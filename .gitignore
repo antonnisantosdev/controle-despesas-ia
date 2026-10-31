@@ -1,0 +1,19 @@
+# Ambiente virtual do Python (cada pessoa cria o seu com pip install)
+.venv/
+
+# Cache que o Python gera automaticamente ao correr o código
+__pycache__/
+*.pyc
+
+# Segredos: chaves de API, palavras-passe do Supabase, etc.
+.env
+.env.*
+!.env.example
+
+# Definições locais do Claude Code (pessoais, não são do projeto)
+.claude/settings.local.json
+
+# Lixo do sistema operativo e do editor
+.DS_Store
+Thumbs.db
+.vscode/
