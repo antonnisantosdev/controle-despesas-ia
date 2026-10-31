@@ -6,12 +6,17 @@ from pydantic import BaseModel
 app = FastAPI()
 
 
-class Transacao(BaseModel):
-    id: int
+# Dados que o cliente envia para criar uma transação (sem id: quem o gera é a API).
+class TransacaoCriar(BaseModel):
     data: date
     descricao: str
     valor: float
     categoria: str | None = None
+
+
+# Transação completa, tal como fica guardada: herda os campos acima e junta o id.
+class Transacao(TransacaoCriar):
+    id: int
 
 
 # Transações de teste guardadas em memória (perdem-se quando a API reinicia).
@@ -42,3 +47,11 @@ def obter_transacao(transacao_id: int) -> Transacao:
         if transacao.id == transacao_id:
             return transacao
     raise HTTPException(status_code=404, detail="Transação não encontrada")
+
+
+@app.post("/transacoes", status_code=201)
+def criar_transacao(nova: TransacaoCriar) -> Transacao:
+    novo_id = max(transacao.id for transacao in transacoes) + 1 if transacoes else 1
+    transacao = Transacao(id=novo_id, data=nova.data, descricao=nova.descricao, valor=nova.valor, categoria=nova.categoria)
+    transacoes.append(transacao)
+    return transacao
