@@ -48,22 +48,31 @@ def quem_sou_eu(user_id: str = Depends(obter_utilizador_atual)):
     return {"user_id": user_id}
 
 
+# A API usa a chave secreta (ignora o RLS), por isso cada rota filtra pelo user_id do token.
 @app.get("/transacoes")
-def listar_transacoes() -> list[Transacao]:
-    resposta = supabase.table("transacoes").select("*").order("data").execute()
+def listar_transacoes(user_id: str = Depends(obter_utilizador_atual)) -> list[Transacao]:
+    resposta = (
+        supabase.table("transacoes")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("data")
+        .execute()
+    )
     return resposta.data
 
 
 @app.get("/transacoes/{transacao_id}")
-def obter_transacao(transacao_id: int) -> Transacao:
-    resposta = supabase.table("transacoes").select("*").eq("id", transacao_id).execute()
+def obter_transacao(transacao_id: int, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
+    resposta = supabase.table("transacoes").select("*").eq("id", transacao_id).eq("user_id", user_id).execute()
     if not resposta.data:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
     return resposta.data[0]
 
 
 @app.post("/transacoes", status_code=201)
-def criar_transacao(nova: TransacaoCriar) -> Transacao:
+def criar_transacao(nova: TransacaoCriar, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
     # mode="json" converte a date em texto ("2026-09-20"), que é o que o Supabase aceita.
-    resposta = supabase.table("transacoes").insert(nova.model_dump(mode="json")).execute()
+    # O dono vem sempre do token, nunca do corpo do pedido.
+    dados = nova.model_dump(mode="json") | {"user_id": user_id}
+    resposta = supabase.table("transacoes").insert(dados).execute()
     return resposta.data[0]
