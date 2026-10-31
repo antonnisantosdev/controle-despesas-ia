@@ -1,8 +1,10 @@
 from datetime import date
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
+from supabase import AuthApiError
 
+from auth import fazer_login, obter_utilizador_atual
 from database import supabase
 
 app = FastAPI()
@@ -21,9 +23,29 @@ class Transacao(TransacaoCriar):
     id: int
 
 
+class Credenciais(BaseModel):
+    email: str
+    password: str
+
+
 @app.get("/")
 def inicio():
     return {"message": "A API de finanças está funcionando!"}
+
+
+@app.post("/login")
+def login(credenciais: Credenciais):
+    try:
+        token = fazer_login(credenciais.email, credenciais.password)
+    except AuthApiError:
+        raise HTTPException(status_code=401, detail="Email ou palavra-passe errados")
+    return {"access_token": token, "token_type": "bearer"}
+
+
+# Rota de teste: mostra quem é o utilizador do token enviado.
+@app.get("/eu")
+def quem_sou_eu(user_id: str = Depends(obter_utilizador_atual)):
+    return {"user_id": user_id}
 
 
 @app.get("/transacoes")
