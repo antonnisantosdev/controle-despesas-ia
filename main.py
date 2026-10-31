@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -34,3 +34,11 @@ def inicio():
 @app.get("/transacoes")
 def listar_transacoes() -> list[Transacao]:
     return transacoes
+
+
+@app.get("/transacoes/{transacao_id}")
+def obter_transacao(transacao_id: int) -> Transacao:
+    for transacao in transacoes:
+        if transacao.id == transacao_id:
+            return transacao
+    raise HTTPException(status_code=404, detail="Transação não encontrada")
