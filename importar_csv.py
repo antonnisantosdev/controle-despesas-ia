@@ -1,8 +1,9 @@
 import csv
+import hashlib
 import io
 from datetime import datetime
 
-from models import TransacaoCriar
+from models import TransacaoImportada
 
 
 class ErroImportacao(Exception):
@@ -13,16 +14,21 @@ class ErroImportacao(Exception):
         self.erros = erros
 
 
-def converter_linha(linha: dict) -> TransacaoCriar:
-    """Converte uma linha do CSV do banco numa TransacaoCriar."""
-    return TransacaoCriar(
+def calcular_hash(linha: dict) -> str:
+    texto = ";".join(f"{chave}={linha[chave]}" for chave in ["Data", "Montante", "Descrição", "Saldo"])
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
+
+
+def converter_linha(linha: dict) -> TransacaoImportada:
+    return TransacaoImportada(
         data=datetime.strptime(linha["Data"], "%d-%m-%Y").date(),
         valor=float(linha["Montante"].replace(".", "").replace(",", ".")),
         descricao=linha["Descrição"].strip(),
+        hash_importacao=calcular_hash(linha),
     )
 
 
-def ler_extrato(conteudo: str) -> list[TransacaoCriar]:
+def ler_extrato(conteudo: str) -> list[TransacaoImportada]:
     leitor = csv.DictReader(io.StringIO(conteudo), delimiter=";")
     transacoes = []
     erros = []
@@ -32,7 +38,7 @@ def ler_extrato(conteudo: str) -> list[TransacaoCriar]:
         try:
             transacao = converter_linha(linha)
             transacoes.append(transacao)
-        except Exception as e:
+        except (ValueError, KeyError) as e:
             erros.append(f"Linha {numero}: {e}")
 
     if erros:
