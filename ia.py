@@ -1,6 +1,6 @@
 """Categorização de transações com IA.
 
-O resto da API só chama categorizar(); qual o fornecedor usado (Claude, Gemini...)
+O resto da API só chama categorizar(); qual o fornecedor usado (por agora, o Claude)
 decide-se no .env com IA_FORNECEDOR, sem mudar mais nenhum ficheiro.
 """
 
