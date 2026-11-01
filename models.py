@@ -46,6 +46,12 @@ class ResultadoImportacao(BaseModel):
     transacoes: list[Transacao]
 
 
+# Uma fatia do gráfico do dashboard: quanto se gastou numa categoria.
+class GastoCategoria(BaseModel):
+    categoria: str
+    total: float
+
+
 # Corpo do PATCH: o utilizador só pode mudar a categoria, e só para uma das permitidas.
 class CategoriaAtualizar(BaseModel):
     categoria: Categoria

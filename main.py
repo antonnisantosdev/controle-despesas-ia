@@ -1,11 +1,19 @@
-from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
 from supabase import AuthApiError
 
 from auth import fazer_login, obter_utilizador_atual
+from dashboard import gastos_por_categoria, limites_do_mes
 from database import supabase
 from ia import ErroIA, categorizar
 from importar_csv import ErroImportacao, ler_extrato
-from models import CategoriaAtualizar, Credenciais, ResultadoImportacao, Transacao, TransacaoCriar
+from models import (
+    CategoriaAtualizar,
+    Credenciais,
+    GastoCategoria,
+    ResultadoImportacao,
+    Transacao,
+    TransacaoCriar,
+)
 
 app = FastAPI()
 
@@ -146,3 +154,20 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
         duplicadas=len(dados) - len(resposta.data),
         transacoes=resposta.data,
     )
+
+# Gastos de um mês por categoria, para o gráfico do dashboard. Exemplo: /dashboard/categorias?mes=2026-10
+# O pattern faz o FastAPI recusar (422) qualquer coisa que não seja AAAA-MM.
+@app.get("/dashboard/categorias")
+def dashboard_categorias(
+    mes: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), user_id: str = Depends(obter_utilizador_atual)
+) -> list[GastoCategoria]:
+    inicio, fim = limites_do_mes(mes)
+    resposta = (
+        supabase.table("transacoes")
+        .select("categoria, valor")
+        .eq("user_id", user_id)
+        .gte("data", inicio.isoformat())
+        .lt("data", fim.isoformat())
+        .execute()
+    )
+    return gastos_por_categoria(resposta.data)
