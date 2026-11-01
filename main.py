@@ -1,31 +1,11 @@
-from datetime import date
-
 from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel
 from supabase import AuthApiError
 
 from auth import fazer_login, obter_utilizador_atual
 from database import supabase
+from models import Credenciais, Transacao, TransacaoCriar
 
 app = FastAPI()
-
-
-# Dados que o cliente envia para criar uma transação (sem id: quem o gera é a base de dados).
-class TransacaoCriar(BaseModel):
-    data: date
-    descricao: str
-    valor: float
-    categoria: str | None = None
-
-
-# Transação completa, tal como fica guardada: herda os campos acima e junta o id.
-class Transacao(TransacaoCriar):
-    id: int
-
-
-class Credenciais(BaseModel):
-    email: str
-    password: str
 
 
 @app.get("/")
