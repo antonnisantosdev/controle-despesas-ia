@@ -3,6 +3,7 @@ from supabase import AuthApiError
 
 from auth import fazer_login, obter_utilizador_atual
 from database import supabase
+from ia import ErroIA, categorizar
 from importar_csv import ErroImportacao, ler_extrato
 from models import Credenciais, ResultadoImportacao, Transacao, TransacaoCriar
 
@@ -70,6 +71,14 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
         raise HTTPException(status_code=422, detail={"mensagem": str(erro), "erros": erro.erros})
     if not novas:
         raise HTTPException(status_code=422, detail="O ficheiro não tem transações")
+
+    try:   
+        categorias = categorizar(novas)
+    except ErroIA as erro:
+        raise HTTPException(status_code=503, detail="A categorização automática falhou. Tenta importar mais tarde. " )
+
+    for nova, categoria in zip(novas, categorias):
+        nova.categoria = categoria
 
     dados = [nova.model_dump(mode="json") | {"user_id": user_id} for nova in novas]
     # upsert com ignore_duplicates: as linhas cuja impressão digital já existe são saltadas

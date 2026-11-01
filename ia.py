@@ -84,11 +84,21 @@ Responde apenas com JSON, no formato:
 """
 
 
+class ErroIA(Exception):
+    """A IA falhou (sem ligação, chave errada, sem créditos, resposta inválida...).
+
+    O resto da API só conhece este erro, nunca os erros de cada fornecedor.
+    """
+
+
 def categorizar(transacoes: list[TransacaoCriar]) -> list[str]:
     """Devolve uma categoria para cada transação, pela mesma ordem."""
     fornecedor = os.getenv("IA_FORNECEDOR", "claude")
     if fornecedor == "claude":
-        return _categorizar_claude(transacoes)
+        try:
+            return _categorizar_claude(transacoes)
+        except anthropic.APIError as erro:
+            raise ErroIA(f"Claude: {erro}") from erro
     raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
 
 
@@ -107,7 +117,7 @@ def _categorizar_claude(transacoes: list[TransacaoCriar]) -> list[str]:
         output_format=RespostaCategorizacao,
     )
     if resposta.parsed_output is None:
-        raise RuntimeError(f"A IA não devolveu uma resposta válida (stop_reason={resposta.stop_reason})")
+        raise ErroIA(f"A IA não devolveu uma resposta válida (stop_reason={resposta.stop_reason})")
 
     # Organiza por índice; se a IA saltar alguma transação, fica "outros".
     por_indice = {c.indice: c.categoria for c in resposta.parsed_output.categorizacoes}
