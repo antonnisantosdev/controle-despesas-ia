@@ -77,6 +77,42 @@ def corrigir_categoria(
     return resposta.data[0]
 
 
+# Categoriza com IA as transações que ficaram sem categoria (antigas, ou de uma importação em que a IA falhou).
+@app.post("/transacoes/categorizar")
+def categorizar_pendentes(user_id: str = Depends(obter_utilizador_atual)) -> list[Transacao]:
+    # .is_("categoria", "null") é o "WHERE categoria IS NULL" do SQL (o .eq não serve para NULL).
+    resposta = (
+        supabase.table("transacoes")
+        .select("*")
+        .eq("user_id", user_id)
+        .is_("categoria", "null")
+        .execute()
+    )
+    pendentes = [Transacao(**linha) for linha in resposta.data]
+    if not pendentes:
+        return []
+
+    try:
+        categorias = categorizar(pendentes)
+    except ErroIA as erro:
+        print(erro)
+        raise HTTPException(status_code=503, detail="A categorização automática falhou. Tenta mais tarde.")
+
+    atualizadas = []
+    for transacao, categoria in zip(pendentes, categorias):
+        transacao.categoria = categoria
+        dados = {"categoria": categoria}
+        resposta = (
+            supabase.table("transacoes")
+            .update(dados)
+            .eq("id", transacao.id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        atualizadas.append(resposta.data[0])
+    return atualizadas
+
+
 @app.post("/transacoes/importar", status_code=201)
 def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizador_atual)) -> ResultadoImportacao:
     # "utf-8-sig" ignora a marca invisível (BOM) que o Excel põe no início dos CSV.
