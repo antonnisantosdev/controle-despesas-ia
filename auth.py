@@ -4,8 +4,6 @@ from supabase import AuthApiError, create_client
 
 from database import SUPABASE_KEY, SUPABASE_URL, supabase
 
-# Lê o cabeçalho "Authorization: Bearer <token>" de cada pedido.
-# Também faz aparecer o botão "Authorize" no /docs.
 esquema_bearer = HTTPBearer()
 
 
