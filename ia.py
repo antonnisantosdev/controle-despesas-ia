@@ -5,32 +5,14 @@ decide-se no .env com IA_FORNECEDOR, sem mudar mais nenhum ficheiro.
 """
 
 import os
-from typing import Literal
 
 import anthropic
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from models import TransacaoCriar
+from models import Categoria, TransacaoCriar
 
 load_dotenv()
-
-# As únicas categorias que a IA pode escolher. Com Literal, a resposta é validada:
-# se a IA inventar outra palavra, o Pydantic rejeita-a.
-Categoria = Literal[
-    "alimentação",
-    "restaurantes",
-    "transporte",
-    "casa",
-    "saúde",
-    "lazer",
-    "compras",
-    "telecomunicações",
-    "rendimento",
-    "transferências",
-    "levantamentos",
-    "outros",
-]
 
 
 # Formato obrigatório da resposta da IA (saída estruturada).

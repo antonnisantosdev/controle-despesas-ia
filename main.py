@@ -5,7 +5,7 @@ from auth import fazer_login, obter_utilizador_atual
 from database import supabase
 from ia import ErroIA, categorizar
 from importar_csv import ErroImportacao, ler_extrato
-from models import Credenciais, ResultadoImportacao, Transacao, TransacaoCriar
+from models import CategoriaAtualizar, Credenciais, ResultadoImportacao, Transacao, TransacaoCriar
 
 app = FastAPI()
 
@@ -57,6 +57,23 @@ def criar_transacao(nova: TransacaoCriar, user_id: str = Depends(obter_utilizado
     # O dono vem sempre do token, nunca do corpo do pedido.
     dados = nova.model_dump(mode="json") | {"user_id": user_id}
     resposta = supabase.table("transacoes").insert(dados).execute()
+    return resposta.data[0]
+
+
+# O utilizador corrige a categoria escolhida pela IA (ou preenche uma que ficou vazia).
+@app.patch("/transacoes/{transacao_id}")
+def corrigir_categoria(
+    transacao_id: int, alteracao: CategoriaAtualizar, user_id: str = Depends(obter_utilizador_atual)
+) -> Transacao:
+    resposta = (
+        supabase.table("transacoes")
+        .update({"categoria": alteracao.categoria})
+        .eq("id", transacao_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not resposta.data:
+        raise HTTPException(status_code=404, detail="Transação não encontrada")
     return resposta.data[0]
 
 

@@ -1,6 +1,24 @@
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel
+
+# As únicas categorias permitidas, tanto para a IA como para as correções do utilizador.
+# Com Literal, o Pydantic rejeita qualquer outra palavra.
+Categoria = Literal[
+    "alimentação",
+    "restaurantes",
+    "transporte",
+    "casa",
+    "saúde",
+    "lazer",
+    "compras",
+    "telecomunicações",
+    "rendimento",
+    "transferências",
+    "levantamentos",
+    "outros",
+]
 
 
 # Dados que o cliente envia para criar uma transação (sem id: quem o gera é a base de dados).
@@ -26,6 +44,11 @@ class ResultadoImportacao(BaseModel):
     importadas: int
     duplicadas: int
     transacoes: list[Transacao]
+
+
+# Corpo do PATCH: o utilizador só pode mudar a categoria, e só para uma das permitidas.
+class CategoriaAtualizar(BaseModel):
+    categoria: Categoria
 
 
 class Credenciais(BaseModel):
