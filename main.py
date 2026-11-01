@@ -3,7 +3,7 @@ from supabase import AuthApiError
 
 from auth import fazer_login, obter_utilizador_atual
 from database import supabase
-from importar_csv import ler_extrato
+from importar_csv import ErroImportacao, ler_extrato
 from models import Credenciais, Transacao, TransacaoCriar
 
 app = FastAPI()
@@ -63,7 +63,13 @@ def criar_transacao(nova: TransacaoCriar, user_id: str = Depends(obter_utilizado
 def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizador_atual)) -> list[Transacao]:
     # "utf-8-sig" ignora a marca invisível (BOM) que o Excel põe no início dos CSV.
     conteudo = ficheiro.file.read().decode("utf-8-sig")
-    novas = ler_extrato(conteudo)
+    try:
+        novas = ler_extrato(conteudo)
+    except ErroImportacao as erro:
+        # Nada é gravado: o utilizador corrige o ficheiro e volta a importar.
+        raise HTTPException(status_code=422, detail={"mensagem": str(erro), "erros": erro.erros})
+    if not novas:
+        raise HTTPException(status_code=422, detail="O ficheiro não tem transações")
 
     novas = [nova.model_dump(mode="json") | {"user_id": user_id} for nova in novas]
     resposta = supabase.table("transacoes").insert(novas).execute()
