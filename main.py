@@ -1,4 +1,7 @@
+import os
+
 from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from supabase import AuthApiError
 
 from auth import fazer_login, obter_utilizador_atual
@@ -17,6 +20,15 @@ from models import (
 )
 
 app = FastAPI()
+
+# CORS: diz ao browser que o frontend (noutro endereço) pode chamar esta API.
+# Só os endereços do FRONTEND_URL são aceites; no deploy junta-se o da Vercel, separado por vírgula.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("FRONTEND_URL", "http://localhost:3000").split(","),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
