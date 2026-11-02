@@ -2,7 +2,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
 from supabase import AuthApiError
 
 from auth import fazer_login, obter_utilizador_atual
-from dashboard import gastos_por_categoria, limites_do_mes
+from dashboard import gastos_por_categoria, limites_do_mes, resumo_mensal
 from database import supabase
 from ia import ErroIA, categorizar
 from importar_csv import ErroImportacao, ler_extrato
@@ -11,6 +11,7 @@ from models import (
     Credenciais,
     GastoCategoria,
     ResultadoImportacao,
+    ResumoMensal,
     Transacao,
     TransacaoCriar,
 )
@@ -171,3 +172,10 @@ def dashboard_categorias(
         .execute()
     )
     return gastos_por_categoria(resposta.data)
+
+
+# Receitas e despesas de cada mês, para o gráfico da evolução.
+@app.get("/dashboard/mensal")
+def dashboard_mensal(user_id: str = Depends(obter_utilizador_atual)) -> list[ResumoMensal]:
+    resposta = supabase.table("transacoes").select("data, valor").eq("user_id", user_id).execute()
+    return resumo_mensal(resposta.data)

@@ -52,6 +52,13 @@ class GastoCategoria(BaseModel):
     total: float
 
 
+# Um ponto do gráfico da evolução: o que entrou e o que saiu num mês.
+class ResumoMensal(BaseModel):
+    mes: str
+    receitas: float
+    despesas: float
+
+
 # Corpo do PATCH: o utilizador só pode mudar a categoria, e só para uma das permitidas.
 class CategoriaAtualizar(BaseModel):
     categoria: Categoria

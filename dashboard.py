@@ -6,7 +6,7 @@ Não falam com o Supabase nem com o FastAPI, por isso são fáceis de testar
 
 from datetime import date
 
-from models import GastoCategoria
+from models import GastoCategoria, ResumoMensal
 
 
 def limites_do_mes(mes: str) -> tuple[date, date]:
@@ -36,3 +36,24 @@ def gastos_por_categoria(transacoes: list[dict]) -> list[GastoCategoria]:
 
     gastos = [GastoCategoria(categoria=categoria, total=round(total, 2)) for categoria, total in totais.items()]
     return sorted(gastos, key=lambda gasto: gasto.total, reverse=True)
+
+
+def resumo_mensal(transacoes: list[dict]) -> list[ResumoMensal]:
+    """Receitas e despesas de cada mês, do mais antigo para o mais recente."""
+    totais: dict[str, dict[str, float]] = {}
+
+    for transacao in transacoes:
+        mes = transacao["data"][:7]  # "2026-10-05" -> "2026-10"
+        if mes not in totais:
+            totais[mes] = {"receitas": 0, "despesas": 0}
+
+        valor = transacao["valor"]
+        if valor >= 0:
+            totais[mes]["receitas"] += valor
+        else:
+            totais[mes]["despesas"] += abs(valor)
+
+    return [
+        ResumoMensal(mes=mes, receitas=round(t["receitas"], 2), despesas=round(t["despesas"], 2))
+        for mes, t in sorted(totais.items())
+    ]
