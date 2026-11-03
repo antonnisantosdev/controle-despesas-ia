@@ -8,7 +8,7 @@ from auth import fazer_login, obter_utilizador_atual
 from dashboard import gastos_por_categoria, limites_do_mes, resumo_mensal
 from database import supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
-from ia import ErroIA, categorizar, conversar
+from ia import ErroIA, categorizar, conversar, resumir_mes
 from importar_csv import ErroImportacao, ler_extrato
 from models import (
     CategoriaAtualizar,
@@ -17,10 +17,12 @@ from models import (
     PerguntaChat,
     RespostaChat,
     ResultadoImportacao,
+    ResumoMes,
     ResumoMensal,
     Transacao,
     TransacaoCriar,
 )
+from resumo import recolher_dados
 
 app = FastAPI()
 
@@ -209,3 +211,19 @@ def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -
         print(erro)
         raise HTTPException(status_code=503, detail="O chat falhou. Tenta mais tarde.")
     return RespostaChat(resposta=resposta)
+
+
+# Resumo do mês escrito pela IA, com alertas. Exemplo: /resumo?mes=2026-10
+@app.get("/resumo")
+def resumo_do_mes(
+    mes: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), user_id: str = Depends(obter_utilizador_atual)
+) -> ResumoMes:
+    dados = recolher_dados(user_id, mes)
+    # Sem transações não há nada para resumir: não vale a pena pagar uma chamada à IA.
+    if dados["transacoes_no_mes"] == 0:
+        return ResumoMes(resumo="Ainda não há transações neste mês.", alertas=[])
+    try:
+        return resumir_mes(dados)
+    except ErroIA as erro:
+        print(erro)
+        raise HTTPException(status_code=503, detail="O resumo automático falhou. Tenta mais tarde.")

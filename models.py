@@ -76,3 +76,15 @@ class PerguntaChat(BaseModel):
 
 class RespostaChat(BaseModel):
     resposta: str
+
+
+# Um alerta do resumo mensal: "atencao" para coisas a corrigir, "info" para o resto.
+class Alerta(BaseModel):
+    nivel: Literal["info", "atencao"]
+    mensagem: str
+
+
+# Resumo do mês escrito pela IA (saída estruturada) e devolvido tal e qual pela API.
+class ResumoMes(BaseModel):
+    resumo: str
+    alertas: list[Alerta]

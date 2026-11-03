@@ -1,9 +1,10 @@
-"""Funções de IA: categorização de transações e chat sobre as finanças.
+"""Funções de IA: categorização de transações, chat sobre as finanças e resumo mensal.
 
-O resto da API só chama categorizar() e conversar(); qual o fornecedor usado (por agora,
+O resto da API só chama categorizar(), conversar() e resumir_mes(); qual o fornecedor usado (por agora,
 o Claude) decide-se no .env com IA_FORNECEDOR, sem mudar mais nenhum ficheiro.
 """
 
+import json
 import os
 from collections.abc import Callable
 from datetime import date
@@ -12,7 +13,7 @@ import anthropic
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from models import Categoria, TransacaoCriar
+from models import Categoria, ResumoMes, TransacaoCriar
 
 load_dotenv()
 
@@ -173,3 +174,49 @@ def _conversar_claude(pergunta: str, ferramentas: list[dict], executar: Callable
         mensagens.append({"role": "user", "content": resultados})
 
     raise ErroIA(f"A IA pediu ferramentas mais de {MAX_VOLTAS} vezes sem responder")
+
+
+# Instruções do resumo mensal. A IA recebe os números já calculados (sem tool use): só os explica.
+INSTRUCOES_RESUMO = """
+És o assistente de uma app portuguesa de controlo de despesas pessoais.
+Recebes, em JSON, os números de um mês e do mês anterior, e escreves um resumo para o utilizador.
+
+O resumo:
+- 2 a 4 frases, em português de Portugal, a tratar o utilizador por "tu", sem Markdown.
+- Usa só os números recebidos. Nunca inventes nem estimes valores.
+- Escreve os valores no formato português, por exemplo 1.234,56 €.
+
+Os alertas (no máximo 3, do mais importante para o menos importante):
+- nivel "atencao": quando as despesas do mês foram maiores do que as receitas do mês.
+- nivel "atencao": quando as despesas do mês subiram mais de 30% em relação ao mês anterior.
+- nivel "atencao": quando uma categoria subiu mais de 50% e mais de 50 € em relação ao mês anterior.
+- nivel "info": quando uma só despesa representa mais de metade das despesas do mês.
+- Cada alerta é uma frase que explica a causa com os números (categoria, descrição ou valor),
+  por exemplo: "As despesas subiram para 1.895,57 €, sobretudo por uma compra de 1.234,56 € em informática."
+- Se nada disto acontecer, a lista de alertas fica vazia. Não inventes alertas para valores pequenos.
+"""
+
+
+def resumir_mes(dados: dict) -> ResumoMes:
+    """Pede à IA um resumo do mês, com alertas, a partir dos números já calculados."""
+    fornecedor = os.getenv("IA_FORNECEDOR", "claude")
+    if fornecedor == "claude":
+        try:
+            return _resumir_mes_claude(dados)
+        except anthropic.APIError as erro:
+            raise ErroIA(f"Claude: {erro}") from erro
+    raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
+
+
+def _resumir_mes_claude(dados: dict) -> ResumoMes:
+    cliente = anthropic.Anthropic()
+    resposta = cliente.messages.parse(
+        model=os.getenv("CLAUDE_MODELO", "claude-haiku-5-5"),
+        max_tokens=2048,
+        system=INSTRUCOES_RESUMO,
+        messages=[{"role": "user", "content": json.dumps(dados, ensure_ascii=False)}],
+        output_format=ResumoMes,
+    )
+    if resposta.parsed_output is None:
+        raise ErroIA(f"A IA não devolveu um resumo válido (stop_reason={resposta.stop_reason})")
+    return resposta.parsed_output

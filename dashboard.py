@@ -4,7 +4,7 @@ Não falam com o Supabase nem com o FastAPI, por isso são fáceis de testar
 (e o chat da Fase 5 vai poder reaproveitá-las).
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from models import GastoCategoria, ResumoMensal
 
@@ -19,6 +19,12 @@ def limites_do_mes(mes: str) -> tuple[date, date]:
     else:
         fim = date(inicio.year, inicio.month + 1, 1)
     return inicio, fim
+
+
+def mes_anterior(mes: str) -> str:
+    """Para "2026-01" devolve "2025-12": o dia antes do dia 1 é sempre do mês anterior."""
+    inicio, _ = limites_do_mes(mes)
+    return (inicio - timedelta(days=1)).strftime("%Y-%m")
 
 
 def gastos_por_categoria(transacoes: list[dict]) -> list[GastoCategoria]:
