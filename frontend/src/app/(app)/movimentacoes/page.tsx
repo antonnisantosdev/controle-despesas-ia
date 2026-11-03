@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { apagarToken, pedirApi, SessaoExpirada, type ResumoMensal, type Transacao } from "@/lib/api";
 
-import { METODOS_PAGAMENTO } from "@/lib/opcoes";
+import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
 
 import { euros, nomeMes } from "../dashboard/formatos";
 import FormNovaMovimentacao from "./FormNovaMovimentacao";
@@ -76,6 +76,33 @@ export default function PaginaMovimentacoes() {
 
   const transacoes = aCarregar ? [] : (lista?.transacoes ?? []);
 
+  // Muda a categoria de uma transação só no ecrã (sem falar com a API).
+  // Cria uma lista nova em vez de alterar a antiga, para o React reparar e redesenhar.
+  function trocarNaLista(id: number, categoria: string | null) {
+    setLista((atual) =>
+      atual && {
+        ...atual,
+        transacoes: atual.transacoes.map((t) => (t.id === id ? { ...t, categoria } : t)),
+      },
+    );
+  }
+
+  // O utilizador escolheu outra categoria na tabela.
+  async function mudarCategoria(transacao: Transacao, nova: string) {
+    const antiga = transacao.categoria;
+    trocarNaLista(transacao.id, nova);
+    try {
+      await pedirApi(`/transacoes/${transacao.id}`, { categoria: nova }, "PATCH");
+    } catch (e) {
+      trocarNaLista(transacao.id, antiga);
+      if (e instanceof SessaoExpirada) {
+        tratarErro(e);
+      } else {
+        setErro("Não foi possível guardar a categoria. Tenta outra vez.");
+      }
+    }
+  }
+
   return (
     <main className="p-4 sm:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -136,9 +163,24 @@ export default function PaginaMovimentacoes() {
                       <td className="whitespace-nowrap px-4 py-3 tabular-nums text-texto-suave">{diaMes(t.data)}</td>
                       <td className="px-4 py-3 text-texto">{t.descricao}</td>
                       <td className="px-4 py-3">
-                        <span className="rounded-full bg-fundo px-2.5 py-1 text-xs capitalize text-texto-suave">
-                          {t.categoria ?? "sem categoria"}
-                        </span>
+                        {/* Caixa com ar de "pílula": mudar aqui corrige a categoria escolhida pela IA. */}
+                        <select
+                          value={t.categoria ?? ""}
+                          onChange={(e) => mudarCategoria(t, e.target.value)}
+                          aria-label={`Categoria de ${t.descricao}`}
+                          className="cursor-pointer rounded-full border border-transparent bg-fundo px-2.5 py-1 text-xs capitalize text-texto-suave hover:border-borda"
+                        >
+                          {t.categoria === null && (
+                            <option value="" disabled>
+                              sem categoria
+                            </option>
+                          )}
+                          {CATEGORIAS.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-texto-suave">
                         {t.metodo_pagamento ? METODOS_PAGAMENTO[t.metodo_pagamento] ?? t.metodo_pagamento : "—"}

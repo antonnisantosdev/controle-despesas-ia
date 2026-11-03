@@ -35,15 +35,15 @@ export type ResumoMes = { resumo: string; alertas: Alerta[] };
 export class SessaoExpirada extends Error {}
 
 // Faz um pedido à API com o token do login e devolve o JSON da resposta.
-// Sem corpo é um GET; com corpo é um POST com esse objeto em JSON.
-export async function pedirApi<T>(caminho: string, corpo?: object): Promise<T> {
+// Sem corpo é um GET; com corpo é um POST com esse objeto em JSON (ou outro método, se for indicado).
+export async function pedirApi<T>(caminho: string, corpo?: object, metodo?: "POST" | "PATCH"): Promise<T> {
   const token = lerToken();
   if (!token) {
     throw new SessaoExpirada();
   }
 
   const resposta = await fetch(`${API_URL}${caminho}`, {
-    method: corpo ? "POST" : "GET",
+    method: metodo ?? (corpo ? "POST" : "GET"),
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: corpo ? JSON.stringify(corpo) : undefined,
   });
