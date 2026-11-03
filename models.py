@@ -119,3 +119,16 @@ class Alerta(BaseModel):
 class ResumoMes(BaseModel):
     resumo: str
     alertas: list[Alerta]
+
+
+# Uma linha do Planeamento: quanto se quer gastar numa categoria (limite) e quanto já se gastou no mês.
+# O limite fica vazio quando a categoria tem gastos mas ainda não tem orçamento.
+class LinhaOrcamento(BaseModel):
+    categoria: str
+    limite: float | None
+    gasto: float
+
+
+# Corpo do PUT /orcamentos/{categoria}.
+class NovoLimite(BaseModel):
+    limite: float = Field(gt=0)

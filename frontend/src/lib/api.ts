@@ -28,6 +28,7 @@ export type Transacao = {
   categoria: string | null;
   metodo_pagamento: string | null;
 };
+export type LinhaOrcamento = { categoria: string; limite: number | null; gasto: number };
 export type ResultadoImportacao = { importadas: number; duplicadas: number; transacoes: Transacao[] };
 export type Alerta = { nivel: "info" | "atencao"; mensagem: string };
 export type ResumoMes = { resumo: string; alertas: Alerta[] };
@@ -77,7 +78,7 @@ async function lerResposta<T>(resposta: Response): Promise<T> {
 
 // Faz um pedido à API com o token do login e devolve o JSON da resposta.
 // Sem corpo é um GET; com corpo é um POST com esse objeto em JSON (ou outro método, se for indicado).
-export async function pedirApi<T>(caminho: string, corpo?: object, metodo?: "POST" | "PATCH"): Promise<T> {
+export async function pedirApi<T>(caminho: string, corpo?: object, metodo?: "POST" | "PATCH" | "PUT"): Promise<T> {
   const token = lerTokenOuFalhar();
   const resposta = await fetch(`${API_URL}${caminho}`, {
     method: metodo ?? (corpo ? "POST" : "GET"),

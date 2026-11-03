@@ -5,17 +5,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import AuthApiError
 
 from auth import fazer_login, obter_utilizador_atual
-from dashboard import gastos_por_categoria, limites_do_mes, resumo_mensal
+from dashboard import limites_do_mes, resumo_mensal
+from consultas import gastos_do_mes
 from database import supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
 from ia import ErroIA, categorizar, conversar, resumir_mes
 from importar_csv import ErroImportacao, ler_extrato
 from limites import registar_pergunta
+from orcamento import guardar_limite, planeamento_do_mes
 from models import (
+    Categoria,
     CategoriaAtualizar,
     Credenciais,
     GastoCategoria,
+    LinhaOrcamento,
     NovaMovimentacao,
+    NovoLimite,
     PerguntaChat,
     RespostaChat,
     ResultadoImportacao,
@@ -196,16 +201,7 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
 def dashboard_categorias(
     mes: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), user_id: str = Depends(obter_utilizador_atual)
 ) -> list[GastoCategoria]:
-    inicio, fim = limites_do_mes(mes)
-    resposta = (
-        supabase.table("transacoes")
-        .select("categoria, valor")
-        .eq("user_id", user_id)
-        .gte("data", inicio.isoformat())
-        .lt("data", fim.isoformat())
-        .execute()
-    )
-    return gastos_por_categoria(resposta.data)
+    return gastos_do_mes(user_id, mes)
 
 
 # Receitas e despesas de cada mês, para o gráfico da evolução.
@@ -247,3 +243,20 @@ def resumo_do_mes(
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="O resumo automático falhou. Tenta mais tarde.")
+
+
+# Planeamento do mês: cada categoria com o orçamento (se tiver) e quanto já se gastou.
+@app.get("/orcamentos")
+def listar_orcamentos(
+    mes: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), user_id: str = Depends(obter_utilizador_atual)
+) -> list[LinhaOrcamento]:
+    return planeamento_do_mes(user_id, mes)
+
+
+# Define (ou muda) o orçamento mensal de uma categoria. A categoria no URL tem de ser uma das permitidas.
+@app.put("/orcamentos/{categoria}")
+def definir_orcamento(
+    categoria: Categoria, novo: NovoLimite, user_id: str = Depends(obter_utilizador_atual)
+) -> NovoLimite:
+    guardar_limite(user_id, categoria, novo.limite)
+    return novo

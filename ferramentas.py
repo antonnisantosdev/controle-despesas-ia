@@ -6,8 +6,7 @@ sempre do token e é este código que o junta: a IA nunca o vê nem o escolhe.
 
 import json
 
-from dashboard import gastos_por_categoria, limites_do_mes
-from database import supabase
+from consultas import gastos_do_mes
 
 # A lista que a IA recebe: o nome, para que serve (a IA decide com base nisto)
 # e os parâmetros que aceita, descritos em JSON Schema.
@@ -32,16 +31,7 @@ FERRAMENTAS = [
 
 
 def _gastos_por_categoria(user_id: str, mes: str) -> list[dict]:
-    inicio, fim = limites_do_mes(mes)
-    resposta = (
-        supabase.table("transacoes")
-        .select("categoria, valor")
-        .eq("user_id", user_id)
-        .gte("data", inicio.isoformat())
-        .lt("data", fim.isoformat())
-        .execute()
-    )
-    return [gasto.model_dump() for gasto in gastos_por_categoria(resposta.data)]
+    return [gasto.model_dump() for gasto in gastos_do_mes(user_id, mes)]
 
 
 def executar_ferramenta(nome: str, argumentos: dict, user_id: str) -> str:
