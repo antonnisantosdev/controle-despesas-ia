@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # As únicas categorias permitidas, tanto para a IA como para as correções do utilizador.
 # Com Literal, o Pydantic rejeita qualquer outra palavra.
@@ -67,3 +67,12 @@ class CategoriaAtualizar(BaseModel):
 class Credenciais(BaseModel):
     email: str
     password: str
+
+
+# Pergunta enviada ao chat. O limite de tamanho evita pedidos enormes (que a IA cobraria).
+class PerguntaChat(BaseModel):
+    pergunta: str = Field(min_length=1, max_length=500)
+
+
+class RespostaChat(BaseModel):
+    resposta: str

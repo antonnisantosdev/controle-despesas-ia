@@ -7,12 +7,15 @@ from supabase import AuthApiError
 from auth import fazer_login, obter_utilizador_atual
 from dashboard import gastos_por_categoria, limites_do_mes, resumo_mensal
 from database import supabase
-from ia import ErroIA, categorizar
+from ferramentas import FERRAMENTAS, executar_ferramenta
+from ia import ErroIA, categorizar, conversar
 from importar_csv import ErroImportacao, ler_extrato
 from models import (
     CategoriaAtualizar,
     Credenciais,
     GastoCategoria,
+    PerguntaChat,
+    RespostaChat,
     ResultadoImportacao,
     ResumoMensal,
     Transacao,
@@ -191,3 +194,18 @@ def dashboard_categorias(
 def dashboard_mensal(user_id: str = Depends(obter_utilizador_atual)) -> list[ResumoMensal]:
     resposta = supabase.table("transacoes").select("data, valor").eq("user_id", user_id).execute()
     return resumo_mensal(resposta.data)
+
+
+# Chat sobre as finanças: a IA responde usando as ferramentas, sempre com os dados deste utilizador.
+@app.post("/chat")
+def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -> RespostaChat:
+    # Closure: uma função que "lembra" o user_id deste pedido. A IA só lhe passa o nome e os argumentos.
+    def executar(nome: str, argumentos: dict) -> str:
+        return executar_ferramenta(nome, argumentos, user_id)
+
+    try:
+        resposta = conversar(pedido.pergunta, FERRAMENTAS, executar)
+    except ErroIA as erro:
+        print(erro)
+        raise HTTPException(status_code=503, detail="O chat falhou. Tenta mais tarde.")
+    return RespostaChat(resposta=resposta)
