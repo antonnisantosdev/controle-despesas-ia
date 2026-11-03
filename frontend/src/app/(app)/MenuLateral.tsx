@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
+import Logo from "@/components/Logo";
 import { apagarToken } from "@/lib/api";
 
 const LIGACOES = [
@@ -38,11 +39,8 @@ export default function MenuLateral() {
 
   return (
     <aside className="flex shrink-0 flex-col gap-4 border-b border-borda bg-menu p-4 md:sticky md:top-0 md:h-screen md:w-60 md:border-b-0 md:border-r">
-      <div className="flex items-center gap-2 px-1">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-destaque text-sm font-bold text-white">
-          CP
-        </span>
-        <span className="font-semibold text-texto">Control Prices</span>
+      <div className="px-1 py-1">
+        <Logo altura={36} />
       </div>
 
       <nav className="flex gap-1 md:flex-col">

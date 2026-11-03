@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import Logo from "@/components/Logo";
 import { API_URL, guardarToken } from "@/lib/api";
 
 export default function PaginaLogin() {
@@ -45,7 +46,9 @@ export default function PaginaLogin() {
   return (
     <main className="flex flex-1 items-center justify-center bg-fundo p-4">
       <form onSubmit={entrar} className="w-full max-w-sm space-y-4 rounded-xl border border-borda bg-cartao p-6">
-        <h1 className="text-xl font-semibold text-texto">Control Prices</h1>
+        <h1 className="flex justify-center pb-2">
+          <Logo altura={48} />
+        </h1>
 
         <label className="block">
           <span className="text-sm text-texto-suave">Email</span>
