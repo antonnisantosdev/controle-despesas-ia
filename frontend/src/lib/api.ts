@@ -20,6 +20,8 @@ export function apagarToken() {
 export type ResumoMensal = { mes: string; receitas: number; despesas: number };
 export type GastoCategoria = { categoria: string; total: number };
 export type RespostaChat = { resposta: string };
+export type Alerta = { nivel: "info" | "atencao"; mensagem: string };
+export type ResumoMes = { resumo: string; alertas: Alerta[] };
 
 // Lançado quando a API responde 401: o token não existe, é inválido ou expirou.
 export class SessaoExpirada extends Error {}

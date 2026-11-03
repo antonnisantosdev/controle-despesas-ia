@@ -24,6 +24,7 @@ import {
 } from "@/lib/api";
 
 import Chat from "./Chat";
+import ResumoCartao from "./ResumoCartao";
 
 // Cores das séries (paleta categórica validada para daltonismo): 1.ª azul, 2.ª laranja.
 const COR_RECEITAS = "#2a78d6";
@@ -147,6 +148,8 @@ export default function PaginaDashboard() {
             </ResponsiveContainer>
           )}
         </section>
+
+        <ResumoCartao mes={mes} />
       </div>
     </main>
   );
