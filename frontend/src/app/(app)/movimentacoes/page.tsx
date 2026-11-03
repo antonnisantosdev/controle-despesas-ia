@@ -3,11 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { apagarToken, pedirApi, SessaoExpirada, type ResumoMensal, type Transacao } from "@/lib/api";
-
+import {
+  apagarToken,
+  pedirApi,
+  SessaoExpirada,
+  type ResultadoImportacao,
+  type ResumoMensal,
+  type Transacao,
+} from "@/lib/api";
 import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
 
 import { euros, nomeMes } from "../dashboard/formatos";
+import BotaoImportar from "./BotaoImportar";
 import FormNovaMovimentacao from "./FormNovaMovimentacao";
 
 // "2026-10-05" -> "05/10"
@@ -24,6 +31,8 @@ export default function PaginaMovimentacoes() {
   const [lista, setLista] = useState<{ mes: string; transacoes: Transacao[] } | null>(null);
   const [erro, setErro] = useState("");
   const [formAberto, setFormAberto] = useState(false);
+  // Resultado da última importação: uma mensagem e, se o ficheiro tiver erros, as linhas inválidas.
+  const [aviso, setAviso] = useState<{ tipo: "sucesso" | "erro"; mensagem: string; erros: string[] } | null>(null);
   // Muda sempre que é criada uma movimentação, para a lista voltar a ser pedida à API.
   const [versao, setVersao] = useState(0);
   const aCarregar = lista?.mes !== mes;
@@ -50,13 +59,28 @@ export default function PaginaMovimentacoes() {
   }, []);
 
   // Depois de criar: fecha o formulário, mostra o mês da movimentação nova e recarrega a lista.
-  function aposCriar(criada: Transacao) {
-    const mesNovo = criada.data.slice(0, 7);
-    setFormAberto(false);
+  // Mostra um mês (juntando-o à caixa, se for novo) e volta a pedir a lista à API.
+  function mostrarMes(mesNovo: string) {
     setMeses((anteriores) => (anteriores.includes(mesNovo) ? anteriores : [...anteriores, mesNovo].sort()));
     setMes(mesNovo);
     setLista(null);
     setVersao((v) => v + 1);
+  }
+
+  function aposCriar(criada: Transacao) {
+    setFormAberto(false);
+    mostrarMes(criada.data.slice(0, 7));
+  }
+
+  // Depois de importar: diz quantas entraram e salta para o mês mais recente do extrato.
+  function aposImportar(resultado: ResultadoImportacao) {
+    setAviso({
+      tipo: "sucesso",
+      mensagem: `${resultado.importadas} importada(s), ${resultado.duplicadas} já existia(m).`,
+      erros: [],
+    });
+    const datas = resultado.transacoes.map((t) => t.data).sort();
+    if (datas.length > 0) mostrarMes(datas[datas.length - 1].slice(0, 7));
   }
 
   // 2. Sempre que o mês muda (ou há uma movimentação nova), carrega as transações desse mês.
@@ -124,6 +148,11 @@ export default function PaginaMovimentacoes() {
                 </option>
               ))}
             </select>
+            <BotaoImportar
+              onImportado={aposImportar}
+              onErro={(mensagem, erros) => setAviso({ tipo: "erro", mensagem, erros })}
+              onSessaoExpirada={tratarErro}
+            />
             <button
               type="button"
               onClick={() => setFormAberto(true)}
@@ -133,6 +162,30 @@ export default function PaginaMovimentacoes() {
             </button>
           </div>
         </header>
+
+        {aviso && (
+          <div
+            className={`rounded-lg p-3 text-sm ${
+              aviso.tipo === "sucesso"
+                ? "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+                : "bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-200"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <p className="font-medium">{aviso.mensagem}</p>
+              <button type="button" onClick={() => setAviso(null)} aria-label="Fechar aviso" className="opacity-70 hover:opacity-100">
+                ✕
+              </button>
+            </div>
+            {aviso.erros.length > 0 && (
+              <ul className="mt-2 list-disc space-y-0.5 pl-5">
+                {aviso.erros.map((linha) => (
+                  <li key={linha}>{linha}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {formAberto && <FormNovaMovimentacao onCriada={aposCriar} onFechar={() => setFormAberto(false)} />}
 

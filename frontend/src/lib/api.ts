@@ -28,31 +28,68 @@ export type Transacao = {
   categoria: string | null;
   metodo_pagamento: string | null;
 };
+export type ResultadoImportacao = { importadas: number; duplicadas: number; transacoes: Transacao[] };
 export type Alerta = { nivel: "info" | "atencao"; mensagem: string };
 export type ResumoMes = { resumo: string; alertas: Alerta[] };
 
 // Lançado quando a API responde 401: o token não existe, é inválido ou expirou.
 export class SessaoExpirada extends Error {}
 
-// Faz um pedido à API com o token do login e devolve o JSON da resposta.
-// Sem corpo é um GET; com corpo é um POST com esse objeto em JSON (ou outro método, se for indicado).
-export async function pedirApi<T>(caminho: string, corpo?: object, metodo?: "POST" | "PATCH"): Promise<T> {
+// Lançado quando a API responde com outro erro. Guarda o código (422, 503...) e o "detail"
+// que o FastAPI enviou, para a página poder mostrar a explicação certa.
+export class ErroApi extends Error {
+  status: number;
+  detalhe: unknown;
+
+  constructor(status: number, detalhe: unknown) {
+    super(`A API respondeu ${status}`);
+    this.status = status;
+    this.detalhe = detalhe;
+  }
+}
+
+function lerTokenOuFalhar(): string {
   const token = lerToken();
   if (!token) {
     throw new SessaoExpirada();
   }
+  return token;
+}
 
+// O que todas as respostas têm em comum: 401 -> SessaoExpirada, outro erro -> ErroApi, sucesso -> JSON.
+async function lerResposta<T>(resposta: Response): Promise<T> {
+  if (resposta.status === 401) {
+    throw new SessaoExpirada();
+  }
+  if (!resposta.ok) {
+    const corpo = await resposta.json().catch(() => null);
+    throw new ErroApi(resposta.status, corpo?.detail);
+  }
+  return await resposta.json();
+}
+
+// Faz um pedido à API com o token do login e devolve o JSON da resposta.
+// Sem corpo é um GET; com corpo é um POST com esse objeto em JSON (ou outro método, se for indicado).
+export async function pedirApi<T>(caminho: string, corpo?: object, metodo?: "POST" | "PATCH"): Promise<T> {
+  const token = lerTokenOuFalhar();
   const resposta = await fetch(`${API_URL}${caminho}`, {
     method: metodo ?? (corpo ? "POST" : "GET"),
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: corpo ? JSON.stringify(corpo) : undefined,
   });
+  return lerResposta<T>(resposta);
+}
 
-  if (resposta.status === 401) {
-    throw new SessaoExpirada();
-  }
-  if (!resposta.ok) {
-    throw new Error(`A API respondeu ${resposta.status} em ${caminho}`);
-  }
-  return await resposta.json();
+// Envia um ficheiro (multipart/form-data, como um <form enctype="multipart/form-data"> em PHP).
+// Não se põe "Content-Type": o browser escreve-o sozinho, com a "fronteira" entre as partes.
+export async function enviarFicheiro<T>(caminho: string, campo: string, ficheiro: File): Promise<T> {
+  const token = lerTokenOuFalhar();
+  const formulario = new FormData();
+  formulario.append(campo, ficheiro);
+  const resposta = await fetch(`${API_URL}${caminho}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formulario,
+  });
+  return lerResposta<T>(resposta);
 }
