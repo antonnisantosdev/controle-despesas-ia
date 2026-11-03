@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
-import { pedirApi, SessaoExpirada, type RespostaChat } from "@/lib/api";
+import { ErroApi, pedirApi, SessaoExpirada, type RespostaChat } from "@/lib/api";
 
 type Mensagem = { autor: "tu" | "ia"; texto: string };
 
@@ -30,6 +30,9 @@ export default function Chat() {
     } catch (e) {
       if (e instanceof SessaoExpirada) {
         setErro("A tua sessão expirou. Faz login de novo.");
+      } else if (e instanceof ErroApi && e.status === 429 && typeof e.detalhe === "string") {
+        // Limite diário: a API já explica quantas perguntas e quando volta a dar.
+        setErro(e.detalhe);
       } else {
         console.error(e);
         setErro("O chat falhou. Tenta mais tarde.");

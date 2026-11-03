@@ -10,6 +10,7 @@ from database import supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
 from ia import ErroIA, categorizar, conversar, resumir_mes
 from importar_csv import ErroImportacao, ler_extrato
+from limites import registar_pergunta
 from models import (
     CategoriaAtualizar,
     Credenciais,
@@ -217,6 +218,9 @@ def dashboard_mensal(user_id: str = Depends(obter_utilizador_atual)) -> list[Res
 # Chat sobre as finanças: a IA responde usando as ferramentas, sempre com os dados deste utilizador.
 @app.post("/chat")
 def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -> RespostaChat:
+    # Antes de gastar uma chamada à IA: conta a pergunta, ou responde 429 se o limite de hoje acabou.
+    registar_pergunta(user_id)
+
     # Closure: uma função que "lembra" o user_id deste pedido. A IA só lhe passa o nome e os argumentos.
     def executar(nome: str, argumentos: dict) -> str:
         return executar_ferramenta(nome, argumentos, user_id)
