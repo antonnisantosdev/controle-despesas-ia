@@ -40,30 +40,30 @@ export default function Chat() {
   }
 
   return (
-    <section className="rounded-xl bg-white p-4 shadow sm:p-6">
-      <h2 className="mb-4 font-medium text-gray-900">Pergunta às tuas finanças</h2>
+    <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
+      <h2 className="mb-4 font-medium text-texto">Pergunta às tuas finanças</h2>
 
       <div className="mb-4 max-h-80 space-y-3 overflow-y-auto">
         {mensagens.length === 0 && (
-          <p className="text-sm text-gray-500">Experimenta: {EXEMPLOS.map((e) => `"${e}"`).join(" ou ")}</p>
+          <p className="text-sm text-texto-suave">Experimenta: {EXEMPLOS.map((e) => `"${e}"`).join(" ou ")}</p>
         )}
         {mensagens.map((m, i) => (
           <div key={i} className={m.autor === "tu" ? "flex justify-end" : "flex justify-start"}>
             <p
               className={
                 m.autor === "tu"
-                  ? "max-w-[85%] rounded-lg bg-gray-900 px-3 py-2 text-sm text-white"
-                  : "max-w-[85%] whitespace-pre-line rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-900"
+                  ? "max-w-[85%] rounded-lg bg-destaque px-3 py-2 text-sm text-white"
+                  : "max-w-[85%] whitespace-pre-line rounded-lg bg-fundo px-3 py-2 text-sm text-texto"
               }
             >
               {m.texto}
             </p>
           </div>
         ))}
-        {aPensar && <p className="text-sm text-gray-500">A consultar os teus dados...</p>}
+        {aPensar && <p className="text-sm text-texto-suave">A consultar os teus dados...</p>}
       </div>
 
-      {erro && <p className="mb-3 text-sm text-red-600">{erro}</p>}
+      {erro && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{erro}</p>}
 
       <form onSubmit={enviar} className="flex gap-2">
         <input
@@ -71,12 +71,12 @@ export default function Chat() {
           onChange={(e) => setPergunta(e.target.value)}
           maxLength={500}
           placeholder="Escreve uma pergunta..."
-          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+          className="flex-1 rounded-md border border-borda bg-cartao px-3 py-2 text-sm text-texto"
         />
         <button
           type="submit"
           disabled={aPensar}
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          className="rounded-md bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
         >
           Enviar
         </button>

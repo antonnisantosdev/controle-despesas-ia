@@ -31,15 +31,15 @@ export default function ResumoCartao({ mes }: { mes: string }) {
   }, [mes]);
 
   return (
-    <section className="rounded-xl bg-white p-4 shadow sm:p-6">
-      <h2 className="mb-3 font-medium text-gray-900">Resumo do mês</h2>
+    <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
+      <h2 className="mb-3 font-medium text-texto">Resumo do mês</h2>
 
-      {aCarregar && <p className="text-sm text-gray-500">A IA está a analisar o mês...</p>}
-      {!aCarregar && resultado?.erro && <p className="text-sm text-red-600">{resultado.erro}</p>}
+      {aCarregar && <p className="text-sm text-texto-suave">A IA está a analisar o mês...</p>}
+      {!aCarregar && resultado?.erro && <p className="text-sm text-red-600 dark:text-red-400">{resultado.erro}</p>}
 
       {resumo && (
         <>
-          <p className="text-sm leading-relaxed text-gray-800">{resumo.resumo}</p>
+          <p className="text-sm leading-relaxed text-texto">{resumo.resumo}</p>
 
           {resumo.alertas.length > 0 && (
             <ul className="mt-4 space-y-2">
@@ -48,8 +48,8 @@ export default function ResumoCartao({ mes }: { mes: string }) {
                   key={i}
                   className={
                     alerta.nivel === "atencao"
-                      ? "rounded-md bg-amber-50 p-3 text-sm text-amber-900"
-                      : "rounded-md bg-blue-50 p-3 text-sm text-blue-900"
+                      ? "rounded-md bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                      : "rounded-md bg-blue-50 p-3 text-sm text-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
                   }
                 >
                   <strong>{alerta.nivel === "atencao" ? "⚠ Atenção: " : "ℹ Nota: "}</strong>

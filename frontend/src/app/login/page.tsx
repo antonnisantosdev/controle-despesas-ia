@@ -43,39 +43,39 @@ export default function PaginaLogin() {
   }
 
   return (
-    <main className="flex flex-1 items-center justify-center bg-gray-50 p-4">
-      <form onSubmit={entrar} className="w-full max-w-sm space-y-4 rounded-xl bg-white p-6 shadow">
-        <h1 className="text-xl font-semibold text-gray-900">Controlo de Despesas</h1>
+    <main className="flex flex-1 items-center justify-center bg-fundo p-4">
+      <form onSubmit={entrar} className="w-full max-w-sm space-y-4 rounded-xl border border-borda bg-cartao p-6">
+        <h1 className="text-xl font-semibold text-texto">Control Prices</h1>
 
         <label className="block">
-          <span className="text-sm text-gray-700">Email</span>
+          <span className="text-sm text-texto-suave">Email</span>
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
+            className="mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto"
           />
         </label>
 
         <label className="block">
-          <span className="text-sm text-gray-700">Palavra-passe</span>
+          <span className="text-sm text-texto-suave">Palavra-passe</span>
           <input
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
+            className="mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto"
           />
         </label>
 
         {/* Só aparece quando há um erro para mostrar. */}
-        {erro && <p className="text-sm text-red-600">{erro}</p>}
+        {erro && <p className="text-sm text-red-600 dark:text-red-400">{erro}</p>}
 
         <button
           type="submit"
           disabled={aEntrar}
-          className="w-full rounded-md bg-emerald-600 py-2 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          className="w-full rounded-md bg-destaque py-2 font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
         >
           {aEntrar ? "A entrar..." : "Entrar"}
         </button>

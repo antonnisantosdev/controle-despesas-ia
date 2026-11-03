@@ -26,11 +26,12 @@ import {
 import Chat from "./Chat";
 import ResumoCartao from "./ResumoCartao";
 
-// Cores das séries (paleta categórica validada para daltonismo): 1.ª azul, 2.ª laranja.
-const COR_RECEITAS = "#2a78d6";
-const COR_DESPESAS = "#eb6834";
-const COR_GRELHA = "#e5e4e0";
-const COR_TEXTO_EIXO = "#52514e";
+// Cores dos gráficos: vêm das variáveis do tema (globals.css), por isso mudam sozinhas no tema escuro.
+const COR_RECEITAS = "var(--cor-receitas)";
+const COR_DESPESAS = "var(--cor-despesas)";
+const COR_GRELHA = "var(--grelha)";
+const COR_TEXTO_EIXO = "var(--texto-suave)";
+const ESTILO_TOOLTIP = { background: "var(--cartao)", borderColor: "var(--borda)", color: "var(--texto)", borderRadius: 8 };
 
 function euros(valor: number) {
   return valor.toLocaleString("pt-PT", { style: "currency", currency: "EUR" });
@@ -83,47 +84,40 @@ export default function PaginaDashboard() {
       .catch((e) => tratarErro(e, router, setErro));
   }, [mes, router]);
 
-  function sair() {
-    apagarToken();
-    router.replace("/login");
-  }
-
   return (
-    <main className="flex-1 bg-gray-50 p-4 sm:p-8">
-      <div className="mx-auto max-w-4xl space-y-6">
-        <header className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-gray-900">Controlo de Despesas</h1>
-          <button onClick={sair} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100">
-            Sair
-          </button>
+    <main className="p-4 sm:p-8">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <header>
+          <p className="text-xs font-semibold uppercase tracking-wide text-destaque">Resumo financeiro</p>
+          <h1 className="text-2xl font-semibold text-texto">Visão geral</h1>
         </header>
 
-        {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
+        {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
 
         <Chat />
 
-        <section className="rounded-xl bg-white p-4 shadow sm:p-6">
-          <h2 className="mb-4 font-medium text-gray-900">Receitas e despesas por mês</h2>
+        <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
+          <h2 className="mb-4 font-medium text-texto">Receitas e despesas por mês</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={mensal} barGap={2}>
               <CartesianGrid vertical={false} stroke={COR_GRELHA} />
               <XAxis dataKey="mes" tickFormatter={nomeMes} tick={{ fill: COR_TEXTO_EIXO, fontSize: 12 }} />
               <YAxis tickFormatter={(v) => `${v} €`} tick={{ fill: COR_TEXTO_EIXO, fontSize: 12 }} width={70} />
-              <Tooltip formatter={(valor) => euros(Number(valor))} labelFormatter={(mes) => nomeMes(String(mes))} />
-              <Legend />
+              <Tooltip contentStyle={ESTILO_TOOLTIP} formatter={(valor) => euros(Number(valor))} labelFormatter={(mes) => nomeMes(String(mes))} />
+              <Legend wrapperStyle={{ color: "var(--texto-suave)", fontSize: 12 }} />
               <Bar dataKey="receitas" name="Receitas" fill={COR_RECEITAS} radius={[4, 4, 0, 0]} maxBarSize={40} />
               <Bar dataKey="despesas" name="Despesas" fill={COR_DESPESAS} radius={[4, 4, 0, 0]} maxBarSize={40} />
             </BarChart>
           </ResponsiveContainer>
         </section>
 
-        <section className="rounded-xl bg-white p-4 shadow sm:p-6">
+        <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
           <div className="mb-4 flex items-center justify-between gap-4">
-            <h2 className="font-medium text-gray-900">Gastos por categoria</h2>
+            <h2 className="font-medium text-texto">Gastos por categoria</h2>
             <select
               value={mes}
               onChange={(e) => setMes(e.target.value)}
-              className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+              className="rounded-md border border-borda bg-cartao px-2 py-1 text-sm text-texto"
             >
               {mensal.map((m) => (
                 <option key={m.mes} value={m.mes}>
@@ -134,13 +128,13 @@ export default function PaginaDashboard() {
           </div>
 
           {categorias.length === 0 ? (
-            <p className="text-sm text-gray-500">Sem despesas neste mês.</p>
+            <p className="text-sm text-texto-suave">Sem despesas neste mês.</p>
           ) : (
             <ResponsiveContainer width="100%" height={categorias.length * 36 + 20}>
               <BarChart data={categorias} layout="vertical" margin={{ right: 90 }}>
                 <XAxis type="number" hide />
                 <YAxis type="category" dataKey="categoria" width={120} tick={{ fill: COR_TEXTO_EIXO, fontSize: 12 }} />
-                <Tooltip formatter={(valor) => euros(Number(valor))} />
+                <Tooltip contentStyle={ESTILO_TOOLTIP} cursor={{ fill: "var(--fundo)" }} formatter={(valor) => euros(Number(valor))} />
                 <Bar dataKey="total" name="Gasto" fill={COR_RECEITAS} radius={[0, 4, 4, 0]} barSize={20}>
                   <LabelList dataKey="total" position="right" formatter={(valor) => euros(Number(valor))} fill={COR_TEXTO_EIXO} fontSize={12} />
                 </Bar>
