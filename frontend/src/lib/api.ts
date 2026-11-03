@@ -61,6 +61,13 @@ async function lerResposta<T>(resposta: Response): Promise<T> {
   if (resposta.status === 401) {
     throw new SessaoExpirada();
   }
+  // 403 = sem assinatura ativa. Vale para a app inteira, por isso trata-se aqui e não em cada página.
+  if (resposta.status === 403) {
+    // Aqui não há useRouter (não é um componente). Um recarregamento completo da página
+    // não faz mal: só acontece quando o acesso termina.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign("/assinatura-expirada");
+  }
   if (!resposta.ok) {
     const corpo = await resposta.json().catch(() => null);
     throw new ErroApi(resposta.status, corpo?.detail);
