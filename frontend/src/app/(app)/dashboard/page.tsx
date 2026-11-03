@@ -2,17 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  LabelList,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
 import {
   apagarToken,
@@ -23,24 +12,13 @@ import {
   type ResumoMensal,
 } from "@/lib/api";
 
+import CartaoResumo from "./CartaoResumo";
 import Chat from "./Chat";
+import { nomeMes } from "./formatos";
+import GraficoCategorias from "./GraficoCategorias";
+import GraficoMensal from "./GraficoMensal";
 import ResumoCartao from "./ResumoCartao";
-
-// Cores dos gráficos: vêm das variáveis do tema (globals.css), por isso mudam sozinhas no tema escuro.
-const COR_RECEITAS = "var(--cor-receitas)";
-const COR_DESPESAS = "var(--cor-despesas)";
-const COR_GRELHA = "var(--grelha)";
-const COR_TEXTO_EIXO = "var(--texto-suave)";
-const ESTILO_TOOLTIP = { background: "var(--cartao)", borderColor: "var(--borda)", color: "var(--texto)", borderRadius: 8 };
-
-function euros(valor: number) {
-  return valor.toLocaleString("pt-PT", { style: "currency", currency: "EUR" });
-}
-
-// "2026-10" -> "out. de 2026"
-function nomeMes(mes: string) {
-  return new Date(`${mes}-01T00:00:00`).toLocaleDateString("pt-PT", { month: "short", year: "numeric" });
-}
+import { calcularTotais } from "./totais";
 
 type Router = ReturnType<typeof useRouter>;
 
@@ -60,6 +38,7 @@ export default function PaginaDashboard() {
   const [mes, setMes] = useState("");
   const [categorias, setCategorias] = useState<GastoCategoria[]>([]);
   const [erro, setErro] = useState("");
+  const totais = calcularTotais(mensal, mes);
 
   // 1. Ao abrir a página: sem token vai para o login; com token carrega a evolução mensal
   //    e escolhe o mês mais recente.
@@ -86,64 +65,53 @@ export default function PaginaDashboard() {
 
   return (
     <main className="p-4 sm:p-8">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <header>
-          <p className="text-xs font-semibold uppercase tracking-wide text-destaque">Resumo financeiro</p>
-          <h1 className="text-2xl font-semibold text-texto">Visão geral</h1>
+      <div className="mx-auto max-w-6xl space-y-6">
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-destaque">Resumo financeiro</p>
+            <h1 className="text-2xl font-semibold text-texto">Visão geral</h1>
+          </div>
+          {/* O mês escolhido aqui muda os cartões, as categorias e o resumo da IA. */}
+          <select
+            value={mes}
+            onChange={(e) => setMes(e.target.value)}
+            aria-label="Mês"
+            className="rounded-lg border border-borda bg-cartao px-3 py-2 text-sm text-texto"
+          >
+            {mensal.map((m) => (
+              <option key={m.mes} value={m.mes}>
+                {nomeMes(m.mes)}
+              </option>
+            ))}
+          </select>
         </header>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <CartaoResumo titulo="Saldo do mês" valor={totais.saldoMes} descricao="Entradas menos despesas" icone="M3 7h18v12H3zM3 7l3-3h12l3 3M16 13h2" corIcone="var(--destaque)" />
+          <CartaoResumo titulo="Entradas do mês" valor={totais.entradas} descricao="Dinheiro que entrou" icone="M7 17L17 7M7 7v10h10" corIcone="var(--cor-receitas)" />
+          <CartaoResumo titulo="Despesas do mês" valor={totais.despesas} descricao="Dinheiro que saiu" icone="M7 7l10 10M17 7v10H7" corIcone="var(--cor-despesas)" />
+          <CartaoResumo titulo="Saldo acumulado" valor={totais.saldoTotal} descricao="Desde o primeiro extrato" icone="M4 19h16M6 15v-4M10 15V7M14 15v-6M18 15V5" corIcone="var(--texto-suave)" />
+        </div>
 
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
 
-        <Chat />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6 lg:col-span-2">
+            <h2 className="font-medium text-texto">Movimentação financeira</h2>
+            <p className="mb-4 text-xs text-texto-suave">Entradas e despesas de cada mês</p>
+            <GraficoMensal dados={mensal} />
+          </section>
+          <ResumoCartao mes={mes} />
+        </div>
 
-        <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
-          <h2 className="mb-4 font-medium text-texto">Receitas e despesas por mês</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={mensal} barGap={2}>
-              <CartesianGrid vertical={false} stroke={COR_GRELHA} />
-              <XAxis dataKey="mes" tickFormatter={nomeMes} tick={{ fill: COR_TEXTO_EIXO, fontSize: 12 }} />
-              <YAxis tickFormatter={(v) => `${v} €`} tick={{ fill: COR_TEXTO_EIXO, fontSize: 12 }} width={70} />
-              <Tooltip contentStyle={ESTILO_TOOLTIP} formatter={(valor) => euros(Number(valor))} labelFormatter={(mes) => nomeMes(String(mes))} />
-              <Legend wrapperStyle={{ color: "var(--texto-suave)", fontSize: 12 }} />
-              <Bar dataKey="receitas" name="Receitas" fill={COR_RECEITAS} radius={[4, 4, 0, 0]} maxBarSize={40} />
-              <Bar dataKey="despesas" name="Despesas" fill={COR_DESPESAS} radius={[4, 4, 0, 0]} maxBarSize={40} />
-            </BarChart>
-          </ResponsiveContainer>
-        </section>
-
-        <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
-          <div className="mb-4 flex items-center justify-between gap-4">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
             <h2 className="font-medium text-texto">Gastos por categoria</h2>
-            <select
-              value={mes}
-              onChange={(e) => setMes(e.target.value)}
-              className="rounded-md border border-borda bg-cartao px-2 py-1 text-sm text-texto"
-            >
-              {mensal.map((m) => (
-                <option key={m.mes} value={m.mes}>
-                  {nomeMes(m.mes)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {categorias.length === 0 ? (
-            <p className="text-sm text-texto-suave">Sem despesas neste mês.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={categorias.length * 36 + 20}>
-              <BarChart data={categorias} layout="vertical" margin={{ right: 90 }}>
-                <XAxis type="number" hide />
-                <YAxis type="category" dataKey="categoria" width={120} tick={{ fill: COR_TEXTO_EIXO, fontSize: 12 }} />
-                <Tooltip contentStyle={ESTILO_TOOLTIP} cursor={{ fill: "var(--fundo)" }} formatter={(valor) => euros(Number(valor))} />
-                <Bar dataKey="total" name="Gasto" fill={COR_RECEITAS} radius={[0, 4, 4, 0]} barSize={20}>
-                  <LabelList dataKey="total" position="right" formatter={(valor) => euros(Number(valor))} fill={COR_TEXTO_EIXO} fontSize={12} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </section>
-
-        <ResumoCartao mes={mes} />
+            <p className="mb-4 text-xs text-texto-suave">Para onde foi o dinheiro em {mes ? nomeMes(mes) : "..."}</p>
+            <GraficoCategorias dados={categorias} />
+          </section>
+          <Chat />
+        </div>
       </div>
     </main>
   );

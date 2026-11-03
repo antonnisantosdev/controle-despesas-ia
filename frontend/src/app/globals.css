@@ -18,6 +18,13 @@
   --cor-receitas: #2a78d6;
   --cor-despesas: #eb6834;
   --grelha: #e5e4e0;
+  /* Fatias do gráfico de categorias, sempre por esta ordem (a maior fica com a 1.ª cor). */
+  --serie-1: #2a78d6;
+  --serie-2: #eb6834;
+  --serie-3: #1baf7a;
+  --serie-4: #eda100;
+  --serie-5: #e87ba4;
+  --serie-outros: #a3a29c;
 }
 
 /* As mesmas cores, ajustadas para o fundo escuro. */
@@ -34,6 +41,12 @@
   --cor-receitas: #3987e5;
   --cor-despesas: #d95926;
   --grelha: #383835;
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --serie-3: #199e70;
+  --serie-4: #c98500;
+  --serie-5: #d55181;
+  --serie-outros: #6b6a64;
 }
 
 @theme inline {
