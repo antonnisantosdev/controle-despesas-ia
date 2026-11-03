@@ -19,19 +19,23 @@ export function apagarToken() {
 // Formatos das respostas do dashboard (os mesmos modelos Pydantic do backend, em TypeScript).
 export type ResumoMensal = { mes: string; receitas: number; despesas: number };
 export type GastoCategoria = { categoria: string; total: number };
+export type RespostaChat = { resposta: string };
 
 // Lançado quando a API responde 401: o token não existe, é inválido ou expirou.
 export class SessaoExpirada extends Error {}
 
-// Faz um GET à API com o token do login e devolve o JSON da resposta.
-export async function pedirApi<T>(caminho: string): Promise<T> {
+// Faz um pedido à API com o token do login e devolve o JSON da resposta.
+// Sem corpo é um GET; com corpo é um POST com esse objeto em JSON.
+export async function pedirApi<T>(caminho: string, corpo?: object): Promise<T> {
   const token = lerToken();
   if (!token) {
     throw new SessaoExpirada();
   }
 
   const resposta = await fetch(`${API_URL}${caminho}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    method: corpo ? "POST" : "GET",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: corpo ? JSON.stringify(corpo) : undefined,
   });
 
   if (resposta.status === 401) {

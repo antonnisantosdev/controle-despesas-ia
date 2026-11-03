@@ -23,6 +23,8 @@ import {
   type ResumoMensal,
 } from "@/lib/api";
 
+import Chat from "./Chat";
+
 // Cores das séries (paleta categórica validada para daltonismo): 1.ª azul, 2.ª laranja.
 const COR_RECEITAS = "#2a78d6";
 const COR_DESPESAS = "#eb6834";
@@ -96,6 +98,8 @@ export default function PaginaDashboard() {
         </header>
 
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
+
+        <Chat />
 
         <section className="rounded-xl bg-white p-4 shadow sm:p-6">
           <h2 className="mb-4 font-medium text-gray-900">Receitas e despesas por mês</h2>
