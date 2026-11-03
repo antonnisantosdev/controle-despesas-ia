@@ -20,6 +20,14 @@ export function apagarToken() {
 export type ResumoMensal = { mes: string; receitas: number; despesas: number };
 export type GastoCategoria = { categoria: string; total: number };
 export type RespostaChat = { resposta: string };
+export type Transacao = {
+  id: number;
+  data: string;
+  descricao: string;
+  valor: number;
+  categoria: string | null;
+  metodo_pagamento: string | null;
+};
 export type Alerta = { nivel: "info" | "atencao"; mensagem: string };
 export type ResumoMes = { resumo: string; alertas: Alerta[] };
 

@@ -14,6 +14,7 @@ from models import (
     CategoriaAtualizar,
     Credenciais,
     GastoCategoria,
+    NovaMovimentacao,
     PerguntaChat,
     RespostaChat,
     ResultadoImportacao,
@@ -57,15 +58,20 @@ def quem_sou_eu(user_id: str = Depends(obter_utilizador_atual)):
 
 
 # A API usa a chave secreta (ignora o RLS), por isso cada rota filtra pelo user_id do token.
+# Lista as transações, das mais recentes para as mais antigas. Com ?mes=2026-10, só as desse mês.
 @app.get("/transacoes")
-def listar_transacoes(user_id: str = Depends(obter_utilizador_atual)) -> list[Transacao]:
-    resposta = (
-        supabase.table("transacoes")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("data")
-        .execute()
-    )
+def listar_transacoes(
+    mes: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+    user_id: str = Depends(obter_utilizador_atual),
+) -> list[Transacao]:
+    # A consulta monta-se aos bocados, como um WP_Query com argumentos opcionais.
+    consulta = supabase.table("transacoes").select("*").eq("user_id", user_id)
+
+    if mes:
+        inicio, fim = limites_do_mes(mes)
+        consulta = consulta.gte("data", inicio.isoformat()).lt("data", fim.isoformat())
+
+    resposta = consulta.order("data", desc=True).execute()
     return resposta.data
 
 
@@ -77,11 +83,21 @@ def obter_transacao(transacao_id: int, user_id: str = Depends(obter_utilizador_a
     return resposta.data[0]
 
 
+# Cria uma movimentação à mão (dinheiro, MB Way...). Sem categoria, a IA escolhe uma.
 @app.post("/transacoes", status_code=201)
-def criar_transacao(nova: TransacaoCriar, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
+def criar_transacao(nova: NovaMovimentacao, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
+    categoria = nova.categoria
+    if not categoria:
+        try:
+            categoria = categorizar([TransacaoCriar(**nova.model_dump())])[0]
+        except ErroIA as erro:
+            # Sem raise: a movimentação grava-se sem categoria, para o utilizador não perder o que escreveu.
+            # Fica para o POST /transacoes/categorizar tratar mais tarde.
+            print(erro)
+
     # mode="json" converte a date em texto ("2026-09-20"), que é o que o Supabase aceita.
     # O dono vem sempre do token, nunca do corpo do pedido.
-    dados = nova.model_dump(mode="json") | {"user_id": user_id}
+    dados = nova.model_dump(mode="json") | {"categoria": categoria, "user_id": user_id}
     resposta = supabase.table("transacoes").insert(dados).execute()
     return resposta.data[0]
 

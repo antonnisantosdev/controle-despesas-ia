@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # As únicas categorias permitidas, tanto para a IA como para as correções do utilizador.
 # Com Literal, o Pydantic rejeita qualquer outra palavra.
@@ -21,6 +21,18 @@ Categoria = Literal[
 ]
 
 
+# Como foi paga uma transação. Os nomes são códigos simples; o frontend mostra-os por extenso.
+MetodoPagamento = Literal[
+    "dinheiro",
+    "cartao_debito",
+    "cartao_credito",
+    "cartao_refeicao",
+    "mbway",
+    "transferencia",
+    "debito_direto",
+]
+
+
 # Dados que o cliente envia para criar uma transação (sem id: quem o gera é a base de dados).
 class TransacaoCriar(BaseModel):
     data: date
@@ -32,6 +44,25 @@ class TransacaoCriar(BaseModel):
 # Transação completa, tal como fica guardada: herda os campos acima e junta o id.
 class Transacao(TransacaoCriar):
     id: int
+    metodo_pagamento: str | None = None
+
+
+# Movimentação criada à mão no ecrã. Mais rigorosa do que TransacaoCriar: o método é obrigatório,
+# a categoria (se vier) tem de ser uma das permitidas, e sem categoria quem escolhe é a IA.
+class NovaMovimentacao(BaseModel):
+    data: date
+    descricao: str = Field(min_length=1, max_length=200)
+    valor: float
+    metodo_pagamento: MetodoPagamento
+    categoria: Categoria | None = None
+
+    # O Pydantic não tem uma regra pronta para "diferente de zero", por isso escreve-se à mão.
+    @field_validator("valor")
+    @classmethod
+    def valor_diferente_de_zero(cls, valor: float) -> float:
+        if valor == 0:
+            raise ValueError("o valor não pode ser 0")
+        return valor
 
 
 # Transação lida de um extrato: leva a impressão digital da linha, para detetar repetidas.
