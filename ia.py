@@ -1,6 +1,6 @@
 """Funções de IA: categorização de transações, chat sobre as finanças e resumo mensal.
 
-O resto da API só chama categorizar(), conversar() e resumir_mes(); qual o fornecedor usado (por agora,
+O resto da API só chama categorizar(), conversar(), resumir_mes() e sugerir_orcamento(); qual o fornecedor usado (por agora,
 o Claude) decide-se no .env com IA_FORNECEDOR, sem mudar mais nenhum ficheiro.
 """
 
@@ -13,7 +13,7 @@ import anthropic
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from models import Categoria, ResumoMes, TransacaoCriar
+from models import Categoria, ResumoMes, SugestaoOrcamento, TransacaoCriar
 
 load_dotenv()
 
@@ -219,4 +219,46 @@ def _resumir_mes_claude(dados: dict) -> ResumoMes:
     )
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu um resumo válido (stop_reason={resposta.stop_reason})")
+    return resposta.parsed_output
+
+
+# Instruções da sugestão de orçamento. A IA recebe as contas já feitas (média e máximo dos últimos meses).
+INSTRUCOES_ORCAMENTO = """
+És o assistente de uma app portuguesa de controlo de despesas pessoais.
+Recebes, em JSON, os gastos de cada categoria nos últimos meses: o valor de cada mês, a média e o máximo.
+Propões um orçamento mensal razoável para cada categoria.
+
+Regras:
+- Usa só os números recebidos. Nunca inventes valores.
+- Arredonda o limite para valores fáceis de lembrar (múltiplos de 5 €, ou de 10 € acima de 100 €).
+- Parte da média e dá alguma margem; se os meses variam muito, dá mais margem.
+- Não proponhas orçamento para gastos pontuais (uma categoria com um só mês muito alto e os outros a zero,
+  como uma compra grande) nem para "transferências" e "levantamentos", que não são consumo.
+- A explicação é uma frase curta, em português de Portugal, a tratar o utilizador por "tu", sem Markdown,
+  com o número em que te baseaste (por exemplo, a média).
+"""
+
+
+def sugerir_orcamento(historico: dict) -> SugestaoOrcamento:
+    """Pede à IA um orçamento por categoria a partir dos gastos dos últimos meses."""
+    fornecedor = os.getenv("IA_FORNECEDOR", "claude")
+    if fornecedor == "claude":
+        try:
+            return _sugerir_orcamento_claude(historico)
+        except anthropic.APIError as erro:
+            raise ErroIA(f"Claude: {erro}") from erro
+    raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
+
+
+def _sugerir_orcamento_claude(historico: dict) -> SugestaoOrcamento:
+    cliente = anthropic.Anthropic()
+    resposta = cliente.messages.parse(
+        model=os.getenv("CLAUDE_MODELO", "claude-haiku-5-5"),
+        max_tokens=2048,
+        system=INSTRUCOES_ORCAMENTO,
+        messages=[{"role": "user", "content": json.dumps(historico, ensure_ascii=False)}],
+        output_format=SugestaoOrcamento,
+    )
+    if resposta.parsed_output is None:
+        raise ErroIA(f"A IA não devolveu uma sugestão válida (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output

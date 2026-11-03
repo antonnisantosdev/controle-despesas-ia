@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 from consultas import gastos_do_mes
+from dashboard import mes_anterior
 from database import supabase
 from models import GastoCategoria, LinhaOrcamento
 
@@ -41,3 +42,36 @@ def guardar_limite(user_id: str, categoria: str, limite: float) -> None:
         },
         on_conflict="user_id,categoria",
     ).execute()
+
+
+def resumir_historico(gastos_por_mes: dict[str, list[GastoCategoria]]) -> dict[str, dict]:
+    """Para cada categoria: o gasto de cada mês (0 se não houve), a média e o máximo.
+
+    Exemplo de entrada: {"2026-10": [GastoCategoria(categoria="casa", total=450.0)], "2026-11": [...]}
+    Exemplo de saída:   {"casa": {"meses": {"2026-10": 450.0, "2026-11": 42.1}, "media": 246.05, "maximo": 450.0}}
+    """
+    categorias = set(g.categoria for gastos in gastos_por_mes.values() for g in gastos)
+
+    resumo = {}
+    for categoria in categorias:
+        # O gasto desta categoria em cada mês; 0 nos meses em que não houve nenhum.
+        meses = {
+            mes: next((g.total for g in gastos if g.categoria == categoria), 0.0)
+            for mes, gastos in gastos_por_mes.items()
+        }
+        valores = list(meses.values())
+        resumo[categoria] = {
+            "meses": meses,
+            # A dividir por todos os meses (incluindo os de 0): é isso que mostra se um gasto foi pontual.
+            "media": round(sum(valores) / len(valores), 2),
+            "maximo": max(valores),
+        }
+    return resumo
+
+
+def historico_para_sugestao(user_id: str, mes: str, quantos_meses: int = 3) -> dict[str, dict]:
+    """Os gastos dos últimos meses (o mês escolhido e os anteriores), já resumidos para a IA."""
+    meses = [mes]
+    while len(meses) < quantos_meses:
+        meses.append(mes_anterior(meses[-1]))
+    return resumir_historico({m: gastos_do_mes(user_id, m) for m in sorted(meses)})

@@ -129,6 +129,17 @@ class LinhaOrcamento(BaseModel):
     gasto: float
 
 
+# Sugestão da IA para uma categoria (saída estruturada): o valor e uma frase a explicar porquê.
+class SugestaoCategoria(BaseModel):
+    categoria: Categoria
+    limite: float
+    explicacao: str
+
+
+class SugestaoOrcamento(BaseModel):
+    sugestoes: list[SugestaoCategoria]
+
+
 # Corpo do PUT /orcamentos/{categoria}.
 class NovoLimite(BaseModel):
     limite: float = Field(gt=0)

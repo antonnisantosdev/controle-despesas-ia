@@ -9,10 +9,10 @@ from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
 from database import supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
-from ia import ErroIA, categorizar, conversar, resumir_mes
+from ia import ErroIA, categorizar, conversar, resumir_mes, sugerir_orcamento
 from importar_csv import ErroImportacao, ler_extrato
 from limites import registar_pergunta
-from orcamento import guardar_limite, planeamento_do_mes
+from orcamento import guardar_limite, historico_para_sugestao, planeamento_do_mes
 from models import (
     Categoria,
     CategoriaAtualizar,
@@ -25,6 +25,7 @@ from models import (
     RespostaChat,
     ResultadoImportacao,
     ResumoMes,
+    SugestaoOrcamento,
     ResumoMensal,
     Transacao,
     TransacaoCriar,
@@ -260,3 +261,20 @@ def definir_orcamento(
 ) -> NovoLimite:
     guardar_limite(user_id, categoria, novo.limite)
     return novo
+
+
+# A IA propõe um orçamento a partir dos últimos 3 meses. Não guarda nada: o utilizador escolhe o que aceita.
+@app.post("/orcamentos/sugestao")
+def sugestao_orcamento(
+    mes: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), user_id: str = Depends(obter_utilizador_atual)
+) -> SugestaoOrcamento:
+    historico = historico_para_sugestao(user_id, mes)
+    if not historico:
+        return SugestaoOrcamento(sugestoes=[])
+    # Conta para o limite diário, como as perguntas do chat (cada sugestão é uma chamada à IA).
+    registar_pergunta(user_id)
+    try:
+        return sugerir_orcamento(historico)
+    except ErroIA as erro:
+        print(erro)
+        raise HTTPException(status_code=503, detail="A sugestão automática falhou. Tenta mais tarde.")

@@ -29,6 +29,8 @@ export type Transacao = {
   metodo_pagamento: string | null;
 };
 export type LinhaOrcamento = { categoria: string; limite: number | null; gasto: number };
+export type SugestaoCategoria = { categoria: string; limite: number; explicacao: string };
+export type SugestaoOrcamento = { sugestoes: SugestaoCategoria[] };
 export type ResultadoImportacao = { importadas: number; duplicadas: number; transacoes: Transacao[] };
 export type Alerta = { nivel: "info" | "atencao"; mensagem: string };
 export type ResumoMes = { resumo: string; alertas: Alerta[] };

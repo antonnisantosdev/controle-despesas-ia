@@ -3,11 +3,21 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { apagarToken, pedirApi, SessaoExpirada, type LinhaOrcamento, type ResumoMensal } from "@/lib/api";
+import {
+  apagarToken,
+  ErroApi,
+  pedirApi,
+  SessaoExpirada,
+  type LinhaOrcamento,
+  type ResumoMensal,
+  type SugestaoCategoria,
+  type SugestaoOrcamento,
+} from "@/lib/api";
 import { CATEGORIAS } from "@/lib/opcoes";
 
 import { euros, nomeMes } from "../dashboard/formatos";
 import LinhaPlaneamento from "./LinhaPlaneamento";
+import SugestoesIA from "./SugestoesIA";
 
 // "Rendimento" não é um gasto, por isso não faz sentido ter orçamento.
 const CATEGORIAS_DE_GASTO = CATEGORIAS.filter((c) => c !== "rendimento");
@@ -20,6 +30,8 @@ export default function PaginaPlaneamento() {
   const [versao, setVersao] = useState(0);
   const [erro, setErro] = useState("");
   const [novaCategoria, setNovaCategoria] = useState("");
+  const [sugestoes, setSugestoes] = useState<SugestaoCategoria[] | null>(null);
+  const [aPedirSugestao, setAPedirSugestao] = useState(false);
   const aCarregar = resultado?.mes !== mes;
   const linhas = aCarregar ? [] : (resultado?.linhas ?? []);
 
@@ -70,6 +82,23 @@ export default function PaginaPlaneamento() {
     }
   }
 
+  // Pede à IA um orçamento baseado nos últimos 3 meses (até ao mês escolhido).
+  async function pedirSugestao() {
+    setAPedirSugestao(true);
+    setErro("");
+    try {
+      const resposta = await pedirApi<SugestaoOrcamento>(`/orcamentos/sugestao?mes=${mes}`, {});
+      setSugestoes(resposta.sugestoes);
+    } catch (e) {
+      if (e instanceof SessaoExpirada) tratarErro(e);
+      // 429 (limite diário) e 503 (IA em baixo) já trazem uma explicação da API.
+      else if (e instanceof ErroApi && typeof e.detalhe === "string") setErro(e.detalhe);
+      else setErro("Não foi possível pedir a sugestão. Tenta outra vez.");
+    } finally {
+      setAPedirSugestao(false);
+    }
+  }
+
   const comOrcamento = linhas.filter((l) => l.limite !== null);
   const totalLimite = comOrcamento.reduce((soma, l) => soma + (l.limite ?? 0), 0);
   const totalGasto = comOrcamento.reduce((soma, l) => soma + l.gasto, 0);
@@ -84,21 +113,33 @@ export default function PaginaPlaneamento() {
             <p className="text-xs font-semibold uppercase tracking-wide text-destaque">Orçamento mensal</p>
             <h1 className="text-2xl font-semibold text-texto">Planeamento</h1>
           </div>
-          <select
-            value={mes}
-            onChange={(e) => setMes(e.target.value)}
-            aria-label="Mês"
-            className="rounded-lg border border-borda bg-cartao px-3 py-2 text-sm text-texto"
-          >
-            {meses.map((m) => (
-              <option key={m} value={m}>
-                {nomeMes(m)}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-2">
+            <select
+              value={mes}
+              onChange={(e) => setMes(e.target.value)}
+              aria-label="Mês"
+              className="rounded-lg border border-borda bg-cartao px-3 py-2 text-sm text-texto"
+            >
+              {meses.map((m) => (
+                <option key={m} value={m}>
+                  {nomeMes(m)}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={pedirSugestao}
+              disabled={aPedirSugestao || !mes}
+              className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
+            >
+              {aPedirSugestao ? "A IA está a analisar..." : "✨ Sugerir orçamento"}
+            </button>
+          </div>
         </header>
 
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
+
+        {sugestoes && <SugestoesIA sugestoes={sugestoes} onAceitar={guardar} onFechar={() => setSugestoes(null)} />}
 
         {comOrcamento.length > 0 && (
           <div className="rounded-xl border border-borda bg-cartao p-4 text-sm text-texto-suave">
