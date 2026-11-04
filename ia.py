@@ -1,9 +1,10 @@
 """Funções de IA: categorização de transações, chat sobre as finanças e resumo mensal.
 
-O resto da API só chama categorizar(), conversar(), resumir_mes() e sugerir_orcamento(); qual o fornecedor usado (por agora,
+O resto da API só chama categorizar(), conversar(), resumir_mes(), sugerir_orcamento() e ler_talao(); qual o fornecedor usado (por agora,
 o Claude) decide-se no .env com IA_FORNECEDOR, sem mudar mais nenhum ficheiro.
 """
 
+import base64
 import json
 import os
 from collections.abc import Callable
@@ -13,7 +14,7 @@ import anthropic
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from models import Categoria, ResumoMes, SugestaoOrcamento, TransacaoCriar
+from models import Categoria, ResumoMes, SugestaoOrcamento, Talao, TransacaoCriar
 
 load_dotenv()
 
@@ -264,4 +265,60 @@ def _sugerir_orcamento_claude(historico: dict) -> SugestaoOrcamento:
     )
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu uma sugestão válida (stop_reason={resposta.stop_reason})")
+    return resposta.parsed_output
+
+
+# Instruções da leitura de talões. A IA recebe a fotografia e devolve os produtos (visão + saída estruturada).
+INSTRUCOES_TALAO = """
+És o assistente de uma app portuguesa de controlo de despesas pessoais.
+Recebes a fotografia de um talão de compra de uma loja portuguesa e lês o que lá está escrito.
+
+Regras:
+- Usa só o que está escrito no talão. Nunca inventes produtos, preços nem datas.
+- Em itens vão apenas os produtos comprados. O IVA, os subtotais, o TOTAL, o pagamento e o troco não são produtos.
+- Se houver produtos repetidos em linhas diferentes, devolve-os todos, um por linha (não os juntes).
+- quantidade é o número de unidades, ou o peso em kg nos produtos a peso (por exemplo "BANANA 1,234 kg x 1,29" dá quantidade 1.234).
+- preco é o valor da linha (o que se pagou por aquela quantidade), e não o preço por unidade ou por kg.
+- Um desconto ("DESC.", "PROMO", valor negativo) abate no preco do produto a que diz respeito, e não é um item à parte.
+- total é o valor TOTAL impresso no talão, mesmo que a soma dos itens dê um valor diferente.
+- data é a data da compra impressa no talão; se não for legível, deixa-a vazia.
+- categoria: supermercado ou mercearia = alimentação; restaurante ou café = restaurantes; farmácia = saúde;
+  outras lojas = compras.
+- Se a imagem não for um talão ou não se conseguir ler, devolve loja vazia, itens vazios e total 0.
+"""
+
+
+def ler_talao(imagem: bytes, tipo: str) -> Talao:
+    """Pede à IA que leia a fotografia de um talão. O tipo é o da imagem, por exemplo "image/jpeg"."""
+    fornecedor = os.getenv("IA_FORNECEDOR", "claude")
+    if fornecedor == "claude":
+        try:
+            return _ler_talao_claude(imagem, tipo)
+        except anthropic.APIError as erro:
+            raise ErroIA(f"Claude: {erro}") from erro
+    raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
+
+
+def _ler_talao_claude(imagem: bytes, tipo: str) -> Talao:
+    cliente = anthropic.Anthropic()
+    # A API não recebe ficheiros soltos: a imagem vai dentro do JSON, convertida em texto (base64).
+    imagem_base64 = base64.standard_b64encode(imagem).decode("utf-8")
+    resposta = cliente.messages.parse(
+        model=os.getenv("CLAUDE_MODELO", "claude-haiku-5-5"),
+        max_tokens=4096,
+        system=INSTRUCOES_TALAO,
+        messages=[
+            {
+                "role": "user",
+                # Com visão, o conteúdo deixa de ser só texto: é uma lista de blocos (a imagem e um pedido).
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": tipo, "data": imagem_base64}},
+                    {"type": "text", "text": "Lê este talão."},
+                ],
+            }
+        ],
+        output_format=Talao,
+    )
+    if resposta.parsed_output is None:
+        raise ErroIA(f"A IA não conseguiu ler o talão (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output

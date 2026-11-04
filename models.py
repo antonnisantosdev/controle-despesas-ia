@@ -143,3 +143,19 @@ class SugestaoOrcamento(BaseModel):
 # Corpo do PUT /orcamentos/{categoria}.
 class NovoLimite(BaseModel):
     limite: float = Field(gt=0)
+
+
+# Um produto lido do talão. O preço é o da linha (quantidade x preço unitário, já com descontos).
+class ItemTalao(BaseModel):
+    descricao: str
+    quantidade: float
+    preco: float
+
+
+# O que a IA leu de uma fotografia de talão (saída estruturada). A data fica vazia se não for legível.
+class Talao(BaseModel):
+    loja: str
+    data: date | None
+    itens: list[ItemTalao]
+    total: float
+    categoria: Categoria
