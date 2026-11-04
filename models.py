@@ -180,3 +180,21 @@ class Compra(BaseModel):
     data: date
     total: float
     itens: list[ItemTalao]
+
+
+# Corpo do POST /objetivos: um objetivo de poupança novo. O valor poupado começa a 0 (DEFAULT do SQL).
+class NovoObjetivo(BaseModel):
+    nome: str = Field(min_length=1, max_length=100)
+    valor_alvo: float = Field(gt=0)
+    data_alvo: date
+
+
+# Objetivo guardado, tal como está na tabela objetivos.
+class Objetivo(NovoObjetivo):
+    id: int
+    valor_poupado: float
+
+
+# Corpo do PATCH /objetivos/{id}: o novo total poupado (o frontend soma o que se juntou).
+class PoupadoAtualizar(BaseModel):
+    valor_poupado: float = Field(ge=0)

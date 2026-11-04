@@ -13,6 +13,7 @@ from ferramentas import FERRAMENTAS, executar_ferramenta
 from ia import ErroIA, categorizar, conversar, ler_talao, resumir_mes, sugerir_orcamento
 from importar_csv import ErroImportacao, ler_extrato
 from limites import registar_pergunta
+from objetivos import apagar_objetivo, atualizar_poupado, criar_objetivo, listar_objetivos
 from orcamento import guardar_limite, historico_para_sugestao, planeamento_do_mes
 from models import (
     Categoria,
@@ -24,7 +25,10 @@ from models import (
     NovaCompra,
     NovaMovimentacao,
     NovoLimite,
+    NovoObjetivo,
+    Objetivo,
     PerguntaChat,
+    PoupadoAtualizar,
     RespostaChat,
     ResultadoImportacao,
     ResumoMes,
@@ -324,3 +328,32 @@ def criar_compra(nova: NovaCompra, user_id: str = Depends(obter_utilizador_atual
 @app.get("/compras")
 def lista_de_compras(user_id: str = Depends(obter_utilizador_atual)) -> list[Compra]:
     return listar_compras(user_id)
+
+
+# Minha reserva: os objetivos de poupança do utilizador, do prazo mais próximo para o mais distante.
+@app.get("/objetivos")
+def lista_de_objetivos(user_id: str = Depends(obter_utilizador_atual)) -> list[Objetivo]:
+    return listar_objetivos(user_id)
+
+
+@app.post("/objetivos", status_code=201)
+def novo_objetivo(novo: NovoObjetivo, user_id: str = Depends(obter_utilizador_atual)) -> Objetivo:
+    return criar_objetivo(user_id, novo)
+
+
+# "+ Juntei dinheiro": o frontend envia o novo total poupado.
+@app.patch("/objetivos/{objetivo_id}")
+def mudar_poupado(
+    objetivo_id: int, alteracao: PoupadoAtualizar, user_id: str = Depends(obter_utilizador_atual)
+) -> Objetivo:
+    objetivo = atualizar_poupado(user_id, objetivo_id, alteracao.valor_poupado)
+    if objetivo is None:
+        raise HTTPException(status_code=404, detail="Objetivo não encontrado")
+    return objetivo
+
+
+# 204 No Content: apagou, e não há nada para devolver.
+@app.delete("/objetivos/{objetivo_id}", status_code=204)
+def remover_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_atual)) -> None:
+    if not apagar_objetivo(user_id, objetivo_id):
+        raise HTTPException(status_code=404, detail="Objetivo não encontrado")
