@@ -9,7 +9,7 @@ from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
 from database import supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
-from ia import ErroIA, categorizar, conversar, resumir_mes, sugerir_orcamento
+from ia import ErroIA, categorizar, conversar, ler_talao, resumir_mes, sugerir_orcamento
 from importar_csv import ErroImportacao, ler_extrato
 from limites import registar_pergunta
 from orcamento import guardar_limite, historico_para_sugestao, planeamento_do_mes
@@ -27,6 +27,7 @@ from models import (
     ResumoMes,
     SugestaoOrcamento,
     ResumoMensal,
+    Talao,
     Transacao,
     TransacaoCriar,
 )
@@ -278,3 +279,33 @@ def sugestao_orcamento(
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="A sugestão automática falhou. Tenta mais tarde.")
+
+
+# Os formatos de imagem que a IA aceita, e o tamanho máximo de cada imagem na API (5 MB).
+TIPOS_IMAGEM = {"image/jpeg", "image/png", "image/webp"}
+TAMANHO_MAXIMO = 5 * 1024 * 1024
+
+
+# A IA lê a fotografia de um talão. Não grava nada: o utilizador revê os produtos antes de guardar.
+@app.post("/compras/ler")
+def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual)) -> Talao:
+    imagem = foto.file.read()
+
+    if foto.content_type not in TIPOS_IMAGEM:
+        raise HTTPException(status_code=422, detail="Formato de imagem não suportado. Usa JPEG, PNG ou WebP.")
+    if len(imagem) > TAMANHO_MAXIMO:
+        raise HTTPException(status_code=422, detail="Imagem demasiado grande. Máx. 5 MB.")
+    elif len(imagem) < 1024:
+        raise HTTPException(status_code=422, detail="Imagem demasiado pequena. Tenta outra fotografia.")
+
+    # Só depois de a foto ser válida é que conta para o limite diário (uma foto errada não gasta perguntas).
+    registar_pergunta(user_id)
+    try:
+        talao = ler_talao(imagem, foto.content_type)
+    except ErroIA as erro:
+        print(erro)
+        raise HTTPException(status_code=503, detail="A leitura do talão falhou. Tenta mais tarde.")
+    # Pelas regras do prompt, uma foto que não é um talão (ou ilegível) volta sem itens.
+    if not talao.itens:
+        raise HTTPException(status_code=422, detail="Não consegui ler o talão. Tenta outra fotografia, com mais luz.")
+    return talao
