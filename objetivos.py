@@ -18,6 +18,14 @@ def listar_objetivos(user_id: str) -> list[Objetivo]:
     return [Objetivo(**linha) for linha in resposta.data]
 
 
+def obter_objetivo(user_id: str, objetivo_id: int) -> Objetivo | None:
+    """Um objetivo deste utilizador, ou None se não existir (ou for de outra pessoa)."""
+    resposta = (
+        supabase.table("objetivos").select(COLUNAS).eq("id", objetivo_id).eq("user_id", user_id).execute()
+    )
+    return Objetivo(**resposta.data[0]) if resposta.data else None
+
+
 def criar_objetivo(user_id: str, novo: NovoObjetivo) -> Objetivo:
     # mode="json" converte a data_alvo em texto ("2027-07-01"), que é o que o Supabase aceita.
     dados = novo.model_dump(mode="json") | {"user_id": user_id}
@@ -48,6 +56,9 @@ def apagar_objetivo(user_id: str, objetivo_id: int) -> bool:
 # Quantos meses completos entram no saldo médio. O mês atual fica de fora: ainda não acabou,
 # e um mês a meio (com o salário mas sem as despesas todas) faria a poupança parecer maior.
 MESES_SALDO_MEDIO = 3
+
+# Dos objetivos só se compromete 80% do saldo médio: os outros 20% são folga para imprevistos.
+PARTE_DO_SALDO_PARA_POUPAR = 0.8
 
 
 def meses_ate(data_alvo: date, hoje: date) -> int:
@@ -102,6 +113,7 @@ def dados_do_plano(user_id: str, objetivo: Objetivo, hoje: date) -> dict:
         "meses_ate_ao_prazo": meses_ate(objetivo.data_alvo, hoje),
         "necessario_por_mes": necessario_por_mes(objetivo, hoje),
         "saldo_medio_mensal": saldo,
+        "maximo_para_poupar_por_mes": round(max(saldo, 0) * PARTE_DO_SALDO_PARA_POUPAR, 2),
         "meses_do_saldo_medio": meses_usados,
         "outros_objetivos_por_mes": round(outros_por_mes, 2),
         "gastos_medios_por_categoria": {categoria: dados["media"] for categoria, dados in gastos.items()},

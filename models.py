@@ -198,3 +198,17 @@ class Objetivo(NovoObjetivo):
 # Corpo do PATCH /objetivos/{id}: o novo total poupado (o frontend soma o que se juntou).
 class PoupadoAtualizar(BaseModel):
     valor_poupado: float = Field(ge=0)
+
+
+# Um corte sugerido pela IA: numa categoria de gasto, quanto se pode poupar por mês e porquê.
+class CorteSugerido(BaseModel):
+    categoria: Categoria
+    valor_mensal: float
+    motivo: str
+
+
+# Plano de poupança escrito pela IA (saída estruturada). Não se guarda: muda sempre que o saldo muda.
+class PlanoPoupanca(BaseModel):
+    viavel: bool
+    explicacao: str
+    cortes: list[CorteSugerido]

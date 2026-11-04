@@ -1,6 +1,6 @@
 """Funções de IA: categorização de transações, chat sobre as finanças e resumo mensal.
 
-O resto da API só chama categorizar(), conversar(), resumir_mes(), sugerir_orcamento() e ler_talao(); qual o fornecedor usado (por agora,
+O resto da API só chama categorizar(), conversar(), resumir_mes(), sugerir_orcamento(), ler_talao() e planear_poupanca(); qual o fornecedor usado (por agora,
 o Claude) decide-se no .env com IA_FORNECEDOR, sem mudar mais nenhum ficheiro.
 """
 
@@ -14,7 +14,7 @@ import anthropic
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from models import Categoria, ResumoMes, SugestaoOrcamento, Talao, TransacaoCriar
+from models import Categoria, PlanoPoupanca, ResumoMes, SugestaoOrcamento, Talao, TransacaoCriar
 
 load_dotenv()
 
@@ -321,4 +321,55 @@ def _ler_talao_claude(imagem: bytes, tipo: str) -> Talao:
     )
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não conseguiu ler o talão (stop_reason={resposta.stop_reason})")
+    return resposta.parsed_output
+
+
+# Instruções do plano de poupança. A IA recebe as contas já feitas (objetivos.py): avalia-as e explica-as.
+INSTRUCOES_POUPANCA = """
+És o assistente de uma app portuguesa de controlo de despesas pessoais.
+Recebes, em JSON, um objetivo de poupança e as contas já feitas: quanto falta, quantos meses faltam,
+quanto é preciso poupar por mês, o saldo médio mensal do utilizador (receitas menos despesas),
+quanto os outros objetivos já precisam por mês e os gastos médios por categoria.
+
+A explicação:
+- 2 a 3 frases, em português de Portugal, a tratar o utilizador por "tu", sem Markdown.
+- Usa só os números recebidos. Nunca inventes nem estimes valores, e não refaças as contas.
+- Escreve os valores no formato português, por exemplo 1.234,56 €.
+
+Regras:
+- maximo_para_poupar_por_mes já é 80% do saldo_medio_mensal (os outros 20% são folga para imprevistos).
+- viavel é true se o necessario_por_mes mais os outros_objetivos_por_mes não passarem do maximo_para_poupar_por_mes.
+  Se passarem, ou se o maximo_para_poupar_por_mes for 0, viavel é false.
+- Se viavel for true, cortes fica vazio. Na explicação diz quanto poupar por mês e que cabe no saldo.
+- Se viavel for false, explica porquê com os números e sugere 1 a 3 cortes, das categorias de
+  gastos_medios_por_categoria com mais gasto.
+- Nunca sugiras cortes em casa, saúde, transferências, levantamentos nem rendimento: não são gastos fáceis de reduzir.
+- O valor_mensal de cada corte é no máximo 30% do gasto médio dessa categoria, arredondado a euros.
+- O motivo de cada corte é uma frase curta com o gasto médio da categoria, por exemplo
+  "Gastas em média 54,12 € por mês em alimentação."
+"""
+
+
+def planear_poupanca(dados: dict) -> PlanoPoupanca:
+    """Pede à IA que avalie um objetivo de poupança a partir das contas já feitas."""
+    fornecedor = os.getenv("IA_FORNECEDOR", "claude")
+    if fornecedor == "claude":
+        try:
+            return _planear_poupanca_claude(dados)
+        except anthropic.APIError as erro:
+            raise ErroIA(f"Claude: {erro}") from erro
+    raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
+
+
+def _planear_poupanca_claude(dados: dict) -> PlanoPoupanca:
+    cliente = anthropic.Anthropic()
+    resposta = cliente.messages.parse(
+        model=os.getenv("CLAUDE_MODELO", "claude-haiku-5-5"),
+        max_tokens=2048,
+        system=INSTRUCOES_POUPANCA,
+        messages=[{"role": "user", "content": json.dumps(dados, ensure_ascii=False)}],
+        output_format=PlanoPoupanca,
+    )
+    if resposta.parsed_output is None:
+        raise ErroIA(f"A IA não devolveu um plano válido (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output

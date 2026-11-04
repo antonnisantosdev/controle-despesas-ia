@@ -1,4 +1,5 @@
 import os
+from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,10 +11,17 @@ from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
 from database import supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
-from ia import ErroIA, categorizar, conversar, ler_talao, resumir_mes, sugerir_orcamento
+from ia import ErroIA, categorizar, conversar, ler_talao, planear_poupanca, resumir_mes, sugerir_orcamento
 from importar_csv import ErroImportacao, ler_extrato
 from limites import registar_pergunta
-from objetivos import apagar_objetivo, atualizar_poupado, criar_objetivo, listar_objetivos
+from objetivos import (
+    apagar_objetivo,
+    atualizar_poupado,
+    criar_objetivo,
+    dados_do_plano,
+    listar_objetivos,
+    obter_objetivo,
+)
 from orcamento import guardar_limite, historico_para_sugestao, planeamento_do_mes
 from models import (
     Categoria,
@@ -28,6 +36,7 @@ from models import (
     NovoObjetivo,
     Objetivo,
     PerguntaChat,
+    PlanoPoupanca,
     PoupadoAtualizar,
     RespostaChat,
     ResultadoImportacao,
@@ -357,3 +366,33 @@ def mudar_poupado(
 def remover_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_atual)) -> None:
     if not apagar_objetivo(user_id, objetivo_id):
         raise HTTPException(status_code=404, detail="Objetivo não encontrado")
+
+
+# A IA avalia o objetivo (as contas já vêm feitas do objetivos.py). Não guarda nada.
+@app.post("/objetivos/{objetivo_id}/plano")
+def plano_do_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_atual)) -> PlanoPoupanca:
+    objetivo = obter_objetivo(user_id, objetivo_id)
+    if objetivo is None:
+        raise HTTPException(status_code=404, detail="Objetivo não encontrado")
+    dados = dados_do_plano(user_id, objetivo, date.today())
+
+    # Casos em que a resposta é sempre a mesma: não vale a pena pagar uma chamada à IA.
+    if dados["falta"] == 0:
+        return PlanoPoupanca(viavel=True, explicacao="Já atingiste este objetivo. Parabéns!", cortes=[])
+    if dados["necessario_por_mes"] is None:
+        return PlanoPoupanca(
+            viavel=False, explicacao="O prazo deste objetivo já terminou. Escolhe uma nova data para voltar a planear.", cortes=[]
+        )
+    if not dados["meses_do_saldo_medio"]:
+        return PlanoPoupanca(
+            viavel=False,
+            explicacao="Ainda não tens um mês completo de movimentações, por isso não consigo calcular a tua poupança média.",
+            cortes=[],
+        )
+
+    registar_pergunta(user_id)
+    try:
+        return planear_poupanca(dados)
+    except ErroIA as erro:
+        print(erro)
+        raise HTTPException(status_code=503, detail="O plano de poupança falhou. Tenta mais tarde.")
