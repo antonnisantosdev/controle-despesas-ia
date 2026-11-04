@@ -34,6 +34,10 @@ export type SugestaoOrcamento = { sugestoes: SugestaoCategoria[] };
 export type ResultadoImportacao = { importadas: number; duplicadas: number; transacoes: Transacao[] };
 export type Alerta = { nivel: "info" | "atencao"; mensagem: string };
 export type ResumoMes = { resumo: string; alertas: Alerta[] };
+export type ItemTalao = { descricao: string; quantidade: number; preco: number };
+// O que a IA leu da fotografia (POST /compras/ler). A data vem null se não for legível.
+export type Talao = { loja: string; data: string | null; itens: ItemTalao[]; total: number; categoria: string };
+export type Compra = { id: number; transacao_id: number; loja: string; data: string; total: number; itens: ItemTalao[] };
 
 // Lançado quando a API responde 401: o token não existe, é inválido ou expirou.
 export class SessaoExpirada extends Error {}

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import AuthApiError
 
 from auth import fazer_login, obter_utilizador_atual
-from compras import gravar_compra
+from compras import gravar_compra, listar_compras
 from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
 from database import supabase
@@ -318,3 +318,9 @@ def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual))
 @app.post("/compras", status_code=201)
 def criar_compra(nova: NovaCompra, user_id: str = Depends(obter_utilizador_atual)) -> Compra:
     return gravar_compra(user_id, nova)
+
+
+# As compras guardadas, com os produtos, para a página Minhas compras.
+@app.get("/compras")
+def lista_de_compras(user_id: str = Depends(obter_utilizador_atual)) -> list[Compra]:
+    return listar_compras(user_id)

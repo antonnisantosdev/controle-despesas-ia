@@ -10,6 +10,7 @@ const LIGACOES = [
   { href: "/dashboard", nome: "Visão geral", icone: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
   { href: "/movimentacoes", nome: "Movimentações", icone: "M4 6h16M4 12h16M4 18h10" },
   { href: "/planeamento", nome: "Planeamento", icone: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+  { href: "/compras", nome: "Minhas compras", icone: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3" },
 ];
 
 function Icone({ caminho }: { caminho: string }) {
@@ -37,24 +38,38 @@ export default function MenuLateral() {
 
   const estiloBotao =
     "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-texto-suave hover:bg-fundo hover:text-texto";
+  // No ecrã estreito, o tema e o sair ficam só com o ícone, ao lado do logo.
+  const estiloIcone = "rounded-lg p-2 text-texto-suave hover:bg-fundo hover:text-texto";
 
   return (
-    <aside className="flex shrink-0 flex-col gap-4 border-b border-borda bg-menu p-4 md:sticky md:top-0 md:h-screen md:w-60 md:border-b-0 md:border-r">
-      <div className="px-1 py-1">
+    <aside className="flex shrink-0 flex-col gap-3 border-b border-borda bg-menu p-3 md:sticky md:top-0 md:h-screen md:w-60 md:gap-4 md:border-b-0 md:border-r md:p-4">
+      <div className="flex items-center justify-between px-1 py-1">
         <Logo altura={36} />
+        <div className="flex gap-1 md:hidden">
+          <button type="button" onClick={alternarTema} aria-label="Mudar tema" title="Mudar tema" className={estiloIcone}>
+            <Icone caminho="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" />
+          </button>
+          <button type="button" onClick={sair} aria-label="Sair da conta" title="Sair da conta" className={estiloIcone}>
+            <Icone caminho="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11" />
+          </button>
+        </div>
       </div>
 
-      <nav className="flex gap-1 md:flex-col">
+      {/* No ecrã estreito, os links ficam numa só linha que desliza para o lado, em vez de se partirem.
+          [scrollbar-width:none] e [&::-webkit-scrollbar]:hidden escondem a barra de deslocamento. */}
+      <nav className="-mx-1 flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden gap-1 overflow-x-auto px-1 md:mx-0 md:flex-col md:overflow-visible md:px-0">
         {LIGACOES.map((ligacao) => {
           const ativa = pagina === ligacao.href;
           return (
             <Link
               key={ligacao.href}
               href={ligacao.href}
+              // No telemóvel, se o link da página atual estiver fora da linha visível, desliza até ele.
+              ref={ativa ? (link) => link?.scrollIntoView({ block: "nearest", inline: "nearest" }) : undefined}
               className={
                 ativa
-                  ? "flex items-center gap-3 rounded-lg bg-destaque/15 px-3 py-2 text-sm font-medium text-destaque"
-                  : "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-texto-suave hover:bg-fundo hover:text-texto"
+                  ? "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-destaque/15 px-3 py-2 text-sm font-medium text-destaque md:gap-3"
+                  : "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm text-texto-suave hover:bg-fundo hover:text-texto md:gap-3"
               }
             >
               <Icone caminho={ligacao.icone} />
@@ -64,7 +79,7 @@ export default function MenuLateral() {
         })}
       </nav>
 
-      <div className="mt-auto flex gap-1 md:flex-col">
+      <div className="mt-auto hidden gap-1 md:flex md:flex-col">
         <button type="button" onClick={alternarTema} className={estiloBotao}>
           <Icone caminho="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" />
           Mudar tema

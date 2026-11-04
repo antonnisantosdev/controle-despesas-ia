@@ -1,4 +1,4 @@
-"""Minhas compras: gravar um talão revisto pelo utilizador (a transação, a compra e os produtos)."""
+"""Minhas compras: gravar um talão revisto pelo utilizador (a transação, a compra e os produtos) e listá-los."""
 
 from database import supabase
 from models import Compra, NovaCompra
@@ -43,3 +43,18 @@ def gravar_compra(user_id: str, nova: NovaCompra) -> Compra:
         raise
 
     return Compra(**compra, itens=nova.itens)
+
+
+def listar_compras(user_id: str) -> list[Compra]:
+    """As compras do utilizador, das mais recentes para as mais antigas, cada uma com os seus produtos."""
+    # "compra_itens(...)" dentro do select: o Supabase segue a chave estrangeira compra_id e traz os
+    # produtos de cada compra no mesmo pedido (como um JOIN, mas já arrumado por compra).
+    resposta = (
+        supabase.table("compras")
+        .select("id, transacao_id, loja, data, total, compra_itens(descricao, quantidade, preco)")
+        .eq("user_id", user_id)
+        .order("data", desc=True)
+        .order("id", desc=True)
+        .execute()
+    )
+    return [Compra(**linha, itens=linha["compra_itens"]) for linha in resposta.data]
