@@ -12,6 +12,7 @@ __pycache__/
 
 # Definições locais do Claude Code (pessoais, não são do projeto)
 .claude/settings.local.json
+CLAUDE.md
 
 # Lixo do sistema operativo e do editor
 .DS_Store
