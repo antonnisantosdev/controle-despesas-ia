@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import AuthApiError
 
 from auth import fazer_login, obter_utilizador_atual
+from compras import gravar_compra
 from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
 from database import supabase
@@ -16,9 +17,11 @@ from orcamento import guardar_limite, historico_para_sugestao, planeamento_do_me
 from models import (
     Categoria,
     CategoriaAtualizar,
+    Compra,
     Credenciais,
     GastoCategoria,
     LinhaOrcamento,
+    NovaCompra,
     NovaMovimentacao,
     NovoLimite,
     PerguntaChat,
@@ -309,3 +312,9 @@ def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual))
     if not talao.itens:
         raise HTTPException(status_code=422, detail="Não consegui ler o talão. Tenta outra fotografia, com mais luz.")
     return talao
+
+
+# Grava o talão depois de o utilizador o rever: cria a transação com o total, a compra e os produtos.
+@app.post("/compras", status_code=201)
+def criar_compra(nova: NovaCompra, user_id: str = Depends(obter_utilizador_atual)) -> Compra:
+    return gravar_compra(user_id, nova)

@@ -159,3 +159,24 @@ class Talao(BaseModel):
     itens: list[ItemTalao]
     total: float
     categoria: Categoria
+
+
+# Corpo do POST /compras: o talão depois de o utilizador o rever no ecrã.
+# Mais rigoroso do que o Talao: aqui a data e o método de pagamento são obrigatórios.
+class NovaCompra(BaseModel):
+    loja: str = Field(min_length=1, max_length=200)
+    data: date
+    itens: list[ItemTalao] = Field(min_length=1)
+    total: float = Field(gt=0)
+    categoria: Categoria
+    metodo_pagamento: MetodoPagamento
+
+
+# Compra gravada, com os produtos e a transação a que ficou ligada.
+class Compra(BaseModel):
+    id: int
+    transacao_id: int
+    loja: str
+    data: date
+    total: float
+    itens: list[ItemTalao]
