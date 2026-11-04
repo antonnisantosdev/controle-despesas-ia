@@ -191,6 +191,9 @@ Os alertas (no máximo 3, do mais importante para o menos importante):
 - nivel "atencao": quando as despesas do mês subiram mais de 30% em relação ao mês anterior.
 - nivel "atencao": quando uma categoria subiu mais de 50% e mais de 50 € em relação ao mês anterior.
 - nivel "info": quando uma só despesa representa mais de metade das despesas do mês.
+- nivel "atencao": quando o gasto de uma categoria da lista "orcamentos" passou o limite dessa categoria
+  (diz a categoria, o gasto, o limite e quanto passou).
+- nivel "info": quando o gasto de uma categoria da lista "orcamentos" chegou a 90% do limite, sem o passar.
 - Cada alerta é uma frase que explica a causa com os números (categoria, descrição ou valor),
   por exemplo: "As despesas subiram para 1.895,57 €, sobretudo por uma compra de 1.234,56 € em informática."
 - Se nada disto acontecer, a lista de alertas fica vazia. Não inventes alertas para valores pequenos.

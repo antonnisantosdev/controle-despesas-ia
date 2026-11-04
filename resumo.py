@@ -6,6 +6,7 @@ buscá-los todos de uma vez e a IA só tem de os explicar.
 
 from dashboard import gastos_por_categoria, limites_do_mes, mes_anterior, resumo_mensal
 from database import supabase
+from orcamento import juntar, limites_do_utilizador
 
 
 def recolher_dados(user_id: str, mes: str) -> dict:
@@ -38,4 +39,10 @@ def recolher_dados(user_id: str, mes: str) -> dict:
             anterior: [gasto.model_dump() for gasto in gastos_por_categoria(do_anterior)],
         },
         "maiores_despesas": maiores,
+        # Só as categorias com orçamento definido: o limite e quanto já se gastou neste mês.
+        "orcamentos": [
+            linha.model_dump()
+            for linha in juntar(limites_do_utilizador(user_id), gastos_por_categoria(deste_mes))
+            if linha.limite is not None
+        ],
     }
