@@ -5,7 +5,6 @@ import { useState, type FormEvent } from "react";
 import { ErroApi, pedirApi, SessaoExpirada, type Objetivo, type PlanoPoupanca } from "@/lib/api";
 
 import { euros } from "../dashboard/formatos";
-import error from "next/dist/api/error";
 
 // Quanto do objetivo já foi poupado, de 0 a 100. É este número que define a largura da barra.
 function percentagemPoupada(valorPoupado: number, valorAlvo: number): number {
