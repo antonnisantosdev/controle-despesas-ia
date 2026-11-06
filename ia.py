@@ -83,7 +83,8 @@ def categorizar(transacoes: list[TransacaoCriar]) -> list[str]:
     if fornecedor == "claude":
         try:
             return _categorizar_claude(transacoes)
-        except anthropic.APIError as erro:
+        # ValueError: uma resposta cortada a meio não passa na validação do Pydantic.
+        except (anthropic.APIError, ValueError) as erro:
             raise ErroIA(f"Claude: {erro}") from erro
     raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
 
@@ -93,13 +94,16 @@ def _categorizar_claude(transacoes: list[TransacaoCriar]) -> list[str]:
 
     lista = "\n".join(f"{i}: {t.descricao} ({t.valor})" for i, t in enumerate(transacoes))
 
-    resposta = cliente.messages.parse(
+    # Streaming e limite alto: um extrato grande tem centenas de transações, todas na mesma resposta.
+    with cliente.messages.stream(
         model=os.getenv("CLAUDE_MODELO", "claude-haiku-5-5"),
-        max_tokens=4096,
+        max_tokens=32000,
+        output_config={"effort": "low"},
         system=INSTRUCOES,
         messages=[{"role": "user", "content": lista}],
         output_format=RespostaCategorizacao,
-    )
+    ) as fluxo:
+        resposta = fluxo.get_final_message()
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu uma resposta válida (stop_reason={resposta.stop_reason})")
     por_indice = {c.indice: c.categoria for c in resposta.parsed_output.categorizacoes}
@@ -357,10 +361,12 @@ def ler_extrato_pdf(pdf: bytes) -> ExtratoPdf:
 def _ler_extrato_pdf_claude(pdf: bytes) -> ExtratoPdf:
     cliente = anthropic.Anthropic()
     pdf_base64 = base64.standard_b64encode(pdf).decode("utf-8")
-    resposta = cliente.messages.parse(
+    # Streaming: um extrato pode ter centenas de movimentos, e uma resposta tão longa não cabe num pedido normal.
+    with cliente.messages.stream(
         model=os.getenv("CLAUDE_MODELO", "claude-haiku-5-5"),
-        # Mais do que nos talões: um extrato pode ter centenas de movimentos, e todos têm de caber na resposta.
-        max_tokens=16000,
+        max_tokens=64000,
+        # Copiar movimentos não exige raciocínio: com esforço baixo, sobram tokens para a resposta.
+        output_config={"effort": "low"},
         system=INSTRUCOES_EXTRATO_PDF,
         messages=[
             {
@@ -376,7 +382,8 @@ def _ler_extrato_pdf_claude(pdf: bytes) -> ExtratoPdf:
             }
         ],
         output_format=ExtratoPdf,
-    )
+    ) as fluxo:
+        resposta = fluxo.get_final_message()
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não conseguiu ler o extrato (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output
