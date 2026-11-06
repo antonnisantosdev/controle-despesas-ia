@@ -11,6 +11,7 @@ const LIGACOES = [
   { href: "/movimentacoes", nome: "Movimentações", icone: "M4 6h16M4 12h16M4 18h10" },
   { href: "/planeamento", nome: "Planeamento", icone: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
   { href: "/compras", nome: "Minhas compras", icone: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3" },
+  { href: "/reserva", nome: "Minha reserva", icone: "M5 21V4h13l-3 4 3 4H5" },
 ];
 
 function Icone({ caminho }: { caminho: string }) {

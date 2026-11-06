@@ -38,6 +38,9 @@ export type ItemTalao = { descricao: string; quantidade: number; preco: number }
 // O que a IA leu da fotografia (POST /compras/ler). A data vem null se não for legível.
 export type Talao = { loja: string; data: string | null; itens: ItemTalao[]; total: number; categoria: string };
 export type Compra = { id: number; transacao_id: number; loja: string; data: string; total: number; itens: ItemTalao[] };
+export type Objetivo = { id: number; nome: string; valor_alvo: number; data_alvo: string; valor_poupado: number };
+export type CorteSugerido = { categoria: string; valor_mensal: number; motivo: string };
+export type PlanoPoupanca = { viavel: boolean; explicacao: string; cortes: CorteSugerido[] };
 
 // Lançado quando a API responde 401: o token não existe, é inválido ou expirou.
 export class SessaoExpirada extends Error {}
@@ -79,12 +82,16 @@ async function lerResposta<T>(resposta: Response): Promise<T> {
     const corpo = await resposta.json().catch(() => null);
     throw new ErroApi(resposta.status, corpo?.detail);
   }
+  // 204 No Content (ex.: depois de apagar): não há corpo, e resposta.json() daria erro.
+  if (resposta.status === 204) {
+    return undefined as T;
+  }
   return await resposta.json();
 }
 
 // Faz um pedido à API com o token do login e devolve o JSON da resposta.
 // Sem corpo é um GET; com corpo é um POST com esse objeto em JSON (ou outro método, se for indicado).
-export async function pedirApi<T>(caminho: string, corpo?: object, metodo?: "POST" | "PATCH" | "PUT"): Promise<T> {
+export async function pedirApi<T>(caminho: string, corpo?: object, metodo?: "POST" | "PATCH" | "PUT" | "DELETE"): Promise<T> {
   const token = lerTokenOuFalhar();
   const resposta = await fetch(`${API_URL}${caminho}`, {
     method: metodo ?? (corpo ? "POST" : "GET"),
