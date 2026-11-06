@@ -3,7 +3,7 @@ import hashlib
 import io
 from datetime import datetime
 
-from models import TransacaoImportada
+from models import ExtratoPdf, TransacaoImportada
 
 
 class ErroImportacao(Exception):
@@ -43,4 +43,27 @@ def ler_extrato(conteudo: str) -> list[TransacaoImportada]:
 
     if erros:
         raise ErroImportacao(erros)
+    return transacoes
+
+
+def transacoes_do_pdf(extrato: ExtratoPdf) -> list[TransacaoImportada]:
+    """Converte o que a IA leu do PDF nas mesmas transações que saem de um CSV."""
+    transacoes = []
+    for posicao, movimento in enumerate(extrato.movimentos):
+        # Mesmo formato de uma linha do CSV: assim, o mesmo movimento em CSV e em PDF dá o mesmo hash.
+        linha = {
+            "Data": movimento.data.strftime("%d-%m-%Y"),
+            "Montante": f"{movimento.valor:.2f}".replace(".", ","),
+            "Descrição": movimento.descricao,
+            # Sem saldo, dois cafés iguais no mesmo dia dariam o mesmo hash e um deles perdia-se.
+            "Saldo": f"{movimento.saldo:.2f}".replace(".", ",") if movimento.saldo is not None else f"sem-saldo-{posicao}",
+        }
+        transacoes.append(
+            TransacaoImportada(
+                data=movimento.data,
+                valor=movimento.valor,
+                descricao=movimento.descricao.strip(),
+                hash_importacao=calcular_hash(linha),
+            )
+        )
     return transacoes

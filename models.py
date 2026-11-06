@@ -70,6 +70,19 @@ class TransacaoImportada(TransacaoCriar):
     hash_importacao: str
 
 
+# Um movimento lido pela IA de um extrato em PDF. Nem todos os bancos mostram o saldo em cada linha.
+class MovimentoPdf(BaseModel):
+    data: date
+    descricao: str
+    valor: float
+    saldo: float | None
+
+
+# O que a IA leu de um extrato em PDF (saída estruturada).
+class ExtratoPdf(BaseModel):
+    movimentos: list[MovimentoPdf]
+
+
 # Resposta da importação: quantas entraram, quantas já existiam, e as que entraram.
 class ResultadoImportacao(BaseModel):
     importadas: int

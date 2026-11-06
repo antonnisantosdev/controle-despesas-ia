@@ -10,7 +10,7 @@ type Props = {
   onSessaoExpirada: (e: unknown) => void;
 };
 
-// Botão que abre a janela "Escolher ficheiro" e envia o CSV para POST /transacoes/importar.
+// Botão que abre a janela "Escolher ficheiro" e envia o CSV ou o PDF para POST /transacoes/importar.
 export default function BotaoImportar({ onImportado, onErro, onSessaoExpirada }: Props) {
   // useRef: uma ligação direta ao <input type="file"> escondido, para o "clicar" a partir do botão.
   const entradaFicheiro = useRef<HTMLInputElement>(null);
@@ -48,7 +48,7 @@ export default function BotaoImportar({ onImportado, onErro, onSessaoExpirada }:
       <input
         ref={entradaFicheiro}
         type="file"
-        accept=".csv,text/csv"
+        accept=".csv,text/csv,.pdf,application/pdf"
         className="hidden"
         onChange={(e) => {
           const ficheiro = e.target.files?.[0];

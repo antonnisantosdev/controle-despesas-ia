@@ -11,8 +11,8 @@ from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
 from database import supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
-from ia import ErroIA, categorizar, conversar, ler_talao, planear_poupanca, resumir_mes, sugerir_orcamento
-from importar_csv import ErroImportacao, ler_extrato
+from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_mes, sugerir_orcamento
+from importar_csv import ErroImportacao, ler_extrato, transacoes_do_pdf
 from limites import registar_pergunta
 from objetivos import (
     apagar_objetivo,
@@ -46,6 +46,7 @@ from models import (
     Talao,
     Transacao,
     TransacaoCriar,
+    TransacaoImportada,
 )
 from resumo import recolher_dados
 
@@ -179,15 +180,43 @@ def categorizar_pendentes(user_id: str = Depends(obter_utilizador_atual)) -> lis
     return atualizadas
 
 
+# Tamanho máximo de um extrato em PDF. Um extrato normal tem bem menos do que isto.
+TAMANHO_MAXIMO_PDF = 10 * 1024 * 1024
+
+
+def ler_pdf_enviado(pdf: bytes, user_id: str) -> list[TransacaoImportada]:
+    """A IA lê o extrato em PDF. Responde 422 se não for válido e 503 se a IA falhar."""
+    if len(pdf) > TAMANHO_MAXIMO_PDF:
+        raise HTTPException(status_code=422, detail="PDF demasiado grande. Máx. 10 MB.")
+
+    # Ler um PDF é a chamada mais cara da importação, por isso conta para o limite diário.
+    registar_pergunta(user_id)
+    try:
+        extrato = ler_extrato_pdf(pdf)
+    except ErroIA as erro:
+        print(erro)
+        raise HTTPException(
+            status_code=503, detail="Não consegui ler o PDF. Se tiver palavra-passe, tira-a. Senão, tenta mais tarde."
+        )
+    if not extrato.movimentos:
+        raise HTTPException(status_code=422, detail="Não encontrei movimentos neste PDF. Confirma que é um extrato bancário.")
+    return transacoes_do_pdf(extrato)
+
+
 @app.post("/transacoes/importar", status_code=201)
 def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizador_atual)) -> ResultadoImportacao:
-    # "utf-8-sig" ignora a marca invisível (BOM) que o Excel põe no início dos CSV.
-    conteudo = ficheiro.file.read().decode("utf-8-sig")
-    try:
-        novas = ler_extrato(conteudo)
-    except ErroImportacao as erro:
-        # Nada é gravado: o utilizador corrige o ficheiro e volta a importar.
-        raise HTTPException(status_code=422, detail={"mensagem": str(erro), "erros": erro.erros})
+    conteudo = ficheiro.file.read()
+
+    # Todos os PDF começam por "%PDF": é mais seguro do que confiar no nome do ficheiro.
+    if conteudo.startswith(b"%PDF"):
+        novas = ler_pdf_enviado(conteudo, user_id)
+    else:
+        try:
+            # "utf-8-sig" ignora a marca invisível (BOM) que o Excel põe no início dos CSV.
+            novas = ler_extrato(conteudo.decode("utf-8-sig"))
+        except ErroImportacao as erro:
+            # Nada é gravado: o utilizador corrige o ficheiro e volta a importar.
+            raise HTTPException(status_code=422, detail={"mensagem": str(erro), "erros": erro.erros})
     if not novas:
         raise HTTPException(status_code=422, detail="O ficheiro não tem transações")
 
