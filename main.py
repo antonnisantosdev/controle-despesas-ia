@@ -76,7 +76,13 @@ def inicio():
 def login(credenciais: Credenciais):
     try:
         token = fazer_login(credenciais.email, credenciais.password)
-    except AuthApiError:
+    except AuthApiError as erro:
+        # Conta criada no registo, mas o link do email de confirmação ainda não foi aberto.
+        if erro.code == "email_not_confirmed":
+            raise HTTPException(
+                status_code=401,
+                detail="Ainda não confirmaste o email. Abre o link que te enviámos para ativar a conta.",
+            )
         raise HTTPException(status_code=401, detail="Email ou palavra-passe errados")
     return {"access_token": token, "token_type": "bearer"}
 

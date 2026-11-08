@@ -57,3 +57,14 @@ def test_registo_com_erro_do_supabase_responde_400(cliente, monkeypatch):
 
     resposta = cliente.post("/registo", json={"email": "nova@exemplo.com", "password": "12345678"})
     assert resposta.status_code == 400
+
+
+def test_login_avisa_quando_o_email_nao_esta_confirmado(cliente, monkeypatch):
+    def falha(email, password):
+        raise AuthApiError("Email not confirmed", 400, "email_not_confirmed")
+
+    monkeypatch.setattr(main, "fazer_login", falha)
+
+    resposta = cliente.post("/login", json={"email": "nova@exemplo.com", "password": "uma-boa-palavra"})
+    assert resposta.status_code == 401
+    assert "confirmaste o email" in resposta.json()["detail"]

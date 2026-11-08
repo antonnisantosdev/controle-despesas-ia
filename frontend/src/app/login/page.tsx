@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -40,7 +41,9 @@ export default function PaginaLogin() {
         guardarToken(dados.access_token);
         router.push("/dashboard");
       } else {
-        setErro("Email ou palavra-passe inválidas.");
+        // A API explica o problema no "detail" (palavra-passe errada, email por confirmar...).
+        const corpo = await resposta.json().catch(() => null);
+        setErro(typeof corpo?.detail === "string" ? corpo.detail : "Email ou palavra-passe inválidas.");
       }
     } catch {
       // O fetch só lança erro quando nem consegue falar com a API (desligada, CORS...).
@@ -89,6 +92,13 @@ export default function PaginaLogin() {
         >
           {aEntrar ? "A entrar..." : "Entrar"}
         </button>
+
+        <p className="text-center text-sm text-texto-suave">
+          Ainda não tens conta?{" "}
+          <Link href="/registo" className="font-medium text-destaque hover:underline">
+            Cria uma grátis
+          </Link>
+        </p>
       </form>
       <AvisoServidor />
     </main>
