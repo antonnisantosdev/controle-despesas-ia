@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import date
 
@@ -13,7 +14,7 @@ from database import supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
 from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_mes, sugerir_orcamento
 from importar_csv import ErroImportacao, ler_extrato, transacoes_do_pdf
-from limites import registar_pergunta
+from limites import pode_usar_ia, registar_pergunta
 from objetivos import (
     apagar_objetivo,
     atualizar_poupado,
@@ -112,7 +113,7 @@ def obter_transacao(transacao_id: int, user_id: str = Depends(obter_utilizador_a
 @app.post("/transacoes", status_code=201)
 def criar_transacao(nova: NovaMovimentacao, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
     categoria = nova.categoria
-    if not categoria:
+    if not categoria and pode_usar_ia(user_id):
         try:
             categoria = categorizar([TransacaoCriar(**nova.model_dump())])[0]
         except ErroIA as erro:
@@ -159,6 +160,8 @@ def categorizar_pendentes(user_id: str = Depends(obter_utilizador_atual)) -> lis
     if not pendentes:
         return []
 
+    # Todas as pendentes vão numa só chamada à IA, por isso conta como uma pergunta.
+    registar_pergunta(user_id)
     try:
         categorias = categorizar(pendentes)
     except ErroIA as erro:
@@ -182,6 +185,9 @@ def categorizar_pendentes(user_id: str = Depends(obter_utilizador_atual)) -> lis
 
 # Tamanho máximo de um extrato em PDF. Um extrato normal tem bem menos do que isto.
 TAMANHO_MAXIMO_PDF = 10 * 1024 * 1024
+
+# Tamanho máximo de um extrato em CSV. Um ano de movimentos em CSV tem uns 100 KB.
+TAMANHO_MAXIMO_CSV = 1 * 1024 * 1024
 
 
 def ler_pdf_enviado(pdf: bytes, user_id: str) -> list[TransacaoImportada]:
@@ -211,16 +217,23 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
     if conteudo.startswith(b"%PDF"):
         novas = ler_pdf_enviado(conteudo, user_id)
     else:
+        if len(conteudo) > TAMANHO_MAXIMO_CSV:
+            raise HTTPException(status_code=422, detail="CSV demasiado grande. Máx. 1 MB.")
+        
+
         try:
             # "utf-8-sig" ignora a marca invisível (BOM) que o Excel põe no início dos CSV.
             novas = ler_extrato(conteudo.decode("utf-8-sig"))
         except ErroImportacao as erro:
             # Nada é gravado: o utilizador corrige o ficheiro e volta a importar.
             raise HTTPException(status_code=422, detail={"mensagem": str(erro), "erros": erro.erros})
+        # A categorização do CSV inteiro é uma só chamada à IA: conta como uma pergunta.
+        # (No PDF já contou ao ler o ficheiro: ler e categorizar fazem parte da mesma importação.)
+        registar_pergunta(user_id)
     if not novas:
         raise HTTPException(status_code=422, detail="O ficheiro não tem transações")
 
-    try:   
+    try:
         categorias = categorizar(novas)
     except ErroIA as erro:
         raise HTTPException(status_code=503, detail="A categorização automática falhou. Tenta importar mais tarde. " )
@@ -276,6 +289,10 @@ def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -
     return RespostaChat(resposta=resposta)
 
 
+# Resumos já escritos pela IA, guardados na memória do servidor (perdem-se quando o Render reinicia).
+RESUMOS_JA_FEITOS: dict[str, ResumoMes] = {}
+
+
 # Resumo do mês escrito pela IA, com alertas. Exemplo: /resumo?mes=2026-10
 @app.get("/resumo")
 def resumo_do_mes(
@@ -285,11 +302,22 @@ def resumo_do_mes(
     # Sem transações não há nada para resumir: não vale a pena pagar uma chamada à IA.
     if dados["transacoes_no_mes"] == 0:
         return ResumoMes(resumo="Ainda não há transações neste mês.", alertas=[])
+
+    # O dashboard pede o resumo sempre que abre. Se os números não mudaram, o resumo também não:
+    # devolve-se o que já foi escrito, sem pagar outra chamada nem gastar uma pergunta.
+    chave = f"{user_id}:{json.dumps(dados, sort_keys=True, default=str)}"
+    if chave in RESUMOS_JA_FEITOS:
+        return RESUMOS_JA_FEITOS[chave]
+
+    if not pode_usar_ia(user_id):
+        return ResumoMes(resumo="Chegaste ao limite diário de pedidos à IA. O resumo volta amanhã.", alertas=[])
     try:
-        return resumir_mes(dados)
+        resumo = resumir_mes(dados)
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="O resumo automático falhou. Tenta mais tarde.")
+    RESUMOS_JA_FEITOS[chave] = resumo
+    return resumo
 
 
 # Planeamento do mês: cada categoria com o orçamento (se tiver) e quanto já se gastou.

@@ -33,3 +33,16 @@ def registar_pergunta(user_id: str) -> None:
 
     # Ainda pode perguntar: esta pergunta passa a contar para o total de hoje.
     supabase.table("uso_ia").insert({"user_id": user_id}).execute()
+
+
+def pode_usar_ia(user_id: str) -> bool:
+    """Como registar_pergunta(), mas devolve False em vez de responder 429.
+
+    Serve para as rotas que funcionam sem IA: a movimentação grava-se sem categoria,
+    e o resumo mostra um aviso, em vez de o pedido inteiro falhar.
+    """
+    try:
+        registar_pergunta(user_id)
+        return True
+    except HTTPException:
+        return False
