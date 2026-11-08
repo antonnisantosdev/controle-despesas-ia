@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import Logo from "@/components/Logo";
-import { API_URL, guardarToken } from "@/lib/api";
+import AvisoServidor from "@/components/AvisoServidor";
+import { API_URL, fetchComTentativas, guardarToken } from "@/lib/api";
 
 export default function PaginaLogin() {
   const router = useRouter();
@@ -15,6 +16,12 @@ export default function PaginaLogin() {
   const [erro, setErro] = useState("");
   const [aEntrar, setAEntrar] = useState(false);
 
+  // Acorda a API logo que a página abre: enquanto se escreve o email e a palavra-passe,
+  // o Render já está a arrancar o servidor. A resposta não interessa, e um erro também não.
+  useEffect(() => {
+    fetch(`${API_URL}/`).catch(() => {});
+  }, []);
+
   async function entrar(evento: FormEvent<HTMLFormElement>) {
     // Impede o envio clássico do formulário (que recarregava a página, como num form PHP).
     evento.preventDefault();
@@ -22,7 +29,7 @@ export default function PaginaLogin() {
     setAEntrar(true);
 
     try {
-      const resposta = await fetch(`${API_URL}/login`, {
+      const resposta = await fetchComTentativas(`${API_URL}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -37,7 +44,7 @@ export default function PaginaLogin() {
       }
     } catch {
       // O fetch só lança erro quando nem consegue falar com a API (desligada, CORS...).
-      setErro("Não foi possível ligar à API. Confirma que o fastapi dev está a correr.");
+      setErro("Não foi possível ligar ao servidor. Tenta outra vez daqui a um minuto.");
     } finally {
       setAEntrar(false);
     }
@@ -83,6 +90,7 @@ export default function PaginaLogin() {
           {aEntrar ? "A entrar..." : "Entrar"}
         </button>
       </form>
+      <AvisoServidor />
     </main>
   );
 }

@@ -1,3 +1,5 @@
+import AvisoServidor from "@/components/AvisoServidor";
+
 import MenuLateral from "./MenuLateral";
 
 // Moldura das páginas da app (depois do login): menu à esquerda, página à direita.
@@ -7,6 +9,7 @@ export default function LayoutApp({ children }: { children: React.ReactNode }) {
     <div className="flex flex-1 flex-col md:flex-row">
       <MenuLateral />
       <div className="min-w-0 flex-1">{children}</div>
+      <AvisoServidor />
     </div>
   );
 }

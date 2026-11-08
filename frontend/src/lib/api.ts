@@ -93,11 +93,67 @@ async function lerResposta<T>(resposta: Response): Promise<T> {
   return await resposta.json();
 }
 
+// --- Novas tentativas quando a API está a acordar ---
+// No plano gratuito do Render, a API adormece depois de 15 minutos sem pedidos e demora até
+// um minuto a arrancar. Entretanto, os pedidos falham por rede ou com 502/503/504.
+// Em vez de mostrar logo um erro, a app espera e tenta outra vez.
+
+// Segundos de espera antes de cada nova tentativa: cerca de 1 minuto no total.
+const ESPERAS_SEGUNDOS = [2, 4, 8, 15, 15, 15];
+
+// Os componentes ouvem este evento para mostrar "A acordar o servidor..." (AvisoServidor.tsx).
+export const EVENTO_A_ACORDAR = "api-a-acordar";
+
+function avisarAAcordar(aAcordar: boolean) {
+  window.dispatchEvent(new CustomEvent(EVENTO_A_ACORDAR, { detail: aAcordar }));
+}
+
+// Decide se um pedido que falhou deve ser repetido.
+// status é null quando nem houve resposta (erro de rede, ou o browser bloqueou-a por CORS).
+function deveTentarOutraVez(metodo: string, status: number | null): boolean {
+  // 502/503/504: quem respondeu foi o Render, a API nem recebeu o pedido. Repetir é seguro com qualquer método.
+  if (status === 502 || status === 503 || status === 504) return true;
+
+  // Sem resposta: não se sabe se o pedido chegou à API. Só se repetem os métodos idempotentes
+  // (repetir dá o mesmo resultado). Um POST repetido podia gravar duas vezes ou contar duas perguntas à IA.
+  if (status === null) return metodo === "GET" || metodo === "PUT" || metodo === "DELETE";
+
+  // 401, 403, 422, 429...: respostas da própria API, que não mudam se se tentar outra vez.
+  return false;
+}
+
+// Um fetch que, se a API estiver a acordar, espera e tenta outra vez (até ao fim de ESPERAS_SEGUNDOS).
+export async function fetchComTentativas(url: string, opcoes: RequestInit = {}): Promise<Response> {
+  const metodo = opcoes.method ?? "GET";
+  try {
+    for (let tentativa = 0; ; tentativa++) {
+      let resposta: Response | null = null;
+      let erroRede: unknown = null;
+      try {
+        resposta = await fetch(url, opcoes);
+      } catch (e) {
+        erroRede = e;
+      }
+
+      const esgotou = tentativa >= ESPERAS_SEGUNDOS.length;
+      if (esgotou || !deveTentarOutraVez(metodo, resposta?.status ?? null)) {
+        if (resposta) return resposta;
+        throw erroRede;
+      }
+
+      avisarAAcordar(true);
+      await new Promise((r) => setTimeout(r, ESPERAS_SEGUNDOS[tentativa] * 1000));
+    }
+  } finally {
+    avisarAAcordar(false);
+  }
+}
+
 // Faz um pedido à API com o token do login e devolve o JSON da resposta.
 // Sem corpo é um GET; com corpo é um POST com esse objeto em JSON (ou outro método, se for indicado).
 export async function pedirApi<T>(caminho: string, corpo?: object, metodo?: "POST" | "PATCH" | "PUT" | "DELETE"): Promise<T> {
   const token = lerTokenOuFalhar();
-  const resposta = await fetch(`${API_URL}${caminho}`, {
+  const resposta = await fetchComTentativas(`${API_URL}${caminho}`, {
     method: metodo ?? (corpo ? "POST" : "GET"),
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: corpo ? JSON.stringify(corpo) : undefined,
@@ -111,7 +167,7 @@ export async function enviarFicheiro<T>(caminho: string, campo: string, ficheiro
   const token = lerTokenOuFalhar();
   const formulario = new FormData();
   formulario.append(campo, ficheiro);
-  const resposta = await fetch(`${API_URL}${caminho}`, {
+  const resposta = await fetchComTentativas(`${API_URL}${caminho}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: formulario,
