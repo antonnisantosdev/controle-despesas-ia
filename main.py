@@ -25,6 +25,7 @@ from objetivos import (
 )
 from orcamento import guardar_limite, historico_para_sugestao, planeamento_do_mes
 from models import (
+    AnoSimulado,
     Categoria,
     CategoriaAtualizar,
     Compra,
@@ -50,6 +51,7 @@ from models import (
     TransacaoImportada,
 )
 from resumo import recolher_dados
+from simulador import simular_poupanca
 
 app = FastAPI()
 
@@ -457,3 +459,15 @@ def plano_do_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="O plano de poupança falhou. Tenta mais tarde.")
+
+
+# Simulador de poupança: só contas, sem IA. Exemplo: /simulador?mensal=50&anos=10&taxa=3
+# Os limites evitam pedidos sem sentido (e simulações enormes).
+@app.get("/simulador")
+def simulador(
+    mensal: float = Query(gt=0, le=10_000),
+    anos: int = Query(ge=1, le=40),
+    taxa: float = Query(ge=0, le=15),
+    user_id: str = Depends(obter_utilizador_atual),
+) -> list[AnoSimulado]:
+    return simular_poupanca(mensal, anos, taxa)

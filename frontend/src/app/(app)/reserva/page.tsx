@@ -7,6 +7,7 @@ import { apagarToken, pedirApi, SessaoExpirada, type Objetivo } from "@/lib/api"
 
 import CartaoObjetivo from "./CartaoObjetivo";
 import FormNovoObjetivo from "./FormNovoObjetivo";
+import SimuladorPoupanca from "./SimuladorPoupanca";
 
 export default function PaginaReserva() {
   const router = useRouter();
@@ -86,6 +87,8 @@ export default function PaginaReserva() {
             />
           ))}
         </div>
+
+        <SimuladorPoupanca onSessaoExpirada={tratarSessao} />
       </div>
     </main>
   );

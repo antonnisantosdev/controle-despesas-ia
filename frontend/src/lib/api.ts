@@ -41,6 +41,8 @@ export type Compra = { id: number; transacao_id: number; loja: string; data: str
 export type Objetivo = { id: number; nome: string; valor_alvo: number; data_alvo: string; valor_poupado: number };
 export type CorteSugerido = { categoria: string; valor_mensal: number; motivo: string };
 export type PlanoPoupanca = { viavel: boolean; explicacao: string; cortes: CorteSugerido[] };
+// Um ano do simulador de poupança (GET /simulador).
+export type AnoSimulado = { ano: number; depositado: number; valor: number };
 
 // Lançado quando a API responde 401: o token não existe, é inválido ou expirou.
 export class SessaoExpirada extends Error {}

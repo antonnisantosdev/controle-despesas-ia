@@ -225,3 +225,10 @@ class PlanoPoupanca(BaseModel):
     viavel: bool
     explicacao: str
     cortes: list[CorteSugerido]
+
+
+# Um ano da simulação de poupança: quanto se depositou até aí e quanto vale com os juros.
+class AnoSimulado(BaseModel):
+    ano: int
+    depositado: float
+    valor: float
