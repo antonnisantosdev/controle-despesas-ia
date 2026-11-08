@@ -1,0 +1,3 @@
+# Bibliotecas só para programar e testar (o Render não as instala).
+# Instalar com: pip install -r requirements-dev.txt
+pytest==9.2.0
