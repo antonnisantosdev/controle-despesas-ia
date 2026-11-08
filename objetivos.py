@@ -5,7 +5,7 @@ e as contas do plano de poupança, que a IA depois avalia e explica.
 from datetime import date
 
 from dashboard import mes_anterior, resumo_mensal
-from database import supabase
+from database import ler_todas, supabase
 from models import NovoObjetivo, Objetivo
 from orcamento import historico_para_sugestao
 
@@ -75,9 +75,9 @@ def meses_ate(data_alvo: date, hoje: date) -> int:
 
 def saldo_medio(user_id: str, hoje: date) -> tuple[float, list[str]]:
     """Média de (receitas - despesas) nos últimos meses completos, e quais foram esses meses."""
-    resposta = supabase.table("transacoes").select("data, valor").eq("user_id", user_id).execute()
+    linhas = ler_todas(lambda: supabase.table("transacoes").select("data, valor").eq("user_id", user_id).order("id"))
     mes_atual = hoje.strftime("%Y-%m")
-    completos = [m for m in resumo_mensal(resposta.data) if m.mes < mes_atual][-MESES_SALDO_MEDIO:]
+    completos = [m for m in resumo_mensal(linhas) if m.mes < mes_atual][-MESES_SALDO_MEDIO:]
     if not completos:
         return 0.0, []
     media = sum(m.receitas - m.despesas for m in completos) / len(completos)

@@ -10,7 +10,7 @@ from auth import fazer_login, obter_utilizador_atual
 from compras import gravar_compra, listar_compras
 from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
-from database import supabase
+from database import ler_todas, supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
 from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_mes, sugerir_orcamento
 from importar_csv import ErroImportacao, ler_extrato, transacoes_do_pdf
@@ -90,23 +90,27 @@ def listar_transacoes(
     mes: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
     user_id: str = Depends(obter_utilizador_atual),
 ) -> list[Transacao]:
-    # A consulta monta-se aos bocados, como um WP_Query com argumentos opcionais.
-    consulta = supabase.table("transacoes").select("*").eq("user_id", user_id)
+    def nova_consulta():
+        # A consulta monta-se aos bocados, como um WP_Query com argumentos opcionais.
+        consulta = supabase.table("transacoes").select("*").eq("user_id", user_id)
+        if mes:
+            inicio, fim = limites_do_mes(mes)
+            consulta = consulta.gte("data", inicio.isoformat()).lt("data", fim.isoformat())
+        # O id desempata as transações do mesmo dia, para a ordem ser sempre igual entre páginas.
+        return consulta.order("data", desc=True).order("id", desc=True)
 
-    if mes:
-        inicio, fim = limites_do_mes(mes)
-        consulta = consulta.gte("data", inicio.isoformat()).lt("data", fim.isoformat())
-
-    resposta = consulta.order("data", desc=True).execute()
-    return resposta.data
+    return ler_todas(nova_consulta)
 
 
 @app.get("/transacoes/{transacao_id}")
 def obter_transacao(transacao_id: int, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
-    resposta = supabase.table("transacoes").select("*").eq("id", transacao_id).eq("user_id", user_id).execute()
-    if not resposta.data:
+    def nova_consulta():
+        return supabase.table("transacoes").select("*").eq("id", transacao_id).eq("user_id", user_id)
+
+    linhas = ler_todas(nova_consulta)
+    if not linhas:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
-    return resposta.data[0]
+    return linhas[0]
 
 
 # Cria uma movimentação à mão (dinheiro, MB Way...). Sem categoria, a IA escolhe uma.
@@ -267,8 +271,8 @@ def dashboard_categorias(
 # Receitas e despesas de cada mês, para o gráfico da evolução.
 @app.get("/dashboard/mensal")
 def dashboard_mensal(user_id: str = Depends(obter_utilizador_atual)) -> list[ResumoMensal]:
-    resposta = supabase.table("transacoes").select("data, valor").eq("user_id", user_id).execute()
-    return resumo_mensal(resposta.data)
+    linhas = ler_todas(lambda: supabase.table("transacoes").select("data, valor").eq("user_id", user_id).order("id"))
+    return resumo_mensal(linhas)
 
 
 # Chat sobre as finanças: a IA responde usando as ferramentas, sempre com os dados deste utilizador.
