@@ -38,7 +38,7 @@ export default function CartaoPlano() {
   const nome = estado.plano ? (NOMES_PLANOS[estado.plano] ?? estado.plano) : "Sem plano";
 
   return (
-    <div className="mb-2 rounded-lg border border-borda bg-cartao p-3">
+    <div className="rounded-lg border border-borda bg-cartao p-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-destaque">Plano {nome}</p>
       <p className="mt-1 text-sm text-texto">
         {usadas} de {estado.limite} perguntas à IA hoje

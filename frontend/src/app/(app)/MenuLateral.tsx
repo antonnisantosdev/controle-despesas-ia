@@ -82,8 +82,13 @@ export default function MenuLateral() {
         })}
       </nav>
 
-      <div className="mt-auto hidden gap-1 md:flex md:flex-col">
+      {/* O cartão do plano aparece nos dois tamanhos: no computador fica no fundo do menu,
+          no telemóvel por baixo dos links. Um só cartão, para não pedir o /plano duas vezes. */}
+      <div className="md:mt-auto">
         <CartaoPlano />
+      </div>
+
+      <div className="hidden gap-1 md:flex md:flex-col">
         <button type="button" onClick={alternarTema} className={estiloBotao}>
           <Icone caminho="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" />
           Mudar tema

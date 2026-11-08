@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -22,6 +22,17 @@ const SCRIPT_TEMA = `try {
 export const metadata: Metadata = {
   title: "Control Prices",
   description: "Controlo financeiro pessoal com IA",
+  // iPhone: o Safari não lê tudo do manifesto, por isso diz-se aqui que a app abre em ecrã inteiro.
+  // O ícone do ecrã inicial vem do apple-icon.png (o Next.js encontra-o sozinho).
+  appleWebApp: { capable: true, title: "Control Prices", statusBarStyle: "default" },
+};
+
+// A cor da barra de estado do telemóvel, igual ao fundo do menu em cada tema (globals.css).
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#161615" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
