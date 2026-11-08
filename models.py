@@ -232,3 +232,10 @@ class AnoSimulado(BaseModel):
     ano: int
     depositado: float
     valor: float
+
+
+# O plano do utilizador e as perguntas à IA que já fez hoje (GET /plano).
+class EstadoPlano(BaseModel):
+    plano: str | None
+    limite: int
+    usadas_hoje: int

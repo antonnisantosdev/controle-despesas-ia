@@ -57,3 +57,13 @@ def test_o_completo_ainda_deixa_perguntar_com_as_mesmas_perguntas(monkeypatch):
 def test_plano_desconhecido_nao_deixa_usar_a_ia(plano):
     # Na dúvida, fecha: um erro na coluna plano nunca pode gastar créditos da IA.
     assert limites.limite_do_plano(plano) == 0
+
+
+def test_a_rota_plano_mostra_o_limite_e_as_perguntas_de_hoje(cliente, monkeypatch):
+    monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: "free")
+    monkeypatch.setattr(limites, "perguntas_de_hoje", lambda user_id: 3)
+
+    resposta = cliente.get("/plano")
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"plano": "free", "limite": 5, "usadas_hoje": 3}

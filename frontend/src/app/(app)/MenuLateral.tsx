@@ -6,6 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import Logo from "@/components/Logo";
 import { apagarToken } from "@/lib/api";
 
+import CartaoPlano from "./CartaoPlano";
+
 const LIGACOES = [
   { href: "/dashboard", nome: "Visão geral", icone: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
   { href: "/movimentacoes", nome: "Movimentações", icone: "M4 6h16M4 12h16M4 18h10" },
@@ -81,6 +83,7 @@ export default function MenuLateral() {
       </nav>
 
       <div className="mt-auto hidden gap-1 md:flex md:flex-col">
+        <CartaoPlano />
         <button type="button" onClick={alternarTema} className={estiloBotao}>
           <Icone caminho="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" />
           Mudar tema

@@ -43,6 +43,8 @@ export type CorteSugerido = { categoria: string; valor_mensal: number; motivo: s
 export type PlanoPoupanca = { viavel: boolean; explicacao: string; cortes: CorteSugerido[] };
 // Um ano do simulador de poupança (GET /simulador).
 export type AnoSimulado = { ano: number; depositado: number; valor: number };
+// O plano do utilizador e as perguntas à IA que já fez hoje (GET /plano).
+export type EstadoPlano = { plano: string | null; limite: number; usadas_hoje: number };
 
 // Lançado quando a API responde 401: o token não existe, é inválido ou expirou.
 export class SessaoExpirada extends Error {}

@@ -8,6 +8,7 @@ from datetime import date
 from fastapi import HTTPException
 
 from database import supabase
+from models import EstadoPlano
 
 # Perguntas à IA por dia em cada plano. Para mudar um limite, muda-se só aqui.
 LIMITES_POR_PLANO = {"free": 5, "essencial": 30, "completo": 100}
@@ -29,10 +30,8 @@ def plano_do_utilizador(user_id: str) -> str | None:
     return resposta.data[0]["plano"] if resposta.data else None
 
 
-def registar_pergunta(user_id: str) -> None:
-    """Conta a pergunta de hoje, ou responde 429 se o utilizador já chegou ao limite do plano."""
-    limite = limite_do_plano(plano_do_utilizador(user_id))
-
+def perguntas_de_hoje(user_id: str) -> int:
+    """Quantas perguntas à IA o utilizador já fez hoje."""
     # count="exact" pede ao Supabase só o número de linhas (como um SELECT COUNT(*)), sem as trazer.
     resposta = (
         supabase.table("uso_ia")
@@ -41,9 +40,20 @@ def registar_pergunta(user_id: str) -> None:
         .gte("criado_em", date.today().isoformat())
         .execute()
     )
-    feitas_hoje = resposta.count or 0
+    return resposta.count or 0
 
-    if feitas_hoje >= limite:
+
+def estado_do_plano(user_id: str) -> EstadoPlano:
+    """O plano, o limite e as perguntas de hoje: o que o menu lateral mostra."""
+    plano = plano_do_utilizador(user_id)
+    return EstadoPlano(plano=plano, limite=limite_do_plano(plano), usadas_hoje=perguntas_de_hoje(user_id))
+
+
+def registar_pergunta(user_id: str) -> None:
+    """Conta a pergunta de hoje, ou responde 429 se o utilizador já chegou ao limite do plano."""
+    limite = limite_do_plano(plano_do_utilizador(user_id))
+
+    if perguntas_de_hoje(user_id) >= limite:
         raise HTTPException(
             status_code=429,
             detail=f"Chegaste ao limite diário de {limite} perguntas do teu plano. Volta amanhã!",

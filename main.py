@@ -14,7 +14,7 @@ from database import ler_todas, supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
 from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_mes, sugerir_orcamento
 from importar_csv import ErroImportacao, ler_extrato, transacoes_do_pdf
-from limites import pode_usar_ia, registar_pergunta
+from limites import estado_do_plano, pode_usar_ia, registar_pergunta
 from objetivos import (
     apagar_objetivo,
     atualizar_poupado,
@@ -26,6 +26,7 @@ from objetivos import (
 from orcamento import guardar_limite, historico_para_sugestao, planeamento_do_mes
 from models import (
     AnoSimulado,
+    EstadoPlano,
     Categoria,
     CategoriaAtualizar,
     Compra,
@@ -471,3 +472,10 @@ def simulador(
     user_id: str = Depends(obter_utilizador_atual),
 ) -> list[AnoSimulado]:
     return simular_poupanca(mensal, anos, taxa)
+
+
+# O plano do utilizador e quantas perguntas à IA ainda tem hoje (o menu lateral mostra-o).
+# Só lê: não conta como pergunta.
+@app.get("/plano")
+def plano(user_id: str = Depends(obter_utilizador_atual)) -> EstadoPlano:
+    return estado_do_plano(user_id)
