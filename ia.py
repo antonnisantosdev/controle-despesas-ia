@@ -59,6 +59,12 @@ Regras para casos ambíguos:
 - Se a transação for um pagamento a um supermercado, categoria = alimentação.
 - Se a transação for um pagamento a um restaurante, categoria = restaurantes.
 - Se a transação for um pagamento a uma farmácia, categoria = saúde.
+- Tudo o que se compra num supermercado conta como alimentação, mesmo que não seja comida (um café, um detergente).
+- Ginásios, aulas de desporto, piscinas e clubes desportivos: categoria = saúde (não é lazer).
+- Seguros: a categoria é a daquilo que seguram. Seguro do carro = transporte, da casa = casa,
+  de saúde = saúde, do telemóvel = telecomunicações.
+- Lojas que vendem produtos (roupa, eletrónica, livros, cosmética e higiene, perfumarias): categoria = compras.
+- Lojas de móveis e de bricolage: categoria = casa. Lojas de brinquedos: categoria = lazer.
 Responde apenas com JSON, no formato:
 {
   "categorizacoes": [

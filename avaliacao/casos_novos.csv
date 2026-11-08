@@ -1,0 +1,14 @@
+# Casos novos (dados inventados), para confirmar que as regras do prompt funcionam em transações que nunca vimos.
+# Não se afina o prompt a olhar para estes erros: senão deixam de ser "novos".
+# Seguem as mesmas regras de negócio dos casos difíceis (ginásio e desporto = saúde; seguros = categoria do que seguram).
+descricao;valor;categoria
+SEGURO MULTIRRISCOS HABITACAO;-25,00;casa
+SEGURO SAUDE MEDIS;-35,00;saúde
+SEGURO AUTOMOVEL FIDELIDADE;-60,00;transporte
+AULA DE PADEL CLUBE;-12,00;saúde
+PISCINA MUNICIPAL ENTRADA;-4,00;saúde
+COMPRA PRIMARK;-25,00;compras
+COMPRA SEPHORA;-45,00;compras
+COMPRA BERTRAND LIVROS;-18,90;compras
+COMPRA CONTINENTE BOM DIA;-15,30;alimentação
+DD NOWO INTERNET;-25,00;telecomunicações

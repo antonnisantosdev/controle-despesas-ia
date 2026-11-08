@@ -3,8 +3,9 @@
 Usa a IA verdadeira (a chave do .env), por isso custa dinheiro. Com o Haiku, menos de 1 cêntimo por execução.
 
 Correr a partir da raiz do projeto:
-    python avaliacao/avaliar_categorizacao.py            (só mostra o resultado)
-    python avaliacao/avaliar_categorizacao.py --guardar  (também o junta a avaliacao/resultados.md)
+    python avaliacao/avaliar_categorizacao.py                        (casos_categorizacao.csv)
+    python avaliacao/avaliar_categorizacao.py casos_novos.csv        (outro conjunto de casos)
+    python avaliacao/avaliar_categorizacao.py --guardar "nota"       (junta o resultado a resultados.md)
 """
 
 import csv
@@ -26,9 +27,9 @@ from models import Categoria, TransacaoCriar  # noqa: E402
 CATEGORIAS = set(get_args(Categoria))
 
 
-def ler_casos() -> list[dict]:
+def ler_casos(nome: str) -> list[dict]:
     """Lê os casos e confirma que estão bem escritos. Um caso mal escrito estragava a percentagem."""
-    with open(PASTA / "casos_categorizacao.csv", encoding="utf-8") as ficheiro:
+    with open(PASTA / nome, encoding="utf-8") as ficheiro:
         # Guarda o número de cada linha no ficheiro, para os avisos apontarem para a linha certa.
         numeradas = [(n, linha) for n, linha in enumerate(ficheiro, start=1) if linha.strip() and not linha.startswith("#")]
     numeros = [n for n, _ in numeradas][1:]  # a primeira é o cabeçalho
@@ -57,7 +58,11 @@ def ler_casos() -> list[dict]:
 
 
 def main():
-    casos = ler_casos()
+    argumentos = [a for a in sys.argv[1:] if a != "--guardar"]
+    # O conjunto de casos é o argumento que acaba em .csv; o resto é uma nota para o resultados.md.
+    conjunto = next((a for a in argumentos if a.endswith(".csv")), "casos_categorizacao.csv")
+    nota = " ".join(a for a in argumentos if not a.endswith(".csv"))
+    casos = ler_casos(conjunto)
     transacoes = [
         TransacaoCriar(data=date.today(), descricao=caso["descricao"], valor=caso["valor"]) for caso in casos
     ]
@@ -74,7 +79,7 @@ def main():
     percentagem = 100 * acertos / len(casos)
     modelo = os.getenv("CLAUDE_MODELO", "claude-haiku-5-5")
 
-    print(f"Modelo: {modelo}")
+    print(f"Modelo: {modelo} | Conjunto: {conjunto}")
     print(f"Acertou {acertos} de {len(casos)}: {percentagem:.1f}%\n")
 
     if erros:
@@ -95,7 +100,9 @@ def main():
                 encoding="utf-8",
             )
         with open(resultados, "a", encoding="utf-8") as ficheiro:
-            ficheiro.write(f"| {date.today()} | {modelo} | {len(casos)} | {acertos} | {percentagem:.1f}% |\n")
+            ficheiro.write(
+                f"| {date.today()} | {modelo} | {conjunto} | {len(casos)} | {acertos} | {percentagem:.1f}% | {nota} |\n"
+            )
         print(f"\nGuardado em {resultados}")
 
 
