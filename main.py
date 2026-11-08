@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import AuthApiError
 
-from auth import fazer_login, obter_utilizador_atual
+from auth import fazer_login, fazer_registo, obter_utilizador_atual
 from compras import gravar_compra, listar_compras
 from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
@@ -31,6 +31,7 @@ from models import (
     CategoriaAtualizar,
     Compra,
     Credenciais,
+    NovaConta,
     GastoCategoria,
     LinhaOrcamento,
     NovaCompra,
@@ -78,6 +79,20 @@ def login(credenciais: Credenciais):
     except AuthApiError:
         raise HTTPException(status_code=401, detail="Email ou palavra-passe errados")
     return {"access_token": token, "token_type": "bearer"}
+
+
+# Registo público: qualquer pessoa cria conta e entra no plano Free (gatilho no Supabase).
+# A conta só fica ativa depois de a pessoa carregar no link do email de confirmação.
+@app.post("/registo", status_code=201)
+def registo(conta: NovaConta):
+    try:
+        fazer_registo(conta.email, conta.password)
+    except AuthApiError as erro:
+        print(erro)
+        raise HTTPException(status_code=400, detail="Não foi possível criar a conta. Confirma o email e a palavra-passe.")
+    # A mesma resposta exista ou não uma conta com este email: assim ninguém usa o registo
+    # para descobrir quem tem conta na app.
+    return {"mensagem": "Enviámos um email de confirmação. Abre o link para ativar a conta."}
 
 
 # Rota de teste: mostra quem é o utilizador do token enviado.

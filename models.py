@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 # As únicas categorias permitidas, tanto para a IA como para as correções do utilizador.
 # Com Literal, o Pydantic rejeita qualquer outra palavra.
@@ -239,3 +239,10 @@ class EstadoPlano(BaseModel):
     plano: str | None
     limite: int
     usadas_hoje: int
+
+
+# Registo público (POST /registo). O EmailStr recusa emails mal escritos antes de chegarem ao Supabase.
+# 72 é o máximo que o Supabase aceita numa palavra-passe.
+class NovaConta(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=72)
