@@ -7,6 +7,7 @@ o Claude) decide-se no .env com IA_FORNECEDOR, sem mudar mais nenhum ficheiro.
 import base64
 import json
 import os
+import time
 from collections.abc import Callable
 from datetime import date
 
@@ -14,6 +15,7 @@ import anthropic
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
+from database import supabase
 from models import Categoria, ExtratoPdf, PlanoPoupanca, ResumoMes, SugestaoOrcamento, Talao, TransacaoCriar
 
 load_dotenv()
@@ -83,6 +85,48 @@ class ErroIA(Exception):
     """
 
 
+# Preço de cada modelo em dólares por milhão de tokens: (entrada, saída).
+# Preços da Anthropic para pedidos até 100 mil tokens. Ao trocar de modelo no .env, junta-se aqui o preço.
+PRECOS_POR_MILHAO = {
+    "claude-haiku-5-5": (0.10, 0.50),
+}
+
+
+def custo_em_dolares(modelo: str, tokens_entrada: int, tokens_saida: int) -> float | None:
+    """Quanto custou uma chamada, em dólares. None se o preço do modelo não estiver na tabela."""
+    if modelo in PRECOS_POR_MILHAO:
+        preco_entrada, preco_saida = PRECOS_POR_MILHAO[modelo]
+        custo = (tokens_entrada / 1_000_000) * preco_entrada + (tokens_saida / 1_000_000) * preco_saida
+        return round(custo, 6)
+    return None
+
+
+def _registar_chamada(funcao: str, resposta, inicio: float) -> None:
+    """Guarda na tabela chamadas_ia os tokens, o custo e a duração de uma chamada à IA.
+
+    Se a gravação falhar, só fica um aviso nos logs: o utilizador recebe a resposta na mesma.
+    """
+    try:
+        modelo = os.getenv("CLAUDE_MODELO", "claude-haiku-5-5")
+        uso = resposta.usage  # a Anthropic diz em cada resposta quantos tokens foram usados
+        supabase.table("chamadas_ia").insert(
+            {
+                "funcao": funcao,
+                # O script de avaliação marca as suas chamadas, para não se misturarem com as dos utilizadores.
+                "origem": os.getenv("IA_ORIGEM", "app"),
+                "modelo": modelo,
+                "tokens_entrada": uso.input_tokens,
+                "tokens_saida": uso.output_tokens,
+                "custo_usd": custo_em_dolares(modelo, uso.input_tokens, uso.output_tokens),
+                "duracao_ms": round((time.perf_counter() - inicio) * 1000),
+                # As respostas com saída estruturada trazem parsed_output; o chat não tem validação.
+                "sucesso": getattr(resposta, "parsed_output", "sem validação") is not None,
+            }
+        ).execute()
+    except Exception as erro:
+        print(f"Não foi possível registar a chamada à IA ({funcao}): {erro}")
+
+
 def categorizar(transacoes: list[TransacaoCriar]) -> list[str]:
     """Devolve uma categoria para cada transação, pela mesma ordem."""
     fornecedor = os.getenv("IA_FORNECEDOR", "claude")
@@ -97,6 +141,7 @@ def categorizar(transacoes: list[TransacaoCriar]) -> list[str]:
 
 def _categorizar_claude(transacoes: list[TransacaoCriar]) -> list[str]:
     cliente = anthropic.Anthropic()
+    inicio = time.perf_counter()
 
     lista = "\n".join(f"{i}: {t.descricao} ({t.valor})" for i, t in enumerate(transacoes))
 
@@ -110,6 +155,7 @@ def _categorizar_claude(transacoes: list[TransacaoCriar]) -> list[str]:
         output_format=RespostaCategorizacao,
     ) as fluxo:
         resposta = fluxo.get_final_message()
+    _registar_chamada("categorizar", resposta, inicio)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu uma resposta válida (stop_reason={resposta.stop_reason})")
     por_indice = {c.indice: c.categoria for c in resposta.parsed_output.categorizacoes}
@@ -152,6 +198,7 @@ def _conversar_claude(pergunta: str, ferramentas: list[dict], executar: Callable
     mensagens = [{"role": "user", "content": pergunta}]
 
     for _ in range(MAX_VOLTAS):
+        inicio = time.perf_counter()
         resposta = cliente.messages.create(
             model=os.getenv("CLAUDE_MODELO", "claude-haiku-5-5"),
             max_tokens=2048,
@@ -161,6 +208,8 @@ def _conversar_claude(pergunta: str, ferramentas: list[dict], executar: Callable
         )
 
         # Sem pedidos de ferramentas: é a resposta final. Junta os blocos de texto.
+        _registar_chamada("chat", resposta, inicio)
+
         if resposta.stop_reason != "tool_use":
             return "".join(bloco.text for bloco in resposta.content if bloco.type == "text")
 
@@ -224,6 +273,7 @@ def resumir_mes(dados: dict) -> ResumoMes:
 
 def _resumir_mes_claude(dados: dict) -> ResumoMes:
     cliente = anthropic.Anthropic()
+    inicio = time.perf_counter()
     resposta = cliente.messages.parse(
         model=os.getenv("CLAUDE_MODELO", "claude-haiku-5-5"),
         max_tokens=2048,
@@ -231,6 +281,7 @@ def _resumir_mes_claude(dados: dict) -> ResumoMes:
         messages=[{"role": "user", "content": json.dumps(dados, ensure_ascii=False)}],
         output_format=ResumoMes,
     )
+    _registar_chamada("resumo", resposta, inicio)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu um resumo válido (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output
@@ -266,6 +317,7 @@ def sugerir_orcamento(historico: dict) -> SugestaoOrcamento:
 
 def _sugerir_orcamento_claude(historico: dict) -> SugestaoOrcamento:
     cliente = anthropic.Anthropic()
+    inicio = time.perf_counter()
     resposta = cliente.messages.parse(
         model=os.getenv("CLAUDE_MODELO", "claude-haiku-5-5"),
         max_tokens=2048,
@@ -273,6 +325,7 @@ def _sugerir_orcamento_claude(historico: dict) -> SugestaoOrcamento:
         messages=[{"role": "user", "content": json.dumps(historico, ensure_ascii=False)}],
         output_format=SugestaoOrcamento,
     )
+    _registar_chamada("orcamento", resposta, inicio)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu uma sugestão válida (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output
@@ -311,6 +364,7 @@ def ler_talao(imagem: bytes, tipo: str) -> Talao:
 
 def _ler_talao_claude(imagem: bytes, tipo: str) -> Talao:
     cliente = anthropic.Anthropic()
+    inicio = time.perf_counter()
     # A API não recebe ficheiros soltos: a imagem vai dentro do JSON, convertida em texto (base64).
     imagem_base64 = base64.standard_b64encode(imagem).decode("utf-8")
     resposta = cliente.messages.parse(
@@ -329,6 +383,7 @@ def _ler_talao_claude(imagem: bytes, tipo: str) -> Talao:
         ],
         output_format=Talao,
     )
+    _registar_chamada("talao", resposta, inicio)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não conseguiu ler o talão (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output
@@ -366,6 +421,7 @@ def ler_extrato_pdf(pdf: bytes) -> ExtratoPdf:
 
 def _ler_extrato_pdf_claude(pdf: bytes) -> ExtratoPdf:
     cliente = anthropic.Anthropic()
+    inicio = time.perf_counter()
     pdf_base64 = base64.standard_b64encode(pdf).decode("utf-8")
     # Streaming: um extrato pode ter centenas de movimentos, e uma resposta tão longa não cabe num pedido normal.
     with cliente.messages.stream(
@@ -390,6 +446,7 @@ def _ler_extrato_pdf_claude(pdf: bytes) -> ExtratoPdf:
         output_format=ExtratoPdf,
     ) as fluxo:
         resposta = fluxo.get_final_message()
+    _registar_chamada("extrato_pdf", resposta, inicio)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não conseguiu ler o extrato (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output
@@ -434,6 +491,7 @@ def planear_poupanca(dados: dict) -> PlanoPoupanca:
 
 def _planear_poupanca_claude(dados: dict) -> PlanoPoupanca:
     cliente = anthropic.Anthropic()
+    inicio = time.perf_counter()
     resposta = cliente.messages.parse(
         model=os.getenv("CLAUDE_MODELO", "claude-haiku-5-5"),
         max_tokens=2048,
@@ -441,6 +499,7 @@ def _planear_poupanca_claude(dados: dict) -> PlanoPoupanca:
         messages=[{"role": "user", "content": json.dumps(dados, ensure_ascii=False)}],
         output_format=PlanoPoupanca,
     )
+    _registar_chamada("poupanca", resposta, inicio)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu um plano válido (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output

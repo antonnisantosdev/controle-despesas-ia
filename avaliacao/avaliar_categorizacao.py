@@ -18,6 +18,8 @@ from pathlib import Path
 PASTA = Path(__file__).parent
 # O script está na pasta avaliacao/, mas os ficheiros da API estão na raiz do projeto.
 sys.path.insert(0, str(PASTA.parent))
+# As chamadas feitas pela avaliação ficam marcadas na tabela chamadas_ia (não são de utilizadores).
+os.environ["IA_ORIGEM"] = "avaliacao"
 
 from typing import get_args  # noqa: E402
 
