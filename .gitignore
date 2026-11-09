@@ -12,7 +12,9 @@ __pycache__/
 
 # Definições locais do Claude Code (pessoais, não são do projeto)
 .claude/settings.local.json
+.claude/launch.json
 CLAUDE.md
+# Os agentes em .claude/agents/ vão para o GitHub de propósito (são do projeto).
 
 # Lixo do sistema operativo e do editor
 .DS_Store
