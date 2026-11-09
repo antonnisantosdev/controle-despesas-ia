@@ -11,9 +11,9 @@ import {
   CONTACTOS,
   formatarEuros,
   ORDEM_PLANOS,
+  pontosDoCartao,
   PRECOS,
   preencher,
-  textoDosPedidos,
   type IdPlano,
   type LimitePlano,
 } from "@/lib/planos";
@@ -167,7 +167,7 @@ export default function PaginaPrecos() {
 
 type PropsCartao = {
   id: IdPlano;
-  limite: LimitePlano; // pedidos à IA e período (o Free conta por mês)
+  limite: LimitePlano; // pedidos à IA e período (o Free conta por mês), e extratos PDF por mês
   atual: boolean; // é o plano de quem tem sessão
   temConta: boolean; // login válido (mesmo com o plano terminado)
   emailConta: string | null;
@@ -175,7 +175,8 @@ type PropsCartao = {
 
 function CartaoDePreco({ id, limite, atual, temConta, emailConta }: PropsCartao) {
   const textos = TEXTOS_CARTOES[id];
-  const pontos = [textoDosPedidos(limite), ...textos.pontos];
+  // Pedidos à IA, "Até 15 extratos PDF por mês" (só nos pagos) e os outros pontos do cartão.
+  const pontos = pontosDoCartao(id, limite);
 
   // A partir do ecrã médio, cada cartão ocupa 4 linhas da grelha da secção (subgrid): nome e frase, preço,
   // pontos e botão. As linhas são partilhadas pelos três cartões, por isso o preço fica à mesma altura

@@ -87,9 +87,15 @@ class ErroIA(Exception):
 
 # Preço de cada modelo em dólares por milhão de tokens: (entrada, saída).
 # Preços da Anthropic para pedidos até 100 mil tokens. Ao trocar de modelo no .env, junta-se aqui o preço.
+# Os do Sonnet e do Opus ficam cá para o custo não ficar vazio se um dia forem usados.
 PRECOS_POR_MILHAO = {
     "claude-haiku-5-5": (0.10, 0.50),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-opus-5-5": (4.00, 20.00),
 }
+
+# Colunas da chamadas_ia que só existem depois da migração sql/016.
+COLUNAS_016 = ("stop_reason", "cache_read_tokens", "cache_creation_tokens")
 
 
 def custo_em_dolares(modelo: str, tokens_entrada: int, tokens_saida: int) -> float | None:
@@ -121,23 +127,30 @@ def _registar_chamada(funcao: str, resposta, inicio: float, user_id: str | None 
             "duracao_ms": round((time.perf_counter() - inicio) * 1000),
             # As respostas com saída estruturada trazem parsed_output; o chat não tem validação.
             "sucesso": getattr(resposta, "parsed_output", "sem validação") is not None,
+            # Porque parou a resposta (end_turn, max_tokens, tool_use...): max_tokens quer dizer resposta cortada.
+            "stop_reason": getattr(resposta, "stop_reason", None),
+            # Tokens lidos da cache e escritos na cache (0 enquanto não usarmos prompt caching).
+            "cache_read_tokens": getattr(uso, "cache_read_input_tokens", None) or 0,
+            "cache_creation_tokens": getattr(uso, "cache_creation_input_tokens", None) or 0,
         }
     except Exception as erro:
         print(f"Não foi possível registar a chamada à IA ({funcao}): {erro}")
         return
 
+    # Da linha mais completa para a mais simples: se uma migração ainda não foi corrida no Supabase,
+    # grava-se outra vez sem as colunas que faltam, para não se perderem os tokens e o custo.
+    sem_016 = {chave: valor for chave, valor in linha.items() if chave not in COLUNAS_016}
+    # A última tentativa é sempre sem a 016 (stop_reason, cache) e sem a 014 (user_id).
     if user_id is not None:
+        tentativas = [linha | {"user_id": user_id}, sem_016 | {"user_id": user_id}, sem_016]
+    else:
+        tentativas = [linha, sem_016]
+    for tentativa in tentativas:
         try:
-            supabase.table("chamadas_ia").insert(linha | {"user_id": user_id}).execute()
+            supabase.table("chamadas_ia").insert(tentativa).execute()
             return
         except Exception as erro:
-            # Ex.: a migração 014 (coluna user_id) ainda não foi corrida no Supabase.
-            # Grava-se outra vez sem o user_id, para não se perderem os tokens e o custo.
-            print(f"Não foi possível registar a chamada à IA com o user_id ({funcao}): {erro}")
-    try:
-        supabase.table("chamadas_ia").insert(linha).execute()
-    except Exception as erro:
-        print(f"Não foi possível registar a chamada à IA ({funcao}): {erro}")
+            print(f"Não foi possível registar a chamada à IA ({funcao}, {len(tentativa)} colunas): {erro}")
 
 
 def categorizar(transacoes: list[TransacaoCriar], user_id: str | None = None) -> list[str]:

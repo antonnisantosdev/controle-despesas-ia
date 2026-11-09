@@ -17,3 +17,12 @@ def test_soma_entrada_e_saida():
 
 def test_modelo_sem_preco_devolve_none():
     assert custo_em_dolares("modelo-que-nao-existe", 1000, 1000) is None
+
+
+@pytest.mark.parametrize(
+    ("modelo", "entrada", "saida"),
+    [("claude-haiku-5-5", 0.10, 0.50), ("claude-sonnet-5-5", 2.00, 10.00), ("claude-opus-5-5", 4.00, 20.00)],
+)
+def test_cada_modelo_tem_o_seu_preco(modelo, entrada, saida):
+    assert custo_em_dolares(modelo, 1_000_000, 0) == pytest.approx(entrada)
+    assert custo_em_dolares(modelo, 0, 1_000_000) == pytest.approx(saida)

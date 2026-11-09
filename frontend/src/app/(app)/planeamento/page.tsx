@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import AlertasOrcamento from "@/components/AlertasOrcamento";
 import AvisoLimite from "@/components/AvisoLimite";
 import {
   apagarToken,
@@ -16,6 +17,7 @@ import {
   type SugestaoOrcamento,
 } from "@/lib/api";
 import { CATEGORIAS } from "@/lib/opcoes";
+import { mesAtual } from "@/lib/planos";
 
 import { euros, nomeMes } from "../dashboard/formatos";
 import LinhaPlaneamento from "./LinhaPlaneamento";
@@ -50,9 +52,10 @@ export default function PaginaPlaneamento() {
   useEffect(() => {
     pedirApi<ResumoMensal[]>("/dashboard/mensal")
       .then((dados) => {
-        const lista = dados.map((d) => d.mes);
+        // Conta nova, ainda sem movimentações: começa no mês atual (senão a página ficava em "A carregar...").
+        const lista = dados.length > 0 ? dados.map((d) => d.mes) : [mesAtual()];
         setMeses(lista);
-        if (lista.length > 0) setMes(lista[lista.length - 1]);
+        setMes(lista[lista.length - 1]);
       })
       .catch(tratarErro);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,6 +147,9 @@ export default function PaginaPlaneamento() {
 
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
         {semPedidos && <AvisoLimite />}
+
+        {/* Só no mês atual: categorias com 90% ou mais do orçamento gasto. Acompanha cada orçamento guardado. */}
+        {mes && <AlertasOrcamento mes={mes} versao={versao} />}
 
         {sugestoes && <SugestoesIA sugestoes={sugestoes} onAceitar={guardar} onFechar={() => setSugestoes(null)} />}
 

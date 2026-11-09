@@ -4,8 +4,13 @@ Aqui não há tool use: sabemos à partida que dados são precisos, por isso vam
 buscá-los todos de uma vez e a IA só tem de os explicar.
 """
 
+import hashlib
+import json
+from datetime import datetime, timezone
+
 from dashboard import gastos_por_categoria, limites_do_mes, mes_anterior, resumo_mensal
 from database import supabase
+from models import ResumoMes
 from orcamento import juntar, limites_do_utilizador
 
 
@@ -46,3 +51,63 @@ def recolher_dados(user_id: str, mes: str) -> dict:
             if linha.limite is not None
         ],
     }
+
+
+# --- Resumos já escritos pela IA ---
+# Ficam na tabela resumos_ia (sql/016): sobrevivem a um reinício do Render, por isso o mesmo resumo
+# não gasta outro pedido à IA. Se a tabela ainda não existir (ou o Supabase falhar), ficam na memória
+# do servidor, como antes da 016 (perdem-se quando o Render reinicia).
+RESUMOS_EM_MEMORIA: dict[str, ResumoMes] = {}
+
+
+def assinatura_dos_dados(dados: dict) -> str:
+    """Uma "impressão digital" dos números do mês: muda se qualquer número mudar.
+
+    sort_keys: a mesma informação dá sempre o mesmo texto, seja qual for a ordem das chaves.
+    """
+    texto = json.dumps(dados, sort_keys=True, default=str)
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
+
+
+def _chave_memoria(user_id: str, mes: str, assinatura: str) -> str:
+    return f"{user_id}:{mes}:{assinatura}"
+
+
+def resumo_guardado(user_id: str, mes: str, assinatura: str) -> ResumoMes | None:
+    """O resumo já escrito para estes números, ou None se os números mudaram (ou nunca houve resumo)."""
+    try:
+        resposta = (
+            supabase.table("resumos_ia")
+            .select("texto, alertas")
+            .eq("user_id", user_id)
+            .eq("mes", mes)
+            .eq("assinatura", assinatura)
+            .execute()
+        )
+        if resposta.data:
+            linha = resposta.data[0]
+            return ResumoMes(resumo=linha["texto"], alertas=linha["alertas"] or [])
+    except Exception as erro:
+        print(f"AVISO: não foi possível ler os resumos guardados (sql/016 por correr?): {erro}")
+    return RESUMOS_EM_MEMORIA.get(_chave_memoria(user_id, mes, assinatura))
+
+
+def guardar_resumo(user_id: str, mes: str, assinatura: str, resumo: ResumoMes) -> None:
+    """Guarda o resumo do mês. Há um só por utilizador e mês: um resumo novo substitui o antigo."""
+    try:
+        supabase.table("resumos_ia").upsert(
+            {
+                "user_id": user_id,
+                "mes": mes,
+                "assinatura": assinatura,
+                "texto": resumo.resumo,
+                "alertas": [alerta.model_dump() for alerta in resumo.alertas],
+                # No ON CONFLICT o default da coluna não volta a correr: a data vai explícita.
+                "criado_em": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="user_id,mes",
+        ).execute()
+        return
+    except Exception as erro:
+        print(f"AVISO: não foi possível guardar o resumo (sql/016 por correr?): {erro}")
+    RESUMOS_EM_MEMORIA[_chave_memoria(user_id, mes, assinatura)] = resumo

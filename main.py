@@ -1,4 +1,3 @@
-import json
 import os
 
 from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
@@ -28,6 +27,7 @@ from limites import (
     estado_do_plano,
     exigir_espaco_na_conta,
     exigir_funcao,
+    exigir_limite_pdf,
     hoje_em_lisboa,
     planos_disponiveis,
     pode_usar_ia,
@@ -41,8 +41,9 @@ from objetivos import (
     listar_objetivos,
     obter_objetivo,
 )
-from orcamento import guardar_limite, historico_para_sugestao, planeamento_do_mes
+from orcamento import alertas_de_orcamento, guardar_limite, historico_para_sugestao, planeamento_do_mes
 from models import (
+    AlertasOrcamento,
     AnoSimulado,
     EstadoPlano,
     Categoria,
@@ -71,7 +72,7 @@ from models import (
     TransacaoCriar,
     TransacaoImportada,
 )
-from resumo import recolher_dados
+from resumo import assinatura_dos_dados, guardar_resumo, recolher_dados, resumo_guardado
 from simulador import simular_poupanca
 
 app = FastAPI()
@@ -200,7 +201,7 @@ def criar_transacao(nova: NovaMovimentacao, user_id: str = Depends(obter_utiliza
     # Antes de gastar um pedido à IA: a conta tem de ter espaço para mais uma.
     exigir_espaco_na_conta(contar_transacoes(user_id), 1)
     categoria = nova.categoria
-    if not categoria and pode_usar_ia(user_id):
+    if not categoria and pode_usar_ia(user_id, "categorizar"):
         try:
             categoria = categorizar([TransacaoCriar(**nova.model_dump())], user_id=user_id)[0]
         except ErroIA as erro:
@@ -257,7 +258,7 @@ def categorizar_pendentes(user_id: str = Depends(obter_utilizador_atual)) -> lis
         return []
 
     # O lote inteiro vai numa só chamada à IA, por isso conta como uma pergunta.
-    registar_pergunta(user_id)
+    registar_pergunta(user_id, "categorizar_pendentes")
     try:
         categorias = categorizar(pendentes, user_id=user_id)
     except ErroIA as erro:
@@ -317,10 +318,15 @@ def ler_csv_enviado(csv: bytes) -> list[TransacaoImportada]:
         raise HTTPException(status_code=422, detail={"mensagem": str(erro), "erros": erro.erros})
 
 
-def ler_pdf_enviado(pdf: bytes, user_id: str) -> list[TransacaoImportada]:
-    """A IA lê o extrato em PDF. Responde 402 no Free, 400 se tiver páginas a mais, 422 se não for válido e 503 se a IA falhar."""
-    # Segunda proteção (a rota já verifica): quem chamar esta função noutro sítio também fica protegido.
-    # Vem antes de contar páginas e de gastar o pedido.
+def ler_pdf_enviado(pdf: bytes, user_id: str) -> tuple[list[TransacaoImportada], int]:
+    """A IA lê o extrato em PDF. Devolve os movimentos lidos e as movimentações que a conta já tinha.
+
+    As verificações vêm por esta ordem, todas antes de gastar o pedido e de chamar a IA:
+    402 no Free; 422 se for grande demais ou ilegível; 400 se tiver páginas a mais;
+    422 se a conta estiver no teto de movimentações; 429 se já chegou ao limite de PDF do mês.
+    Só então conta o pedido à IA (e, com ele, o PDF do mês). 503 se a IA falhar.
+    """
+    # Primeiro o plano: o Free nem chega a ter o ficheiro analisado.
     exigir_funcao(user_id, "importar_pdf")
     if len(pdf) > TAMANHO_MAXIMO_PDF:
         raise HTTPException(status_code=422, detail="PDF demasiado grande. Máx. 10 MB.")
@@ -342,8 +348,17 @@ def ler_pdf_enviado(pdf: bytes, user_id: str) -> list[TransacaoImportada]:
             ),
         )
 
-    # Ler um PDF é a chamada mais cara da importação, por isso conta para o limite do plano.
-    registar_pergunta(user_id)
+    # Ainda não se sabe quantos movimentos tem (só a IA o diz), mas uma conta já no teto
+    # é recusada antes de gastar o pedido e de pagar a leitura do PDF.
+    atuais = contar_transacoes(user_id)
+    exigir_espaco_na_conta(atuais, 1)
+
+    # O PDF foi aceite: só agora se vê o limite de PDF do mês. Um PDF recusado acima não conta.
+    exigir_limite_pdf(user_id)
+
+    # Ler um PDF é a chamada mais cara da importação: gasta um pedido à IA, registado como "importar_pdf",
+    # e é essa linha que conta para o limite de PDF do mês.
+    registar_pergunta(user_id, "importar_pdf")
     try:
         extrato = ler_extrato_pdf(pdf, user_id=user_id)
     except ErroIA as erro:
@@ -353,7 +368,7 @@ def ler_pdf_enviado(pdf: bytes, user_id: str) -> list[TransacaoImportada]:
         )
     if not extrato.movimentos:
         raise HTTPException(status_code=422, detail="Não encontrei movimentos neste PDF. Confirma que é um extrato bancário.")
-    return transacoes_do_pdf(extrato)
+    return transacoes_do_pdf(extrato), atuais
 
 
 @app.post("/transacoes/importar", status_code=201)
@@ -364,13 +379,8 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
     # Todos os PDF começam por "%PDF": é mais seguro do que confiar no nome do ficheiro.
     eh_pdf = conteudo.startswith(b"%PDF")
     if eh_pdf:
-        # O PDF é só dos planos pagos: 402 antes de contar páginas e de gastar um pedido.
-        exigir_funcao(user_id, "importar_pdf")
-        # Ainda não se sabe quantos movimentos tem (só a IA o diz), mas uma conta já no teto
-        # é recusada antes de gastar o pedido e de pagar a leitura do PDF.
-        atuais = contar_transacoes(user_id)
-        exigir_espaco_na_conta(atuais, 1)
-        novas = ler_pdf_enviado(conteudo, user_id)
+        # Plano, tamanho, páginas, teto da conta e limite de PDF: tudo antes de gastar o pedido (ver a função).
+        novas, atuais = ler_pdf_enviado(conteudo, user_id)
     else:
         novas = ler_csv_enviado(conteudo)
         atuais = contar_transacoes(user_id)
@@ -385,7 +395,7 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
     # No CSV, a categorização do ficheiro inteiro é uma só chamada à IA: conta como uma pergunta.
     # Sem pedidos, o CSV importa-se na mesma, sem categorias: os dados são do utilizador.
     aviso = None
-    if eh_pdf or pode_usar_ia(user_id):
+    if eh_pdf or pode_usar_ia(user_id, "importar_csv"):
         try:
             categorias = categorizar(novas, user_id=user_id)
         except ErroIA as erro:
@@ -438,7 +448,7 @@ def dashboard_mensal(user_id: str = Depends(obter_utilizador_atual)) -> list[Res
 @app.post("/chat")
 def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -> RespostaChat:
     # Antes de gastar uma chamada à IA: conta a pergunta, ou responde 429 se o limite do plano acabou.
-    registar_pergunta(user_id)
+    registar_pergunta(user_id, "chat")
 
     # Closure: uma função que "lembra" o user_id deste pedido. A IA só lhe passa o nome e os argumentos.
     def executar(nome: str, argumentos: dict) -> str:
@@ -452,10 +462,6 @@ def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -
     return RespostaChat(resposta=resposta)
 
 
-# Resumos já escritos pela IA, guardados na memória do servidor (perdem-se quando o Render reinicia).
-RESUMOS_JA_FEITOS: dict[str, ResumoMes] = {}
-
-
 # Resumo do mês escrito pela IA, com alertas. Exemplo: /resumo?mes=2026-10
 @app.get("/resumo")
 def resumo_do_mes(
@@ -467,19 +473,20 @@ def resumo_do_mes(
         return ResumoMes(resumo="Ainda não há transações neste mês.", alertas=[])
 
     # O dashboard pede o resumo sempre que abre. Se os números não mudaram, o resumo também não:
-    # devolve-se o que já foi escrito, sem pagar outra chamada nem gastar uma pergunta.
-    chave = f"{user_id}:{json.dumps(dados, sort_keys=True, default=str)}"
-    if chave in RESUMOS_JA_FEITOS:
-        return RESUMOS_JA_FEITOS[chave]
+    # devolve-se o que já foi escrito (tabela resumos_ia), sem pagar outra chamada nem gastar uma pergunta.
+    assinatura = assinatura_dos_dados(dados)
+    guardado = resumo_guardado(user_id, mes, assinatura)
+    if guardado is not None:
+        return guardado
 
-    if not pode_usar_ia(user_id):
+    if not pode_usar_ia(user_id, "resumo"):
         return ResumoMes(resumo=aviso_resumo_sem_pedidos(user_id), alertas=[])
     try:
         resumo = resumir_mes(dados, user_id=user_id)
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="O resumo automático falhou. Tenta mais tarde.")
-    RESUMOS_JA_FEITOS[chave] = resumo
+    guardar_resumo(user_id, mes, assinatura, resumo)
     return resumo
 
 
@@ -489,6 +496,15 @@ def listar_orcamentos(
     mes: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), user_id: str = Depends(obter_utilizador_atual)
 ) -> list[LinhaOrcamento]:
     return planeamento_do_mes(user_id, mes)
+
+
+# Alertas de orçamento do mês atual (de Lisboa): categorias com 90% ou mais do orçamento gasto.
+# Só contas, sem IA: não gasta pedidos. O Planeamento e o dashboard mostram-nos.
+@app.get("/orcamentos/alertas")
+def alertas_orcamento(user_id: str = Depends(obter_utilizador_atual)) -> AlertasOrcamento:
+    # O mês vai na resposta: o frontend só mostra os alertas quando o mês escolhido é este.
+    mes_atual = hoje_em_lisboa().strftime("%Y-%m")
+    return AlertasOrcamento(mes=mes_atual, alertas=alertas_de_orcamento(planeamento_do_mes(user_id, mes_atual)))
 
 
 # Define (ou muda) o orçamento mensal de uma categoria. A categoria no URL tem de ser uma das permitidas.
@@ -509,7 +525,7 @@ def sugestao_orcamento(
     if not historico:
         return SugestaoOrcamento(sugestoes=[])
     # Conta para o limite do plano, como as perguntas do chat (cada sugestão é uma chamada à IA).
-    registar_pergunta(user_id)
+    registar_pergunta(user_id, "orcamento")
     try:
         return sugerir_orcamento(historico, user_id=user_id)
     except ErroIA as erro:
@@ -554,7 +570,7 @@ def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual))
         raise HTTPException(status_code=422, detail="Formato de imagem não suportado. Usa JPEG, PNG ou WebP.")
 
     # Só depois de a foto ser válida é que conta para o limite do plano (uma foto errada não gasta perguntas).
-    registar_pergunta(user_id)
+    registar_pergunta(user_id, "talao")
     try:
         talao = ler_talao(imagem, tipo, user_id=user_id)
     except ErroIA as erro:
@@ -631,7 +647,7 @@ def plano_do_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_
             cortes=[],
         )
 
-    registar_pergunta(user_id)
+    registar_pergunta(user_id, "poupanca")
     try:
         return planear_poupanca(dados, user_id=user_id)
     except ErroIA as erro:

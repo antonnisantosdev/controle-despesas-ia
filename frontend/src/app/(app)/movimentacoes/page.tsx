@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import AvisoLimite from "@/components/AvisoLimite";
+import AvisoLimitePdf from "@/components/AvisoLimitePdf";
 import AvisoPlanoPago from "@/components/AvisoPlanoPago";
 import {
   apagarToken,
@@ -15,7 +16,7 @@ import {
   type Transacao,
 } from "@/lib/api";
 import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
-import { preencher, temFuncoesPagas } from "@/lib/planos";
+import { mesAtual, preencher, temFuncoesPagas } from "@/lib/planos";
 import { TEXTOS_CATEGORIZAR, TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
 
 import { euros, nomeMes } from "../dashboard/formatos";
@@ -47,6 +48,8 @@ export default function PaginaMovimentacoes() {
   } | null>(null);
   // A importação usa a IA: true quando a API respondeu 429 (limite de pedidos à IA).
   const [semPedidos, setSemPedidos] = useState(false);
+  // 429 do limite de extratos PDF do mês (o CSV continua a funcionar).
+  const [semPdf, setSemPdf] = useState(false);
   // 402: o PDF é só dos planos pagos. Guarda a mensagem da API para o AvisoPlanoPago.
   const [soPlanosPagos, setSoPlanosPagos] = useState<string | null>(null);
   // Free: só importa CSV. Avisa antes de escolher o ficheiro. Se o /plano falhar, aceita os dois (a API decide).
@@ -71,9 +74,10 @@ export default function PaginaMovimentacoes() {
   useEffect(() => {
     pedirApi<ResumoMensal[]>("/dashboard/mensal")
       .then((dados) => {
-        const lista = dados.map((d) => d.mes);
+        // Conta nova, ainda sem movimentações: começa no mês atual (senão a página ficava em "A carregar...").
+        const lista = dados.length > 0 ? dados.map((d) => d.mes) : [mesAtual()];
         setMeses(lista);
-        if (lista.length > 0) setMes(lista[lista.length - 1]);
+        setMes(lista[lista.length - 1]);
       })
       .catch(tratarErro);
     pedirEstadoPlano()
@@ -203,18 +207,27 @@ export default function PaginaMovimentacoes() {
               onImportado={aposImportar}
               onErro={(mensagem, erros) => {
                 setSemPedidos(false);
+                setSemPdf(false);
                 setSoPlanosPagos(null);
                 setAviso({ tipo: "erro", mensagem, erros });
               }}
               onSessaoExpirada={tratarErro}
               onLimiteDiario={() => {
                 setAviso(null);
+                setSemPdf(false);
                 setSoPlanosPagos(null);
                 setSemPedidos(true);
+              }}
+              onLimitePdf={() => {
+                setAviso(null);
+                setSemPedidos(false);
+                setSoPlanosPagos(null);
+                setSemPdf(true);
               }}
               onSoPlanosPagos={(mensagem) => {
                 setAviso(null);
                 setSemPedidos(false);
+                setSemPdf(false);
                 setSoPlanosPagos(mensagem);
               }}
               soCsv={soCsv}
@@ -277,6 +290,7 @@ export default function PaginaMovimentacoes() {
         )}
 
         {semPedidos && <AvisoLimite />}
+        {semPdf && <AvisoLimitePdf />}
         {soPlanosPagos && <AvisoPlanoPago mensagem={soPlanosPagos} />}
 
         {formAberto && <FormNovaMovimentacao onCriada={aposCriar} onFechar={() => setFormAberto(false)} />}

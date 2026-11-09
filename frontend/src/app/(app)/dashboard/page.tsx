@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import AlertasOrcamento from "@/components/AlertasOrcamento";
 import {
   apagarToken,
   lerToken,
@@ -11,6 +13,7 @@ import {
   type GastoCategoria,
   type ResumoMensal,
 } from "@/lib/api";
+import { TEXTOS_SEM_DADOS } from "@/lib/textosPlanos";
 
 import CartaoResumo from "./CartaoResumo";
 import Chat from "./Chat";
@@ -38,6 +41,8 @@ export default function PaginaDashboard() {
   const [mes, setMes] = useState("");
   const [categorias, setCategorias] = useState<GastoCategoria[]>([]);
   const [erro, setErro] = useState("");
+  // Conta nova, ainda sem nenhuma movimentação: mostra como começar em vez de ficar "a analisar" para sempre.
+  const [semDados, setSemDados] = useState(false);
   const totais = calcularTotais(mensal, mes);
 
   // 1. Ao abrir a página: sem token vai para o login; com token carrega a evolução mensal
@@ -50,6 +55,7 @@ export default function PaginaDashboard() {
     pedirApi<ResumoMensal[]>("/dashboard/mensal")
       .then((dados) => {
         setMensal(dados);
+        setSemDados(dados.length === 0);
         if (dados.length > 0) setMes(dados[dados.length - 1].mes);
       })
       .catch((e) => tratarErro(e, router, setErro));
@@ -95,13 +101,30 @@ export default function PaginaDashboard() {
 
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
 
+        {semDados && (
+          <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
+            <h2 className="font-medium text-texto">{TEXTOS_SEM_DADOS.titulo}</h2>
+            <p className="mt-1 text-sm text-texto-suave">{TEXTOS_SEM_DADOS.texto}</p>
+            <Link
+              href="/movimentacoes"
+              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-md bg-destaque px-4 text-sm font-semibold text-white transition-colors hover:bg-destaque-hover dark:text-fundo focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque"
+            >
+              {TEXTOS_SEM_DADOS.botao}
+            </Link>
+          </section>
+        )}
+
+        {/* Só aparece quando o mês escolhido é o atual e há categorias com 90% ou mais do orçamento gasto. */}
+        {mes && <AlertasOrcamento mes={mes} />}
+
         <div className="grid gap-6 lg:grid-cols-3">
           <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6 lg:col-span-2">
             <h2 className="font-medium text-texto">Movimentação financeira</h2>
             <p className="mb-4 text-xs text-texto-suave">Entradas e despesas de cada mês</p>
             <GraficoMensal dados={mensal} />
           </section>
-          <ResumoCartao mes={mes} />
+          {/* Sem mês (conta nova) não há nada para a IA resumir. */}
+          {mes && <ResumoCartao mes={mes} />}
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">

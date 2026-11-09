@@ -5,7 +5,10 @@ from datetime import datetime, timezone
 from consultas import gastos_do_mes
 from dashboard import mes_anterior
 from database import supabase
-from models import GastoCategoria, LinhaOrcamento
+from models import AlertaOrcamento, GastoCategoria, LinhaOrcamento
+
+# A partir de que parte do orçamento gasta aparece o alerta "Estás perto do orçamento do mês".
+LIMIAR_ALERTA_ORCAMENTO = 0.9
 
 
 def limites_do_utilizador(user_id: str) -> dict[str, float]:
@@ -29,6 +32,25 @@ def planeamento_do_mes(user_id: str, mes: str) -> list[LinhaOrcamento]:
     linhas = juntar(limites_do_utilizador(user_id), gastos_do_mes(user_id, mes))
     # As categorias com orçamento primeiro (as mais "gastas" em primeiro), depois as que só têm gastos.
     return sorted(linhas, key=lambda linha: (linha.limite is None, -linha.gasto))
+
+
+def alertas_de_orcamento(linhas: list[LinhaOrcamento]) -> list[AlertaOrcamento]:
+    """As categorias com orçamento em que o gasto já chegou a 90% ("perto") ou a 100% ("atingido").
+
+    Só contas, sem IA. Primeiro as que passaram o orçamento, depois as mais perto do limite.
+    """
+    alertas = []
+    for linha in linhas:
+        if not linha.limite:  # sem orçamento (None) ou 0: não há com que comparar
+            continue
+        if linha.gasto >= linha.limite:
+            nivel = "atingido"
+        elif linha.gasto >= linha.limite * LIMIAR_ALERTA_ORCAMENTO:
+            nivel = "perto"
+        else:
+            continue
+        alertas.append(AlertaOrcamento(categoria=linha.categoria, gasto=linha.gasto, limite=linha.limite, nivel=nivel))
+    return sorted(alertas, key=lambda alerta: (alerta.nivel != "atingido", -alerta.gasto / alerta.limite))
 
 
 def guardar_limite(user_id: str, categoria: str, limite: float) -> None:

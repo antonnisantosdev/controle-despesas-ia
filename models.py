@@ -144,6 +144,20 @@ class LinhaOrcamento(BaseModel):
     gasto: float
 
 
+# Categoria do mês atual com o gasto perto (>= 90%) ou acima do orçamento (GET /orcamentos/alertas, sem IA).
+class AlertaOrcamento(BaseModel):
+    categoria: str
+    gasto: float
+    limite: float
+    nivel: Literal["perto", "atingido"]
+
+
+# Resposta de GET /orcamentos/alertas: o mês atual de Lisboa ("2026-11") e os alertas desse mês.
+class AlertasOrcamento(BaseModel):
+    mes: str
+    alertas: list[AlertaOrcamento]
+
+
 # Sugestão da IA para uma categoria (saída estruturada): o valor e uma frase a explicar porquê.
 class SugestaoCategoria(BaseModel):
     categoria: Categoria
@@ -257,6 +271,12 @@ class EstadoPlano(BaseModel):
     usadas_hoje: int
     # Último dia de acesso dos planos pagos; None no Free (não acaba).
     ativo_ate: date | None
+    # Quando um plano pago chegou ao fim e a conta passou ao Free: o nome desse plano e o último dia dele.
+    plano_terminado: str | None = None
+    terminou_em: date | None = None
+    # Extratos em PDF lidos pela IA neste mês, e quantos o plano permite (0 no Free: não importa PDF).
+    pdf_usados: int = 0
+    pdf_limite: int = 0
 
 
 # Um plano à venda e o seu limite de pedidos à IA (GET /planos, público).
@@ -265,6 +285,8 @@ class PlanoDisponivel(BaseModel):
     # Pedidos à IA no período (o nome ficou de quando todos os planos contavam por dia).
     limite_diario: int
     periodo: Literal["dia", "mes"]
+    # Extratos em PDF por mês (0 no Free, que não importa PDF).
+    limite_pdf: int = 0
 
 
 # Registo público (POST /registo). O EmailStr recusa emails mal escritos antes de chegarem ao Supabase.

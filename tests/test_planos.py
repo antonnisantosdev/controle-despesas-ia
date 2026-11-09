@@ -39,11 +39,15 @@ class UsoIaFalso:
 
     com_funcao=True imita o Supabase com a migração 015 (função registar_pedido_ia);
     com_funcao=False imita o Supabase antes dela: o rpc falha como o PostgREST quando a função não existe.
+    com_016=True imita a versão da 016 (com p_funcao); com_016=False só aceita os 3 parâmetros da 015
+    e não tem a coluna funcao.
     """
 
-    def __init__(self, pedidos: list[datetime], com_funcao: bool = True):
+    def __init__(self, pedidos: list[datetime], com_funcao: bool = True, com_016: bool = True):
         self.pedidos = list(pedidos)
         self.com_funcao = com_funcao
+        self.com_016 = com_funcao and com_016
+        self.funcoes: list[str | None] = []  # a funcao de cada pedido inserido (None = sem a coluna)
         self.inseridas = 0
         self.inseridas_na_tabela = 0  # pelo caminho antigo (insert direto)
         self.chamadas_rpc: list[tuple[str, dict]] = []
@@ -61,13 +65,16 @@ class UsoIaFalso:
         return self
 
     def insert(self, dados):
+        if "funcao" in dados and not self.com_016:
+            raise APIError({"code": "PGRST204", "message": "Could not find the 'funcao' column of 'uso_ia'"})
         self.inseridas += 1
         self.inseridas_na_tabela += 1
+        self.funcoes.append(dados.get("funcao"))
         return self
 
     def rpc(self, nome, parametros):
         self.chamadas_rpc.append((nome, parametros))
-        if not self.com_funcao:
+        if not self.com_funcao or ("p_funcao" in parametros and not self.com_016):
             raise APIError({"code": "PGRST202", "message": f"Could not find the function public.{nome}"})
         # O mesmo que a função SQL: conta desde p_desde e só regista se estiver abaixo do limite.
         self.desde = datetime.fromisoformat(parametros["p_desde"])
@@ -75,6 +82,7 @@ class UsoIaFalso:
         self.data = pedidos < parametros["p_limite"]
         if self.data:
             self.inseridas += 1
+            self.funcoes.append(parametros.get("p_funcao"))
         return self
 
     def __getattr__(self, nome):
@@ -86,15 +94,18 @@ class UsoIaFalso:
         return self
 
 
-@pytest.fixture(params=[True, False], ids=["com_funcao_015", "sem_funcao_015"])
+@pytest.fixture(
+    params=[(True, True), (True, False), (False, False)], ids=["com_016", "so_com_015", "sem_015"]
+)
 def preparar(request, monkeypatch):
     """Fixa o plano, os pedidos já feitos e a hora atual (UTC).
 
-    Cada teste que a usa corre duas vezes: com a função da migração 015 e sem ela (caminho antigo).
+    Cada teste que a usa corre três vezes: com a função da 016, só com a da 015, e sem nenhuma (caminho antigo).
     """
 
     def _preparar(plano, pedidos, agora):
-        uso = UsoIaFalso(pedidos, com_funcao=request.param)
+        com_funcao, com_016 = request.param
+        uso = UsoIaFalso(pedidos, com_funcao=com_funcao, com_016=com_016)
         monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: plano)
         monkeypatch.setattr(limites, "supabase", uso)
         monkeypatch.setattr(limites, "agora_utc", lambda: agora)
@@ -112,7 +123,7 @@ def test_o_free_conta_os_pedidos_do_mes_inteiro_e_bloqueia_o_31(preparar):
     uso = preparar("free", pedidos, AGORA)
 
     with pytest.raises(HTTPException) as erro:
-        limites.registar_pergunta("utilizador-teste")
+        limites.registar_pergunta("utilizador-teste", "chat")
     assert erro.value.status_code == 429
     assert erro.value.detail == (
         "Chegaste ao limite deste mês. Já usaste os 30 pedidos à IA deste mês. O contador volta a zero no dia 1."
@@ -123,14 +134,14 @@ def test_o_free_conta_os_pedidos_do_mes_inteiro_e_bloqueia_o_31(preparar):
 def test_o_free_ainda_faz_o_30_pedido(preparar):
     uso = preparar("free", [datetime(2026, 11, 2, 10, 0, tzinfo=UTC)] * 29, AGORA)
 
-    limites.registar_pergunta("utilizador-teste")
+    limites.registar_pergunta("utilizador-teste", "chat")
     assert uso.inseridas == 1
 
 
 def test_os_pedidos_do_mes_passado_nao_contam_no_free(preparar):
     uso = preparar("free", [datetime(2026, 10, 31, 10, 0, tzinfo=UTC)] * 30, AGORA)
 
-    limites.registar_pergunta("utilizador-teste")
+    limites.registar_pergunta("utilizador-teste", "chat")
     assert uso.inseridas == 1
 
 
@@ -139,7 +150,7 @@ def test_os_pagos_bloqueiam_quando_acabam_os_pedidos_de_hoje(preparar, plano, li
     preparar(plano, [datetime(2026, 11, 20, 9, 0, tzinfo=UTC)] * limite, AGORA)
 
     with pytest.raises(HTTPException) as erro:
-        limites.registar_pergunta("utilizador-teste")
+        limites.registar_pergunta("utilizador-teste", "chat")
     assert erro.value.status_code == 429
     assert erro.value.detail == (
         f"Chegaste ao limite de hoje. Já usaste os {limite} pedidos à IA do teu plano. "
@@ -151,7 +162,7 @@ def test_os_pagos_bloqueiam_quando_acabam_os_pedidos_de_hoje(preparar, plano, li
 def test_os_pedidos_de_ontem_nao_contam_nos_pagos(preparar, plano, limite):
     uso = preparar(plano, [datetime(2026, 11, 19, 23, 0, tzinfo=UTC)] * limite, AGORA)
 
-    limites.registar_pergunta("utilizador-teste")
+    limites.registar_pergunta("utilizador-teste", "chat")
     assert uso.inseridas == 1
 
 
@@ -161,7 +172,7 @@ def test_o_dia_vira_a_meia_noite_de_lisboa_no_verao(preparar):
     agora = datetime(2026, 7, 15, 23, 30, tzinfo=UTC)
     uso = preparar("essencial", [datetime(2026, 7, 15, 22, 30, tzinfo=UTC)] * 20, agora)
 
-    limites.registar_pergunta("utilizador-teste")
+    limites.registar_pergunta("utilizador-teste", "chat")
     assert uso.inseridas == 1
     assert uso.desde == datetime(2026, 7, 15, 23, 0, tzinfo=UTC)
 
@@ -171,7 +182,7 @@ def test_no_verao_um_pedido_depois_da_meia_noite_de_lisboa_conta_para_hoje(prepa
     preparar("essencial", [datetime(2026, 7, 15, 23, 5, tzinfo=UTC)] * 20, agora)
 
     with pytest.raises(HTTPException):
-        limites.registar_pergunta("utilizador-teste")
+        limites.registar_pergunta("utilizador-teste", "chat")
 
 
 def test_o_mes_vira_no_dia_1_de_lisboa(preparar):
@@ -179,7 +190,7 @@ def test_o_mes_vira_no_dia_1_de_lisboa(preparar):
     agora = datetime(2026, 7, 31, 23, 30, tzinfo=UTC)
     uso = preparar("free", [datetime(2026, 7, 31, 22, 0, tzinfo=UTC)] * 30, agora)
 
-    limites.registar_pergunta("utilizador-teste")
+    limites.registar_pergunta("utilizador-teste", "chat")
     assert uso.inseridas == 1
     assert uso.desde == datetime(2026, 7, 31, 23, 0, tzinfo=UTC)
 
@@ -197,24 +208,53 @@ def preparar_uso(monkeypatch, uso, plano="essencial"):
 def test_com_a_funcao_conta_e_regista_numa_so_chamada_a_base_de_dados(monkeypatch):
     uso = preparar_uso(monkeypatch, UsoIaFalso([], com_funcao=True))
 
-    limites.registar_pergunta("utilizador-teste")
+    limites.registar_pergunta("utilizador-teste", "chat")
 
     # Um só pedido ao Supabase, com o utilizador, o início do dia de Lisboa e o limite do plano.
     assert uso.chamadas_rpc == [
         (
             "registar_pedido_ia",
-            {"p_user_id": "utilizador-teste", "p_desde": "2026-11-20T00:00:00+00:00", "p_limite": 20},
+            {
+                "p_user_id": "utilizador-teste",
+                "p_desde": "2026-11-20T00:00:00+00:00",
+                "p_limite": 20,
+                "p_funcao": "chat",
+            },
         )
     ]
     assert uso.inseridas == 1
     assert uso.inseridas_na_tabela == 0
+    assert uso.funcoes == ["chat"]
+
+
+def test_so_com_a_015_usa_a_funcao_antiga_sem_p_funcao(monkeypatch):
+    # Antes de o CEO correr a 016: a versão com p_funcao não existe, mas a da 015 sim.
+    # O pedido conta na mesma, de forma atómica, só fica sem a funcao.
+    uso = preparar_uso(monkeypatch, UsoIaFalso([], com_funcao=True, com_016=False))
+
+    limites.registar_pergunta("utilizador-teste", "chat")
+
+    assert [parametros.get("p_funcao") for _, parametros in uso.chamadas_rpc] == ["chat", None]
+    assert "p_funcao" not in uso.chamadas_rpc[1][1]
+    assert uso.inseridas == 1
+    assert uso.inseridas_na_tabela == 0  # não caiu no caminho antigo
+
+
+def test_so_com_a_015_no_limite_responde_429(monkeypatch):
+    uso = preparar_uso(monkeypatch, UsoIaFalso([AGORA] * 20, com_funcao=True, com_016=False))
+
+    with pytest.raises(HTTPException) as erro:
+        limites.registar_pergunta("utilizador-teste", "chat")
+
+    assert erro.value.status_code == 429
+    assert uso.inseridas == 0
 
 
 def test_com_a_funcao_no_limite_responde_429_sem_usar_o_caminho_antigo(monkeypatch):
     uso = preparar_uso(monkeypatch, UsoIaFalso([AGORA] * 20, com_funcao=True))
 
     with pytest.raises(HTTPException) as erro:
-        limites.registar_pergunta("utilizador-teste")
+        limites.registar_pergunta("utilizador-teste", "chat")
 
     assert erro.value.status_code == 429
     assert uso.inseridas == 0
@@ -225,10 +265,22 @@ def test_sem_a_funcao_usa_o_caminho_antigo(monkeypatch):
     # Antes de o CEO correr a 015, o PostgREST responde PGRST202 e a API conta e insere como antes.
     uso = preparar_uso(monkeypatch, UsoIaFalso([], com_funcao=False))
 
-    limites.registar_pergunta("utilizador-teste")
+    limites.registar_pergunta("utilizador-teste", "chat")
 
-    assert len(uso.chamadas_rpc) == 1
+    # Tentou a versão da 016 e a da 015, e só então o caminho antigo, sem a coluna funcao.
+    assert len(uso.chamadas_rpc) == 2
     assert uso.inseridas_na_tabela == 1
+    assert uso.funcoes == [None]
+
+
+def test_o_caminho_antigo_grava_a_funcao_quando_a_coluna_existe(monkeypatch):
+    # Caso raro (coluna da 016 criada mas sem nenhuma função): a funcao não se perde.
+    uso = preparar_uso(monkeypatch, UsoIaFalso([], com_funcao=False))
+    uso.com_016 = True
+
+    limites.registar_pergunta("utilizador-teste", "importar_pdf")
+
+    assert uso.funcoes == ["importar_pdf"]
 
 
 @pytest.mark.parametrize("codigo", ["PGRST202", "42883"])
@@ -239,7 +291,7 @@ def test_os_dois_codigos_de_funcao_em_falta_dao_none(monkeypatch, codigo):
 
     monkeypatch.setattr(limites, "supabase", SemFuncao())
 
-    assert limites.registar_pedido_atomico("utilizador-teste", AGORA, 20) is None
+    assert limites.registar_pedido_atomico("utilizador-teste", AGORA, 20, "chat") is None
 
 
 def test_outros_erros_da_funcao_nao_caem_no_caminho_antigo(monkeypatch):
@@ -255,7 +307,7 @@ def test_outros_erros_da_funcao_nao_caem_no_caminho_antigo(monkeypatch):
     monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: "essencial")
 
     with pytest.raises(APIError):
-        limites.registar_pergunta("utilizador-teste")
+        limites.registar_pergunta("utilizador-teste", "chat")
 
 
 @pytest.mark.parametrize("dados", [None, [], [True], "true"])
@@ -273,14 +325,14 @@ def test_uma_resposta_estranha_da_funcao_conta_como_limite(monkeypatch, dados):
 
     monkeypatch.setattr(limites, "supabase", RespostaEstranha())
 
-    assert limites.registar_pedido_atomico("utilizador-teste", AGORA, 20) is False
+    assert limites.registar_pedido_atomico("utilizador-teste", AGORA, 20, "chat") is False
 
 
 def test_plano_desconhecido_com_a_funcao_tambem_da_429(monkeypatch):
     uso = preparar_uso(monkeypatch, UsoIaFalso([], com_funcao=True), plano=None)
 
     with pytest.raises(HTTPException) as erro:
-        limites.registar_pergunta("utilizador-teste")
+        limites.registar_pergunta("utilizador-teste", "chat")
 
     assert erro.value.status_code == 429
     assert uso.chamadas_rpc[0][1]["p_limite"] == 0
@@ -515,9 +567,24 @@ def test_o_resumo_do_free_sem_pedidos_fala_do_mes(cliente, limite, monkeypatch):
 # --- GET /plano e GET /planos ---
 
 
-def test_a_rota_plano_mostra_o_limite_o_periodo_e_os_pedidos_usados(cliente, monkeypatch):
-    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: ("free", None))
-    monkeypatch.setattr(limites, "pedidos_no_periodo", lambda user_id, periodo: 3 if periodo == "mes" else 99)
+@pytest.fixture
+def assinatura(monkeypatch):
+    """Fixa a linha da assinaturas, os pedidos e os PDF já feitos, e a hora (20 de novembro de 2026)."""
+
+    def _assinatura(plano, ativo_ate, pedidos=0, pdfs=0):
+        pdfs_contados = []
+        monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: (plano, ativo_ate))
+        por_periodo = pedidos if isinstance(pedidos, dict) else {"dia": pedidos, "mes": pedidos}
+        monkeypatch.setattr(limites, "pedidos_no_periodo", lambda user_id, periodo: por_periodo[periodo])
+        monkeypatch.setattr(limites, "pdfs_no_mes", lambda user_id: pdfs_contados.append(user_id) or pdfs)
+        monkeypatch.setattr(limites, "agora_utc", lambda: AGORA)
+        return pdfs_contados
+
+    return _assinatura
+
+
+def test_a_rota_plano_mostra_o_limite_o_periodo_e_os_pedidos_usados(cliente, assinatura):
+    pdfs_contados = assinatura("free", None, pedidos={"mes": 3, "dia": 99})
 
     resposta = cliente.get("/plano")
 
@@ -529,12 +596,16 @@ def test_a_rota_plano_mostra_o_limite_o_periodo_e_os_pedidos_usados(cliente, mon
         "usadas": 3,
         "usadas_hoje": 3,  # nome antigo, mesmo número
         "ativo_ate": None,
+        "plano_terminado": None,
+        "terminou_em": None,
+        "pdf_usados": 0,
+        "pdf_limite": 0,  # o Free não importa PDF
     }
+    assert pdfs_contados == []  # no Free nem se contam os PDF
 
 
-def test_a_rota_plano_conta_por_dia_nos_pagos(cliente, monkeypatch):
-    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: ("essencial", date(2026, 12, 31)))
-    monkeypatch.setattr(limites, "pedidos_no_periodo", lambda user_id, periodo: 7 if periodo == "dia" else 99)
+def test_a_rota_plano_conta_por_dia_nos_pagos(cliente, assinatura):
+    assinatura("essencial", date(2026, 12, 31), pedidos={"dia": 7, "mes": 99}, pdfs=4)
 
     resposta = cliente.get("/plano")
 
@@ -542,6 +613,57 @@ def test_a_rota_plano_conta_por_dia_nos_pagos(cliente, monkeypatch):
     corpo = resposta.json()
     assert (corpo["periodo"], corpo["usadas"], corpo["limite"]) == ("dia", 7, 20)
     assert corpo["ativo_ate"] == "2026-12-31"
+    assert (corpo["pdf_usados"], corpo["pdf_limite"]) == (4, 15)
+    assert corpo["plano_terminado"] is None
+
+
+def test_um_plano_pago_que_terminou_aparece_como_free(cliente, assinatura):
+    # O Completo acabou a 19 de novembro; hoje é dia 20. A base de dados não muda: só a leitura.
+    pdfs_contados = assinatura("completo", date(2026, 11, 19), pedidos={"mes": 12, "dia": 2})
+
+    corpo = cliente.get("/plano").json()
+
+    assert corpo["plano"] == "free"
+    assert (corpo["limite"], corpo["periodo"], corpo["usadas"]) == (30, "mes", 12)
+    assert corpo["ativo_ate"] is None
+    assert corpo["plano_terminado"] == "completo"
+    assert corpo["terminou_em"] == "2026-11-19"
+    assert corpo["pdf_limite"] == 0
+    assert pdfs_contados == []
+
+
+def test_no_ultimo_dia_o_plano_pago_ainda_vale(cliente, assinatura):
+    assinatura("essencial", date(2026, 11, 20))
+
+    corpo = cliente.get("/plano").json()
+
+    assert (corpo["plano"], corpo["plano_terminado"], corpo["ativo_ate"]) == ("essencial", None, "2026-11-20")
+
+
+def test_plano_pago_sem_data_vale_como_free_sem_aviso_de_terminado(cliente, assinatura):
+    assinatura("essencial", None)
+
+    corpo = cliente.get("/plano").json()
+
+    assert corpo["plano"] == "free"
+    assert corpo["plano_terminado"] is None  # sem data não há "terminou a ..." para mostrar
+
+
+def test_um_plano_pago_que_terminou_conta_os_pedidos_do_mes_e_nao_tem_pdf(monkeypatch):
+    # O Free conta todos os pedidos do mês, incluindo os feitos ainda no plano pago (aceite pelo CEO).
+    uso = UsoIaFalso([datetime(2026, 11, 5, 10, 0, tzinfo=UTC)] * 30)
+    monkeypatch.setattr(limites, "supabase", uso)
+    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: ("essencial", date(2026, 11, 19)))
+    monkeypatch.setattr(limites, "agora_utc", lambda: AGORA)
+
+    with pytest.raises(HTTPException) as erro:
+        limites.registar_pergunta("utilizador-teste", "chat")
+    assert erro.value.status_code == 429
+    assert "deste mês" in erro.value.detail
+
+    with pytest.raises(HTTPException) as erro:
+        limites.exigir_funcao("utilizador-teste", "importar_pdf")
+    assert erro.value.status_code == 402
 
 
 def test_o_free_nunca_mostra_data_de_fim(monkeypatch):
@@ -584,19 +706,20 @@ def test_a_rota_planos_lista_os_planos_por_ordem_sem_login():
 
     assert resposta.status_code == 200
     assert resposta.json() == [
-        {"plano": "free", "limite_diario": 30, "periodo": "mes"},
-        {"plano": "essencial", "limite_diario": 20, "periodo": "dia"},
-        {"plano": "completo", "limite_diario": 50, "periodo": "dia"},
+        {"plano": "free", "limite_diario": 30, "periodo": "mes", "limite_pdf": 0},
+        {"plano": "essencial", "limite_diario": 20, "periodo": "dia", "limite_pdf": 15},
+        {"plano": "completo", "limite_diario": 50, "periodo": "dia", "limite_pdf": 30},
     ]
 
 
 def test_a_rota_planos_segue_os_limites_de_limites_py(monkeypatch):
     # Os números vêm só de LIMITES_POR_PLANO: mudar lá muda a página de preços.
     monkeypatch.setattr(limites, "LIMITES_POR_PLANO", {"free": (1, "mes"), "completo": (2, "dia")})
+    monkeypatch.setattr(limites, "LIMITES_PDF_POR_PLANO", {"completo": 3})
 
     resposta = TestClient(main.app).get("/planos")
 
     assert resposta.json() == [
-        {"plano": "free", "limite_diario": 1, "periodo": "mes"},
-        {"plano": "completo", "limite_diario": 2, "periodo": "dia"},
+        {"plano": "free", "limite_diario": 1, "periodo": "mes", "limite_pdf": 0},
+        {"plano": "completo", "limite_diario": 2, "periodo": "dia", "limite_pdf": 3},
     ]

@@ -142,7 +142,7 @@ def test_o_resumo_repetido_nao_volta_a_chamar_a_ia(cliente, ia, limite, monkeypa
 
 def test_sem_pedidos_a_ia_o_resumo_mostra_o_aviso_do_limite(cliente, ia, limite, monkeypatch):
     limite.maximo = 0
-    # Números diferentes dos outros testes, para o resumo não vir da memória (RESUMOS_JA_FEITOS).
+    # Números diferentes dos outros testes, para o resumo não vir da memória (RESUMOS_EM_MEMORIA, resumo.py).
     monkeypatch.setattr(main, "recolher_dados", lambda user_id, mes: {"transacoes_no_mes": 1, "despesas": 7.77})
 
     resposta = cliente.get("/resumo?mes=2026-09")

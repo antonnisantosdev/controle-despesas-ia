@@ -29,6 +29,9 @@ export type Transacao = {
   metodo_pagamento: string | null;
 };
 export type LinhaOrcamento = { categoria: string; limite: number | null; gasto: number };
+// Alertas de orçamento do mês atual de Lisboa (GET /orcamentos/alertas, sem IA).
+export type AlertaOrcamento = { categoria: string; gasto: number; limite: number; nivel: "perto" | "atingido" };
+export type AlertasOrcamento = { mes: string; alertas: AlertaOrcamento[] };
 export type SugestaoCategoria = { categoria: string; limite: number; explicacao: string };
 export type SugestaoOrcamento = { sugestoes: SugestaoCategoria[] };
 // aviso: texto para mostrar (ex.: importou sem categorias porque acabaram os pedidos à IA). Uma API antiga não o envia.
@@ -53,18 +56,29 @@ export type AnoSimulado = { ano: number; depositado: number; valor: number };
 export type Periodo = "dia" | "mes";
 // O plano do utilizador, os pedidos à IA que já fez no período e o último dia do plano (GET /plano),
 // já normalizado por normalizarEstadoPlano(). ativo_ate vem em ISO ("2026-12-31"), ou null no Free (não acaba).
+// plano_terminado e terminou_em: o plano pago que chegou ao fim (a conta está no Free), ou null.
+// pdf_usados e pdf_limite: extratos PDF deste mês (pdf_limite 0 no Free).
 export type EstadoPlano = {
   plano: string | null;
   limite: number;
   periodo: Periodo;
   usadas: number;
   ativo_ate: string | null;
+  plano_terminado: string | null;
+  terminou_em: string | null;
+  pdf_usados: number;
+  pdf_limite: number;
 };
-// O que GET /plano devolve. Uma API antiga (durante o deploy) só traz usadas_hoje e não traz periodo.
-type EstadoPlanoDaApi = Omit<EstadoPlano, "usadas" | "periodo"> & {
+// O que GET /plano devolve. Uma API antiga (durante o deploy) só traz usadas_hoje e não traz periodo,
+// nem os campos do plano terminado e dos PDF.
+type EstadoPlanoDaApi = Pick<EstadoPlano, "plano" | "limite" | "ativo_ate"> & {
   usadas?: number;
   usadas_hoje?: number;
   periodo?: Periodo;
+  plano_terminado?: string | null;
+  terminou_em?: string | null;
+  pdf_usados?: number;
+  pdf_limite?: number;
 };
 
 // Põe o estado sempre na forma nova, para nenhum ecrã fazer contas com undefined (NaN).
@@ -76,6 +90,10 @@ export function normalizarEstadoPlano(bruto: EstadoPlanoDaApi): EstadoPlano {
     periodo: bruto.periodo === "mes" ? "mes" : "dia",
     usadas: bruto.usadas ?? bruto.usadas_hoje ?? 0,
     ativo_ate: bruto.ativo_ate,
+    plano_terminado: bruto.plano_terminado ?? null,
+    terminou_em: bruto.terminou_em ?? null,
+    pdf_usados: bruto.pdf_usados ?? 0,
+    pdf_limite: bruto.pdf_limite ?? 0,
   };
 }
 
@@ -85,7 +103,8 @@ export async function pedirEstadoPlano(): Promise<EstadoPlano> {
 }
 // Um plano à venda e o seu limite de pedidos à IA no período (GET /planos, público).
 // limite_diario é o nome antigo: no Free é o limite do mês.
-export type PlanoDisponivel = { plano: string; limite_diario: number; periodo: Periodo };
+// limite_pdf: extratos PDF por mês (uma API antiga não o envia).
+export type PlanoDisponivel = { plano: string; limite_diario: number; periodo: Periodo; limite_pdf?: number };
 
 // O email da conta, lido do próprio token do Supabase (um JWT: a parte do meio é JSON em base64url).
 // Serve só para pré-preencher mensagens; não é verificação nenhuma (essa é feita pela API).
@@ -280,13 +299,21 @@ export async function enviarFicheiro<T>(caminho: string, campo: string, ficheiro
   return lerResposta<T>(resposta);
 }
 
+// Se o erro é o 429 do limite de extratos PDF do mês. Distingue-se do limite de pedidos pelo texto da API
+// (mensagem_do_limite_pdf em limites.py, igual a TEXTOS_LIMITE_PDF.textoApi).
+export function eLimitePdf(erro: unknown): erro is ErroApi {
+  return (
+    erro instanceof ErroApi && erro.status === 429 && typeof erro.detalhe === "string" && erro.detalhe.includes("extratos PDF")
+  );
+}
+
 // Se o erro é o 429 do limite de pedidos à IA (limites.py). Os ecrãs usam-no para mostrar o AvisoLimite.
 export function eLimiteDiario(erro: unknown): boolean {
-  return erro instanceof ErroApi && erro.status === 429;
+  return erro instanceof ErroApi && erro.status === 429 && !eLimitePdf(erro);
 }
 
 // Se o erro é o 402 de uma função só dos planos pagos (PDF, talões). Os ecrãs mostram o AvisoPlanoPago.
-// (402 e não 403: o 403 é o plano terminado, que manda para /assinatura-expirada.)
+// (402 e não 403: o 403 é a conta sem assinatura, que manda para /assinatura-expirada.)
 export function eSoPlanosPagos(erro: unknown): erro is ErroApi {
   return erro instanceof ErroApi && erro.status === 402;
 }
@@ -294,7 +321,7 @@ export function eSoPlanosPagos(erro: unknown): erro is ErroApi {
 // A sessão vista por uma página pública (ex.: /precos), segundo a resposta de GET /plano:
 // - "sem-sessao": não há token, ou a API respondeu 401 (token inválido ou expirado);
 // - "ativa": 200, com o plano de quem entrou;
-// - "plano-terminado": 403, o login está certo mas o acesso acabou;
+// - "plano-terminado": 403, o login está certo mas a conta não tem assinatura;
 // - "desconhecida": a API falhou (rede, 5xx); não se sabe mais do que "há um token".
 export type SessaoPublica =
   | { tipo: "sem-sessao" }

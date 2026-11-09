@@ -1,8 +1,8 @@
 // Configuração dos planos: ordem, limites de reserva, preços e contactos para "Pedir acesso".
 // As regras a sério (limites, quem tem acesso) estão no backend (limites.py, auth.py); isto é só para mostrar.
 
-import type { Periodo } from "./api";
-import { FRASE_EMAIL, TEXTOS_MENSAGEM, TEXTOS_PRECOS } from "./textosPlanos";
+import type { EstadoPlano, Periodo } from "./api";
+import { FRASE_EMAIL, TEXTOS_AVISO_QUOTA, TEXTOS_CARTOES, TEXTOS_MENSAGEM, TEXTOS_PRECOS } from "./textosPlanos";
 
 export type IdPlano = "free" | "essencial" | "completo";
 
@@ -11,20 +11,56 @@ export const ORDEM_PLANOS: IdPlano[] = ["free", "essencial", "completo"];
 
 export const NOMES_PLANOS: Record<IdPlano, string> = { free: "Free", essencial: "Essencial", completo: "Completo" };
 
-// Pedidos à IA de um plano e o período em que se contam (o Free conta por mês, os pagos por dia).
-export type LimitePlano = { limite: number; periodo: Periodo };
+// Pedidos à IA de um plano e o período em que se contam (o Free conta por mês, os pagos por dia),
+// e os extratos PDF por mês (0 no Free, que não importa PDF).
+export type LimitePlano = { limite: number; periodo: Periodo; limitePdf: number };
 
 // Só para quando GET /planos falha ou a API ainda está a acordar. Os números certos vêm sempre da API
-// (LIMITES_POR_PLANO em limites.py); se lá mudarem, mudar também aqui.
+// (LIMITES_POR_PLANO e LIMITES_PDF_POR_PLANO em limites.py); se lá mudarem, mudar também aqui.
 export const LIMITES_RESERVA: Record<IdPlano, LimitePlano> = {
-  free: { limite: 30, periodo: "mes" },
-  essencial: { limite: 20, periodo: "dia" },
-  completo: { limite: 50, periodo: "dia" },
+  free: { limite: 30, periodo: "mes", limitePdf: 0 },
+  essencial: { limite: 20, periodo: "dia", limitePdf: 15 },
+  completo: { limite: 50, periodo: "dia", limitePdf: 30 },
 };
 
 // "30 pedidos à IA por mês" / "20 pedidos à IA por dia".
 export function textoDosPedidos({ limite, periodo }: LimitePlano): string {
   return preencher(periodo === "mes" ? TEXTOS_PRECOS.pedidosPorMes : TEXTOS_PRECOS.pedidosPorDia, { limite });
+}
+
+// Os pontos de um cartão de plano: os pedidos à IA, o limite de PDF (só nos pagos) e os pontos fixos do cartão.
+export function pontosDoCartao(id: IdPlano, limite: LimitePlano): string[] {
+  const pdf = limite.limitePdf > 0 ? [preencher(TEXTOS_PRECOS.pdfPorMes, { limitePdf: limite.limitePdf })] : [];
+  return [textoDosPedidos(limite), ...pdf, ...TEXTOS_CARTOES[id].pontos];
+}
+
+// --- Aviso aos 80% dos pedidos à IA ---
+// A API conta e bloqueia (429); isto só decide quando mostrar o aviso antes de o limite chegar.
+
+export const PERCENTAGEM_AVISO_QUOTA = 0.8;
+
+// Se já se usou 80% (ou mais) dos pedidos do período, mas ainda não todos (aí aparece o AvisoLimite).
+export function deveAvisarQuota({ usadas, limite }: Pick<EstadoPlano, "usadas" | "limite">): boolean {
+  return limite > 0 && usadas >= limite * PERCENTAGEM_AVISO_QUOTA && usadas < limite;
+}
+
+// O texto completo do aviso (topo do chat) e se leva o link "Mudar de plano" (no Completo não há plano maior).
+export function avisoDeQuota(estado: EstadoPlano): { texto: string; mostrarLink: boolean } | null {
+  if (!deveAvisarQuota(estado)) return null;
+  const valores = { usadas: estado.usadas, limite: estado.limite };
+  if (estado.plano === "completo") {
+    return { texto: preencher(TEXTOS_AVISO_QUOTA.avisoCompleto, valores), mostrarLink: false };
+  }
+  const modelo = estado.periodo === "mes" ? TEXTOS_AVISO_QUOTA.avisoMes : TEXTOS_AVISO_QUOTA.avisoDia;
+  return { texto: preencher(modelo, valores), mostrarLink: true };
+}
+
+// O texto curto, para o cartão do menu lateral: "Faltam 4 pedidos à IA".
+export function avisoCurtoDeQuota(estado: EstadoPlano): string | null {
+  if (!deveAvisarQuota(estado)) return null;
+  const restantes = estado.limite - estado.usadas;
+  if (restantes === 1) return TEXTOS_AVISO_QUOTA.avisoCurtoUm;
+  return preencher(TEXTOS_AVISO_QUOTA.avisoCurto, { restantes });
 }
 
 // Importar PDF e ler talões são só dos planos pagos (FUNCOES_PAGAS em limites.py). Isto só decide o que se
@@ -136,13 +172,25 @@ export function deveAvisarRenovar(iso: string | null, hoje: Date = new Date()): 
 }
 
 // Junta os limites que vieram de GET /planos aos de reserva (um plano em falta fica com o de reserva).
-// Uma API antiga, sem periodo, conta por dia (era assim antes de o Free passar a contar por mês).
+// Uma API antiga, sem periodo, conta por dia (era assim antes de o Free passar a contar por mês);
+// sem limite_pdf, fica o de reserva.
 export function juntarLimites(
-  lista: { plano: string; limite_diario: number; periodo?: Periodo }[] | null,
+  lista: { plano: string; limite_diario: number; periodo?: Periodo; limite_pdf?: number }[] | null,
 ): Record<IdPlano, LimitePlano> {
   const limites = { ...LIMITES_RESERVA };
-  for (const { plano, limite_diario, periodo } of lista ?? []) {
-    if (eIdPlano(plano)) limites[plano] = { limite: limite_diario, periodo: periodo === "mes" ? "mes" : "dia" };
+  for (const { plano, limite_diario, periodo, limite_pdf } of lista ?? []) {
+    if (eIdPlano(plano)) {
+      limites[plano] = {
+        limite: limite_diario,
+        periodo: periodo === "mes" ? "mes" : "dia",
+        limitePdf: typeof limite_pdf === "number" ? limite_pdf : LIMITES_RESERVA[plano].limitePdf,
+      };
+    }
   }
   return limites;
+}
+
+// O mês atual no formato da API ("AAAA-MM"). Serve de mês inicial numa conta ainda sem movimentações.
+export function mesAtual(agora: Date = new Date()): string {
+  return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}`;
 }

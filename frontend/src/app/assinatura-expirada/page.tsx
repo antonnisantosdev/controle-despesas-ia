@@ -7,7 +7,9 @@ import Logo from "@/components/Logo";
 import { apagarToken } from "@/lib/api";
 import { TEXTOS_EXPIRADA } from "@/lib/textosPlanos";
 
-// Aparece quando a API responde 403: o login está certo, mas o acesso já acabou (ou ainda não foi ativado).
+// Aparece quando a API responde 403: o login está certo, mas a conta não tem assinatura.
+// Um plano pago que termina já não manda para aqui (a conta passa a Free sozinha, sem 403).
+// Sem botão para o dashboard: a API voltava a responder 403 e a pessoa ficava num ciclo.
 export default function PaginaAssinaturaExpirada() {
   const router = useRouter();
 
@@ -23,8 +25,7 @@ export default function PaginaAssinaturaExpirada() {
           <Logo altura={48} />
         </div>
         <h1 className="text-lg font-semibold text-texto">{TEXTOS_EXPIRADA.titulo}</h1>
-        <p className="text-sm text-texto-suave">{TEXTOS_EXPIRADA.texto1}</p>
-        <p className="pb-2 text-sm text-texto-suave">{TEXTOS_EXPIRADA.texto2}</p>
+        <p className="pb-2 text-sm text-texto-suave">{TEXTOS_EXPIRADA.texto1}</p>
         <Link
           href="/precos"
           className="flex min-h-11 w-full items-center justify-center rounded-md bg-destaque px-4 text-sm font-semibold text-white transition-colors hover:bg-destaque-hover dark:text-fundo focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque"

@@ -14,9 +14,9 @@ import {
   NOMES_PLANOS,
   nomeDoPlano,
   planosSuperiores,
+  pontosDoCartao,
   preencher,
   temFuncoesPagas,
-  textoDosPedidos,
 } from "@/lib/planos";
 import { useLimitesPlanos } from "@/lib/useLimitesPlanos";
 import { TEXTOS_CARTOES, TEXTOS_EXPIRADA, TEXTOS_MEU_PLANO } from "@/lib/textosPlanos";
@@ -81,9 +81,25 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
   const superiores = planosSuperiores(estado.plano);
   const limites = useLimitesPlanos();
   const percentagem = estado.limite > 0 ? (usadas / estado.limite) * 100 : 100;
+  // Um plano pago que chegou ao fim: a conta está no Free (a API já devolve plano "free").
+  const terminado = eIdPlano(estado.plano_terminado) && estado.plano_terminado !== "free" ? estado.plano_terminado : null;
 
   return (
     <>
+      {terminado && estado.terminou_em && (
+        <section className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
+          <p className="text-sm text-amber-900 dark:text-amber-200">
+            {preencher(TEXTOS_MEU_PLANO.avisoTerminou, {
+              plano: NOMES_PLANOS[terminado],
+              data: dataPorExtenso(estado.terminou_em),
+            })}
+          </p>
+          <div className="sm:max-w-xs">
+            <BotaoPedirAcesso pedido={{ plano: terminado, renovar: true, emailConta }} rotulo={TEXTOS_MEU_PLANO.botaoRenovar} />
+          </div>
+        </section>
+      )}
+
       <section className="space-y-4 rounded-xl border border-borda bg-cartao p-4 sm:p-6">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-destaque-hover">{TEXTOS_MEU_PLANO.planoAtual}</p>
@@ -109,6 +125,18 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
           </div>
           <p className="text-sm text-texto-suave">{doMes ? TEXTOS_MEU_PLANO.reiniciaMes : TEXTOS_MEU_PLANO.reinicia}</p>
         </div>
+        {/* Extratos PDF do mês: só nos planos que importam PDF (no Free o limite é 0). */}
+        {estado.pdf_limite > 0 && (
+          <div className="space-y-1 border-t border-borda pt-4 text-sm">
+            <p className="font-medium text-texto">
+              {preencher(TEXTOS_MEU_PLANO.pdfMes, {
+                usados: Math.min(estado.pdf_usados, estado.pdf_limite),
+                limite: estado.pdf_limite,
+              })}
+            </p>
+            <p className="text-texto-suave">{TEXTOS_MEU_PLANO.pdfReinicia}</p>
+          </div>
+        )}
         <div className="space-y-1 border-t border-borda pt-4 text-sm">
           <p className="text-texto">
             {estado.ativo_ate
@@ -124,7 +152,7 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
       {avisar && plano && estado.ativo_ate && (
         <section className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
           <p className="text-sm text-amber-900 dark:text-amber-200">
-            {preencher(TEXTOS_MEU_PLANO.avisoRenovar, { data: dataPorExtenso(estado.ativo_ate) })}
+            {preencher(TEXTOS_MEU_PLANO.avisoRenovar, { data: dataPorExtenso(estado.ativo_ate), plano: NOMES_PLANOS[plano] })}
           </p>
           <div className="sm:max-w-xs">
             <BotaoPedirAcesso pedido={{ plano, renovar: true, emailConta }} rotulo={TEXTOS_MEU_PLANO.botaoRenovar} />
@@ -139,24 +167,28 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-texto">{TEXTOS_MEU_PLANO.botaoUpgrade}</h2>
             <div className="grid gap-4 sm:grid-cols-2">
-              {superiores.map((id) => (
-                <div key={id} className="flex flex-col gap-3 rounded-xl border border-borda bg-cartao p-4 sm:p-6">
-                  <div className="space-y-1">
-                    <p className="text-lg font-semibold text-texto">{NOMES_PLANOS[id]}</p>
-                    <p className="text-sm text-texto-suave">{TEXTOS_CARTOES[id].frase}</p>
+              {superiores.map((id) => {
+                // O primeiro ponto (os pedidos à IA) vai em destaque; os outros (PDF, talões...) por baixo.
+                const [pedidos, ...outros] = pontosDoCartao(id, limites[id]);
+                return (
+                  <div key={id} className="flex flex-col gap-3 rounded-xl border border-borda bg-cartao p-4 sm:p-6">
+                    <div className="space-y-1">
+                      <p className="text-lg font-semibold text-texto">{NOMES_PLANOS[id]}</p>
+                      <p className="text-sm text-texto-suave">{TEXTOS_CARTOES[id].frase}</p>
+                    </div>
+                    <p className="text-sm font-semibold text-texto">{pedidos}</p>
+                    {/* O que o plano traz além dos pedidos (PDF e talões, para quem vem do Free). */}
+                    <ul className="space-y-1 text-sm text-texto-suave">
+                      {outros.map((ponto) => (
+                        <li key={ponto}>{ponto}</li>
+                      ))}
+                    </ul>
+                    <div className="mt-auto pt-1">
+                      <BotaoPedirAcesso pedido={{ plano: id, renovar: false, emailConta }} rotulo={TEXTOS_CARTOES[id].botao} />
+                    </div>
                   </div>
-                  <p className="text-sm font-semibold text-texto">{textoDosPedidos(limites[id])}</p>
-                  {/* O que o plano traz além dos pedidos (PDF e talões, para quem vem do Free). */}
-                  <ul className="space-y-1 text-sm text-texto-suave">
-                    {TEXTOS_CARTOES[id].pontos.map((ponto) => (
-                      <li key={ponto}>{ponto}</li>
-                    ))}
-                  </ul>
-                  <div className="mt-auto pt-1">
-                    <BotaoPedirAcesso pedido={{ plano: id, renovar: false, emailConta }} rotulo={TEXTOS_CARTOES[id].botao} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )

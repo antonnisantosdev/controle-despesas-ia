@@ -19,6 +19,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import limites  # noqa: E402
 import main  # noqa: E402
+import resumo  # noqa: E402
+from postgrest.exceptions import APIError  # noqa: E402
 from auth import obter_utilizador_atual  # noqa: E402
 
 
@@ -64,20 +66,33 @@ class BaseDadosFalsa:
 
 
 class Limite:
-    """Imita o limite de pedidos à IA e o plano, sem tocar nas tabelas uso_ia e assinaturas.
+    """Imita o limite de pedidos à IA, o limite de PDF do mês e o plano, sem tocar nas tabelas uso_ia e assinaturas.
 
     O plano é "essencial" por omissão: tem todas as funções (PDF e talões incluídos).
+    funcoes guarda a funcao de cada pedido registado; os PDF contam-se pelos pedidos "importar_pdf",
+    como na base de dados.
     """
 
-    def __init__(self, maximo=30, plano="essencial"):
+    def __init__(self, maximo=30, plano="essencial", maximo_pdf=15):
         self.maximo = maximo
         self.perguntas = 0
         self.plano = plano
+        self.maximo_pdf = maximo_pdf
+        self.funcoes: list[str] = []
 
-    def registar(self, user_id):
+    @property
+    def pdfs(self) -> int:
+        return self.funcoes.count("importar_pdf")
+
+    def registar(self, user_id, funcao):
         if self.perguntas >= self.maximo:
             raise HTTPException(status_code=429, detail="Limite diário atingido")
         self.perguntas += 1
+        self.funcoes.append(funcao)
+
+    def exigir_pdf(self, user_id):
+        if self.pdfs >= self.maximo_pdf:
+            raise HTTPException(status_code=429, detail=limites.mensagem_do_limite_pdf(self.maximo_pdf))
 
 
 @pytest.fixture
@@ -86,6 +101,7 @@ def limite(monkeypatch):
     # O main e o limites.py usam a mesma função: troca-se nos dois sítios.
     monkeypatch.setattr(main, "registar_pergunta", limite.registar)
     monkeypatch.setattr(limites, "registar_pergunta", limite.registar)
+    monkeypatch.setattr(main, "exigir_limite_pdf", limite.exigir_pdf)
     # O plano lê-se sempre pelo limites.py (exigir_funcao, aviso do resumo): troca-se lá.
     monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: limite.plano)
     return limite
@@ -98,10 +114,22 @@ def base_dados(monkeypatch):
     return falsa
 
 
+class SemTabelaResumos:
+    """Imita o Supabase antes da sql/016: a tabela resumos_ia não existe (o resumo fica na memória)."""
+
+    def __getattr__(self, nome):
+        return lambda *args, **opcoes: self
+
+    def execute(self):
+        raise APIError({"code": "PGRST205", "message": "Could not find the table 'public.resumos_ia' in the schema cache"})
+
+
 @pytest.fixture
-def cliente(base_dados, limite):
+def cliente(base_dados, limite, monkeypatch):
     """Um cliente da API já com login feito (como o utilizador "utilizador-teste")."""
     main.app.dependency_overrides[obter_utilizador_atual] = lambda: "utilizador-teste"
-    main.RESUMOS_JA_FEITOS.clear()
+    # Por omissão, os resumos ficam na memória (como antes da 016); test_resumos_guardados.py testa a tabela.
+    monkeypatch.setattr(resumo, "supabase", SemTabelaResumos())
+    resumo.RESUMOS_EM_MEMORIA.clear()
     yield TestClient(main.app)
     main.app.dependency_overrides.clear()

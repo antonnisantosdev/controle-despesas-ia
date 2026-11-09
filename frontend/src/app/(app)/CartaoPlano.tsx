@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { pedirEstadoPlano, type EstadoPlano } from "@/lib/api";
-import { nomeDoPlano, preencher } from "@/lib/planos";
+import { avisoCurtoDeQuota, nomeDoPlano, preencher } from "@/lib/planos";
 import { TEXTOS_MEU_PLANO } from "@/lib/textosPlanos";
 
 // A cor da barra conforme os pedidos à IA já feitos no período: avisa antes de o limite chegar.
@@ -41,6 +41,8 @@ export default function CartaoPlano() {
   // O Free conta os pedidos por mês; os pagos, por dia.
   const doMes = estado.periodo === "mes";
   const texto = preencher(doMes ? TEXTOS_MEU_PLANO.cartaoMes : TEXTOS_MEU_PLANO.cartaoHoje, { usadas, limite: estado.limite });
+  // A partir de 80% dos pedidos (e antes do limite): "Faltam 4 pedidos à IA". O cartão já leva a /plano.
+  const avisoCurto = avisoCurtoDeQuota(estado);
 
   return (
     <Link
@@ -60,6 +62,11 @@ export default function CartaoPlano() {
       >
         <div className={`h-full rounded-full ${corDaBarra(usadas, estado.limite)}`} style={{ width: `${percentagem}%` }} />
       </div>
+      {avisoCurto && (
+        <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          {avisoCurto}
+        </p>
+      )}
     </Link>
   );
 }

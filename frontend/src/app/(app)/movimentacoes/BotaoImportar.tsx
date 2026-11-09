@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import {
   eLimiteDiario,
+  eLimitePdf,
   enviarFicheiro,
   ErroApi,
   eSoPlanosPagos,
@@ -17,6 +18,7 @@ type Props = {
   onErro: (mensagem: string, erros: string[]) => void;
   onSessaoExpirada: (e: unknown) => void;
   onLimiteDiario: () => void; // 429: a página mostra o AvisoLimite
+  onLimitePdf: () => void; // 429 do limite de extratos PDF do mês: a página mostra o AvisoLimitePdf
   onSoPlanosPagos: (mensagem: string) => void; // 402 (PDF no Free): a página mostra o AvisoPlanoPago
   soCsv: boolean; // Free: a janela de escolha só mostra CSV (a API responde 402 ao PDF na mesma)
 };
@@ -27,6 +29,7 @@ export default function BotaoImportar({
   onErro,
   onSessaoExpirada,
   onLimiteDiario,
+  onLimitePdf,
   onSoPlanosPagos,
   soCsv,
 }: Props) {
@@ -42,6 +45,11 @@ export default function BotaoImportar({
     } catch (e) {
       if (e instanceof SessaoExpirada) {
         onSessaoExpirada(e);
+        return;
+      }
+      // Antes do eLimiteDiario: os dois são 429, mas o do PDF tem outro aviso (e o CSV continua a funcionar).
+      if (eLimitePdf(e)) {
+        onLimitePdf();
         return;
       }
       if (eLimiteDiario(e)) {

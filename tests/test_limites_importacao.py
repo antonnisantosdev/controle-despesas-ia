@@ -123,8 +123,10 @@ def test_pdf_com_a_conta_no_teto_e_recusado_antes_de_ler(cliente, limite, base_d
 
     assert resposta.status_code == 422
     assert resposta.json()["detail"] == MENSAGEM_TETO
-    assert lidos == []
+    # Ordem: plano, tamanho, páginas e só depois o teto. As páginas contam-se, a IA nunca é chamada.
+    assert lidos == ["paginas"]
     assert limite.perguntas == 0
+    assert limite.pdfs == 0
 
 
 def test_pdf_com_movimentos_a_mais_para_o_teto_nao_grava_nem_categoriza(cliente, ia, limite, base_dados, monkeypatch):

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import AvisoLimite from "@/components/AvisoLimite";
-import { eLimiteDiario, pedirApi, SessaoExpirada, type RespostaChat } from "@/lib/api";
+import AvisoQuota from "@/components/AvisoQuota";
+import { eLimiteDiario, pedirApi, pedirEstadoPlano, SessaoExpirada, type EstadoPlano, type RespostaChat } from "@/lib/api";
 
 type Mensagem = { autor: "tu" | "ia"; texto: string };
 
@@ -15,6 +16,15 @@ export default function Chat() {
   const [aPensar, setAPensar] = useState(false);
   const [erro, setErro] = useState("");
   const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite de pedidos à IA
+  // Os pedidos à IA já usados, para o aviso dos 80%. Volta a ser pedido depois de cada pergunta.
+  const [estado, setEstado] = useState<EstadoPlano | null>(null);
+  const [perguntasFeitas, setPerguntasFeitas] = useState(0);
+
+  useEffect(() => {
+    pedirEstadoPlano()
+      .then(setEstado)
+      .catch(() => setEstado(null)); // sem o estado, o aviso não aparece (o chat funciona na mesma)
+  }, [perguntasFeitas]);
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -42,12 +52,20 @@ export default function Chat() {
       }
     } finally {
       setAPensar(false);
+      setPerguntasFeitas((n) => n + 1);
     }
   }
 
   return (
     <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
       <h2 className="mb-4 font-medium text-texto">Pergunta às tuas finanças</h2>
+
+      {/* No limite já aparece o AvisoLimite; os dois juntos seriam repetidos. */}
+      {!semPedidos && (
+        <div className="mb-4 empty:hidden">
+          <AvisoQuota estado={estado} />
+        </div>
+      )}
 
       <div className="mb-4 max-h-80 space-y-3 overflow-y-auto">
         {mensagens.length === 0 && (
