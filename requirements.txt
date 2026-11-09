@@ -12,3 +12,6 @@ python-dotenv==1.2.4
 
 # IA: categorização com o Claude
 anthropic==2.3.0
+
+# Contar as páginas de um extrato em PDF antes de o enviar à IA
+pypdf==7.0.0

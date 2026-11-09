@@ -7,7 +7,7 @@ import AvisoServidor from "@/components/AvisoServidor";
 import BotaoPedirAcesso from "@/components/BotaoPedirAcesso";
 import Logo from "@/components/Logo";
 import { emailDaSessao, sessaoPublica, type EstadoPlano } from "@/lib/api";
-import { CONTACTOS, ORDEM_PLANOS, PRECOS, preencher, type IdPlano } from "@/lib/planos";
+import { CONTACTOS, formatarEuros, ORDEM_PLANOS, PRECOS, preencher, type IdPlano } from "@/lib/planos";
 import { TEXTOS_CARTOES, TEXTOS_MEU_PLANO, TEXTOS_PRECOS } from "@/lib/textosPlanos";
 import { useLimitesPlanos } from "@/lib/useLimitesPlanos";
 
@@ -42,11 +42,22 @@ async function lerSessao(): Promise<Sessao> {
   }
 }
 
-function textoDoPreco(id: IdPlano): string {
-  if (id === "free") return TEXTOS_PRECOS.precoFree;
-  const preco = PRECOS[id];
-  if (preco === null) return TEXTOS_PRECOS.precoPorDefinir;
-  return preco.toLocaleString("pt-PT", { style: "currency", currency: "EUR" });
+// O preço do cartão: mensal em grande, com o anual por baixo. Free: "Grátis". Pago sem preço: "Preço em breve".
+function PrecoDoCartao({ id }: { id: IdPlano }) {
+  const preco = id === "free" ? null : PRECOS[id];
+  if (preco === null) {
+    const texto = id === "free" ? TEXTOS_PRECOS.precoFree : TEXTOS_PRECOS.precoPorDefinir;
+    return <p className="text-3xl font-bold tracking-tight text-texto">{texto}</p>;
+  }
+  return (
+    <div className="space-y-1">
+      <p className="text-texto">
+        <span className="text-3xl font-bold tracking-tight">{formatarEuros(preco.mensal)}</span>
+        <span className="text-sm text-texto-suave">{TEXTOS_PRECOS.porMes}</span>
+      </p>
+      <p className="text-sm text-texto-suave">{preencher(TEXTOS_PRECOS.precoAnual, { anual: formatarEuros(preco.anual) })}</p>
+    </div>
+  );
 }
 
 // Página pública de preços: fica fora do grupo (app), por isso não tem menu nem precisa de login.
@@ -96,6 +107,8 @@ export default function PaginaPrecos() {
             />
           ))}
         </section>
+
+        <p className="-mt-6 text-center text-sm text-texto-suave sm:-mt-8">{TEXTOS_PRECOS.notaLancamento}</p>
 
         {HA_CONTACTO && (
           <p className="mx-auto max-w-2xl rounded-xl border border-borda bg-cartao p-4 text-center text-sm text-texto-suave">
@@ -175,7 +188,9 @@ function CartaoDePreco({ id, limite, atual, temConta, emailConta }: PropsCartao)
       </div>
 
       {/* O preço é o que mais salta à vista no cartão. */}
-      <p className="border-y border-borda py-4 text-3xl font-bold tracking-tight text-texto">{textoDoPreco(id)}</p>
+      <div className="border-y border-borda py-4">
+        <PrecoDoCartao id={id} />
+      </div>
 
       <ul className="space-y-2.5 text-sm text-texto">
         {pontos.map((ponto) => (

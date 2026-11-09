@@ -12,7 +12,7 @@ import main
 
 @pytest.mark.parametrize(
     ("plano", "esperado"),
-    [("free", 5), ("essencial", 30), ("completo", 100)],
+    [("free", 5), ("essencial", 20), ("completo", 50)],
 )
 def test_cada_plano_tem_o_seu_limite(plano, esperado):
     assert limites.limite_do_plano(plano) == esperado
@@ -51,12 +51,12 @@ def test_o_free_bloqueia_a_sexta_pergunta(monkeypatch):
 def test_o_aviso_do_limite_fala_em_pedidos_a_ia_e_diz_o_limite(monkeypatch):
     # O frontend e o texto aprovado usam "pedidos à IA" (não "perguntas").
     monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: "essencial")
-    monkeypatch.setattr(limites, "supabase", UsoIaFalso(feitas_hoje=30))
+    monkeypatch.setattr(limites, "supabase", UsoIaFalso(feitas_hoje=20))
 
     with pytest.raises(HTTPException) as erro:
         limites.registar_pergunta("utilizador-teste")
     assert erro.value.detail == (
-        "Chegaste ao limite de hoje. Já usaste os 30 pedidos à IA do teu plano. O contador volta a zero à meia-noite."
+        "Chegaste ao limite de hoje. Já usaste os 20 pedidos à IA do teu plano. O contador volta a zero à meia-noite."
     )
 
 
@@ -136,8 +136,8 @@ def test_a_rota_planos_lista_os_planos_por_ordem_sem_login():
     assert resposta.status_code == 200
     assert resposta.json() == [
         {"plano": "free", "limite_diario": 5},
-        {"plano": "essencial", "limite_diario": 30},
-        {"plano": "completo", "limite_diario": 100},
+        {"plano": "essencial", "limite_diario": 20},
+        {"plano": "completo", "limite_diario": 50},
     ]
 
 

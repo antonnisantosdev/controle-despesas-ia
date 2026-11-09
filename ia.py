@@ -101,45 +101,58 @@ def custo_em_dolares(modelo: str, tokens_entrada: int, tokens_saida: int) -> flo
     return None
 
 
-def _registar_chamada(funcao: str, resposta, inicio: float) -> None:
+def _registar_chamada(funcao: str, resposta, inicio: float, user_id: str | None = None) -> None:
     """Guarda na tabela chamadas_ia os tokens, o custo e a duração de uma chamada à IA.
 
+    user_id diz de quem foi a chamada (None no script de avaliação).
     Se a gravação falhar, só fica um aviso nos logs: o utilizador recebe a resposta na mesma.
     """
     try:
         modelo = os.getenv("CLAUDE_MODELO", "claude-haiku-5-5")
         uso = resposta.usage  # a Anthropic diz em cada resposta quantos tokens foram usados
-        supabase.table("chamadas_ia").insert(
-            {
-                "funcao": funcao,
-                # O script de avaliação marca as suas chamadas, para não se misturarem com as dos utilizadores.
-                "origem": os.getenv("IA_ORIGEM", "app"),
-                "modelo": modelo,
-                "tokens_entrada": uso.input_tokens,
-                "tokens_saida": uso.output_tokens,
-                "custo_usd": custo_em_dolares(modelo, uso.input_tokens, uso.output_tokens),
-                "duracao_ms": round((time.perf_counter() - inicio) * 1000),
-                # As respostas com saída estruturada trazem parsed_output; o chat não tem validação.
-                "sucesso": getattr(resposta, "parsed_output", "sem validação") is not None,
-            }
-        ).execute()
+        linha = {
+            "funcao": funcao,
+            # O script de avaliação marca as suas chamadas, para não se misturarem com as dos utilizadores.
+            "origem": os.getenv("IA_ORIGEM", "app"),
+            "modelo": modelo,
+            "tokens_entrada": uso.input_tokens,
+            "tokens_saida": uso.output_tokens,
+            "custo_usd": custo_em_dolares(modelo, uso.input_tokens, uso.output_tokens),
+            "duracao_ms": round((time.perf_counter() - inicio) * 1000),
+            # As respostas com saída estruturada trazem parsed_output; o chat não tem validação.
+            "sucesso": getattr(resposta, "parsed_output", "sem validação") is not None,
+        }
+    except Exception as erro:
+        print(f"Não foi possível registar a chamada à IA ({funcao}): {erro}")
+        return
+
+    if user_id is not None:
+        try:
+            supabase.table("chamadas_ia").insert(linha | {"user_id": user_id}).execute()
+            return
+        except Exception as erro:
+            # Ex.: a migração 014 (coluna user_id) ainda não foi corrida no Supabase.
+            # Grava-se outra vez sem o user_id, para não se perderem os tokens e o custo.
+            print(f"Não foi possível registar a chamada à IA com o user_id ({funcao}): {erro}")
+    try:
+        supabase.table("chamadas_ia").insert(linha).execute()
     except Exception as erro:
         print(f"Não foi possível registar a chamada à IA ({funcao}): {erro}")
 
 
-def categorizar(transacoes: list[TransacaoCriar]) -> list[str]:
+def categorizar(transacoes: list[TransacaoCriar], user_id: str | None = None) -> list[str]:
     """Devolve uma categoria para cada transação, pela mesma ordem."""
     fornecedor = os.getenv("IA_FORNECEDOR", "claude")
     if fornecedor == "claude":
         try:
-            return _categorizar_claude(transacoes)
+            return _categorizar_claude(transacoes, user_id)
         # ValueError: uma resposta cortada a meio não passa na validação do Pydantic.
         except (anthropic.APIError, ValueError) as erro:
             raise ErroIA(f"Claude: {erro}") from erro
     raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
 
 
-def _categorizar_claude(transacoes: list[TransacaoCriar]) -> list[str]:
+def _categorizar_claude(transacoes: list[TransacaoCriar], user_id: str | None) -> list[str]:
     cliente = anthropic.Anthropic()
     inicio = time.perf_counter()
 
@@ -155,7 +168,7 @@ def _categorizar_claude(transacoes: list[TransacaoCriar]) -> list[str]:
         output_format=RespostaCategorizacao,
     ) as fluxo:
         resposta = fluxo.get_final_message()
-    _registar_chamada("categorizar", resposta, inicio)
+    _registar_chamada("categorizar", resposta, inicio, user_id)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu uma resposta válida (stop_reason={resposta.stop_reason})")
     por_indice = {c.indice: c.categoria for c in resposta.parsed_output.categorizacoes}
@@ -177,7 +190,9 @@ Regras:
 MAX_VOLTAS = 5
 
 
-def conversar(pergunta: str, ferramentas: list[dict], executar: Callable[[str, dict], str]) -> str:
+def conversar(
+    pergunta: str, ferramentas: list[dict], executar: Callable[[str, dict], str], user_id: str | None = None
+) -> str:
     """Responde a uma pergunta, deixando a IA pedir ferramentas.
 
     `executar(nome, argumentos)` corre a ferramenta pedida e devolve o resultado em texto.
@@ -186,13 +201,15 @@ def conversar(pergunta: str, ferramentas: list[dict], executar: Callable[[str, d
     fornecedor = os.getenv("IA_FORNECEDOR", "claude")
     if fornecedor == "claude":
         try:
-            return _conversar_claude(pergunta, ferramentas, executar)
+            return _conversar_claude(pergunta, ferramentas, executar, user_id)
         except anthropic.APIError as erro:
             raise ErroIA(f"Claude: {erro}") from erro
     raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
 
 
-def _conversar_claude(pergunta: str, ferramentas: list[dict], executar: Callable[[str, dict], str]) -> str:
+def _conversar_claude(
+    pergunta: str, ferramentas: list[dict], executar: Callable[[str, dict], str], user_id: str | None
+) -> str:
     cliente = anthropic.Anthropic()
     instrucoes = f"{INSTRUCOES_CHAT}\nHoje é {date.today().isoformat()}."
     mensagens = [{"role": "user", "content": pergunta}]
@@ -208,7 +225,7 @@ def _conversar_claude(pergunta: str, ferramentas: list[dict], executar: Callable
         )
 
         # Sem pedidos de ferramentas: é a resposta final. Junta os blocos de texto.
-        _registar_chamada("chat", resposta, inicio)
+        _registar_chamada("chat", resposta, inicio, user_id)
 
         if resposta.stop_reason != "tool_use":
             return "".join(bloco.text for bloco in resposta.content if bloco.type == "text")
@@ -260,18 +277,18 @@ Os alertas (no máximo 3, do mais importante para o menos importante):
 """
 
 
-def resumir_mes(dados: dict) -> ResumoMes:
+def resumir_mes(dados: dict, user_id: str | None = None) -> ResumoMes:
     """Pede à IA um resumo do mês, com alertas, a partir dos números já calculados."""
     fornecedor = os.getenv("IA_FORNECEDOR", "claude")
     if fornecedor == "claude":
         try:
-            return _resumir_mes_claude(dados)
+            return _resumir_mes_claude(dados, user_id)
         except anthropic.APIError as erro:
             raise ErroIA(f"Claude: {erro}") from erro
     raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
 
 
-def _resumir_mes_claude(dados: dict) -> ResumoMes:
+def _resumir_mes_claude(dados: dict, user_id: str | None) -> ResumoMes:
     cliente = anthropic.Anthropic()
     inicio = time.perf_counter()
     resposta = cliente.messages.parse(
@@ -281,7 +298,7 @@ def _resumir_mes_claude(dados: dict) -> ResumoMes:
         messages=[{"role": "user", "content": json.dumps(dados, ensure_ascii=False)}],
         output_format=ResumoMes,
     )
-    _registar_chamada("resumo", resposta, inicio)
+    _registar_chamada("resumo", resposta, inicio, user_id)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu um resumo válido (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output
@@ -304,18 +321,18 @@ Regras:
 """
 
 
-def sugerir_orcamento(historico: dict) -> SugestaoOrcamento:
+def sugerir_orcamento(historico: dict, user_id: str | None = None) -> SugestaoOrcamento:
     """Pede à IA um orçamento por categoria a partir dos gastos dos últimos meses."""
     fornecedor = os.getenv("IA_FORNECEDOR", "claude")
     if fornecedor == "claude":
         try:
-            return _sugerir_orcamento_claude(historico)
+            return _sugerir_orcamento_claude(historico, user_id)
         except anthropic.APIError as erro:
             raise ErroIA(f"Claude: {erro}") from erro
     raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
 
 
-def _sugerir_orcamento_claude(historico: dict) -> SugestaoOrcamento:
+def _sugerir_orcamento_claude(historico: dict, user_id: str | None) -> SugestaoOrcamento:
     cliente = anthropic.Anthropic()
     inicio = time.perf_counter()
     resposta = cliente.messages.parse(
@@ -325,7 +342,7 @@ def _sugerir_orcamento_claude(historico: dict) -> SugestaoOrcamento:
         messages=[{"role": "user", "content": json.dumps(historico, ensure_ascii=False)}],
         output_format=SugestaoOrcamento,
     )
-    _registar_chamada("orcamento", resposta, inicio)
+    _registar_chamada("orcamento", resposta, inicio, user_id)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu uma sugestão válida (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output
@@ -351,18 +368,18 @@ Regras:
 """
 
 
-def ler_talao(imagem: bytes, tipo: str) -> Talao:
+def ler_talao(imagem: bytes, tipo: str, user_id: str | None = None) -> Talao:
     """Pede à IA que leia a fotografia de um talão. O tipo é o da imagem, por exemplo "image/jpeg"."""
     fornecedor = os.getenv("IA_FORNECEDOR", "claude")
     if fornecedor == "claude":
         try:
-            return _ler_talao_claude(imagem, tipo)
+            return _ler_talao_claude(imagem, tipo, user_id)
         except anthropic.APIError as erro:
             raise ErroIA(f"Claude: {erro}") from erro
     raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
 
 
-def _ler_talao_claude(imagem: bytes, tipo: str) -> Talao:
+def _ler_talao_claude(imagem: bytes, tipo: str, user_id: str | None) -> Talao:
     cliente = anthropic.Anthropic()
     inicio = time.perf_counter()
     # A API não recebe ficheiros soltos: a imagem vai dentro do JSON, convertida em texto (base64).
@@ -383,7 +400,7 @@ def _ler_talao_claude(imagem: bytes, tipo: str) -> Talao:
         ],
         output_format=Talao,
     )
-    _registar_chamada("talao", resposta, inicio)
+    _registar_chamada("talao", resposta, inicio, user_id)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não conseguiu ler o talão (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output
@@ -407,19 +424,19 @@ Regras:
 """
 
 
-def ler_extrato_pdf(pdf: bytes) -> ExtratoPdf:
+def ler_extrato_pdf(pdf: bytes, user_id: str | None = None) -> ExtratoPdf:
     """Pede à IA que leia um extrato bancário em PDF."""
     fornecedor = os.getenv("IA_FORNECEDOR", "claude")
     if fornecedor == "claude":
         try:
-            return _ler_extrato_pdf_claude(pdf)
+            return _ler_extrato_pdf_claude(pdf, user_id)
         # ValueError: uma resposta cortada a meio não passa na validação do Pydantic.
         except (anthropic.APIError, ValueError) as erro:
             raise ErroIA(f"Claude: {erro}") from erro
     raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
 
 
-def _ler_extrato_pdf_claude(pdf: bytes) -> ExtratoPdf:
+def _ler_extrato_pdf_claude(pdf: bytes, user_id: str | None) -> ExtratoPdf:
     cliente = anthropic.Anthropic()
     inicio = time.perf_counter()
     pdf_base64 = base64.standard_b64encode(pdf).decode("utf-8")
@@ -446,7 +463,7 @@ def _ler_extrato_pdf_claude(pdf: bytes) -> ExtratoPdf:
         output_format=ExtratoPdf,
     ) as fluxo:
         resposta = fluxo.get_final_message()
-    _registar_chamada("extrato_pdf", resposta, inicio)
+    _registar_chamada("extrato_pdf", resposta, inicio, user_id)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não conseguiu ler o extrato (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output
@@ -478,18 +495,18 @@ Regras:
 """
 
 
-def planear_poupanca(dados: dict) -> PlanoPoupanca:
+def planear_poupanca(dados: dict, user_id: str | None = None) -> PlanoPoupanca:
     """Pede à IA que avalie um objetivo de poupança a partir das contas já feitas."""
     fornecedor = os.getenv("IA_FORNECEDOR", "claude")
     if fornecedor == "claude":
         try:
-            return _planear_poupanca_claude(dados)
+            return _planear_poupanca_claude(dados, user_id)
         except anthropic.APIError as erro:
             raise ErroIA(f"Claude: {erro}") from erro
     raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
 
 
-def _planear_poupanca_claude(dados: dict) -> PlanoPoupanca:
+def _planear_poupanca_claude(dados: dict, user_id: str | None) -> PlanoPoupanca:
     cliente = anthropic.Anthropic()
     inicio = time.perf_counter()
     resposta = cliente.messages.parse(
@@ -499,7 +516,7 @@ def _planear_poupanca_claude(dados: dict) -> PlanoPoupanca:
         messages=[{"role": "user", "content": json.dumps(dados, ensure_ascii=False)}],
         output_format=PlanoPoupanca,
     )
-    _registar_chamada("poupanca", resposta, inicio)
+    _registar_chamada("poupanca", resposta, inicio, user_id)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu um plano válido (stop_reason={resposta.stop_reason})")
     return resposta.parsed_output

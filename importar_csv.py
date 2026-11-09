@@ -14,6 +14,35 @@ class ErroImportacao(Exception):
         self.erros = erros
 
 
+class PdfIlegivel(Exception):
+    """O PDF não se consegue abrir (estragado, ou protegido com palavra-passe)."""
+
+
+# Teto de entradas na árvore de páginas ao contar. Um PDF feito de propósito com dezenas de milhares
+# de páginas vazias cabe em poucos MB e faria o servidor gastar segundos de CPU e centenas de MB a contá-las.
+MAX_ENTRADAS_ARVORE_PDF = 200
+
+
+def contar_paginas_pdf(pdf: bytes) -> int:
+    """Quantas páginas tem o PDF. Lê só a estrutura do ficheiro, sem chamar a IA.
+
+    Se a árvore de páginas passar o teto, para de contar e devolve MAX_ENTRADAS_ARVORE_PDF + 1
+    (quer dizer "mais do que o teto").
+    """
+    # Importado aqui dentro: só a importação de PDF precisa do pypdf.
+    from pypdf import PdfReader, apply_configuration
+    from pypdf.errors import LimitReachedError
+
+    try:
+        with apply_configuration(page_tree_maximum_entries=MAX_ENTRADAS_ARVORE_PDF):
+            return len(PdfReader(io.BytesIO(pdf)).pages)
+    except LimitReachedError:
+        return MAX_ENTRADAS_ARVORE_PDF + 1
+    # Um PDF estragado pode dar vários tipos de erro no pypdf: todos querem dizer "não se consegue ler".
+    except Exception as erro:
+        raise PdfIlegivel(str(erro)) from erro
+
+
 def calcular_hash(linha: dict) -> str:
     texto = ";".join(f"{chave}={linha[chave]}" for chave in ["Data", "Montante", "Descrição", "Saldo"])
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()

@@ -11,7 +11,11 @@ from database import supabase
 from models import EstadoPlano, PlanoDisponivel
 
 # Perguntas à IA por dia em cada plano. Para mudar um limite, muda-se só aqui.
-LIMITES_POR_PLANO = {"free": 5, "essencial": 30, "completo": 100}
+LIMITES_POR_PLANO = {"free": 5, "essencial": 20, "completo": 50}
+
+# Páginas máximas de um extrato em PDF. A IA lê o PDF inteiro numa só chamada: cada página a mais
+# custa tokens, por isso um PDF maior é recusado antes de chamar a IA (e sem gastar um pedido).
+MAX_PAGINAS_PDF = 10
 
 
 def limite_do_plano(plano: str | None) -> int:

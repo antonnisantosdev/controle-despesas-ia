@@ -5,8 +5,11 @@ export const TEXTOS_PRECOS = {
   titulo: "Escolhe o teu plano",
   subtitulo:
     "Todos os planos têm as mesmas funcionalidades. Só muda quantos pedidos podes fazer à IA por dia. Começas no Free, sem cartão.",
-  precoPorDefinir: "Preço em breve",
+  precoPorDefinir: "Preço em breve", // só aparece se um plano pago ficar sem preço em PRECOS (planos.ts)
   precoFree: "Grátis",
+  porMes: "/mês",
+  precoAnual: "ou {anual}/ano (2 meses grátis)",
+  notaLancamento: "Preço de lançamento.",
   pedidosPorDia: "{limite} pedidos à IA por dia",
   funcionalidadesTitulo: "Incluído em todos os planos",
   funcionalidades: [

@@ -12,11 +12,27 @@ export const NOMES_PLANOS: Record<IdPlano, string> = { free: "Free", essencial: 
 
 // Só para quando GET /planos falha ou a API ainda está a acordar. Os números certos vêm sempre da API
 // (LIMITES_POR_PLANO em limites.py); se lá mudarem, mudar também aqui.
-export const LIMITES_RESERVA: Record<IdPlano, number> = { free: 5, essencial: 30, completo: 100 };
+export const LIMITES_RESERVA: Record<IdPlano, number> = { free: 5, essencial: 20, completo: 50 };
 
-// Preço por plano pago, em euros. null = ainda não definido (mostra "Preço em breve").
-// Quem define os preços é o CEO: não pôr aqui valores sem o OK dele.
-export const PRECOS: Record<Exclude<IdPlano, "free">, number | null> = { essencial: null, completo: null };
+// Preço de cada plano pago, em euros com IVA incluído: por mês e por ano (preço de lançamento).
+// null = ainda não definido (mostra "Preço em breve").
+// Quem define os preços é o CEO: não mudar estes valores sem o OK dele.
+export type Preco = { mensal: number; anual: number };
+export const PRECOS: Record<Exclude<IdPlano, "free">, Preco | null> = {
+  essencial: { mensal: 4.99, anual: 49 },
+  completo: { mensal: 8.99, anual: 89 },
+};
+
+// 4.99 -> "4,99 €" e 49 -> "49 €" (sem ",00" nos valores certos).
+export function formatarEuros(valor: number): string {
+  const casas = Number.isInteger(valor) ? 0 : 2;
+  return valor.toLocaleString("pt-PT", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: casas,
+    maximumFractionDigits: casas,
+  });
+}
 
 export function eIdPlano(valor: string | null | undefined): valor is IdPlano {
   return valor === "free" || valor === "essencial" || valor === "completo";

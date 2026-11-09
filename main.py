@@ -13,8 +13,15 @@ from consultas import gastos_do_mes
 from database import ler_todas, supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
 from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_mes, sugerir_orcamento
-from importar_csv import ErroImportacao, ler_extrato, transacoes_do_pdf
-from limites import estado_do_plano, planos_disponiveis, pode_usar_ia, registar_pergunta
+from importar_csv import (
+    MAX_ENTRADAS_ARVORE_PDF,
+    ErroImportacao,
+    PdfIlegivel,
+    contar_paginas_pdf,
+    ler_extrato,
+    transacoes_do_pdf,
+)
+from limites import MAX_PAGINAS_PDF, estado_do_plano, planos_disponiveis, pode_usar_ia, registar_pergunta
 from objetivos import (
     apagar_objetivo,
     atualizar_poupado,
@@ -144,7 +151,7 @@ def criar_transacao(nova: NovaMovimentacao, user_id: str = Depends(obter_utiliza
     categoria = nova.categoria
     if not categoria and pode_usar_ia(user_id):
         try:
-            categoria = categorizar([TransacaoCriar(**nova.model_dump())])[0]
+            categoria = categorizar([TransacaoCriar(**nova.model_dump())], user_id=user_id)[0]
         except ErroIA as erro:
             # Sem raise: a movimentação grava-se sem categoria, para o utilizador não perder o que escreveu.
             # Fica para o POST /transacoes/categorizar tratar mais tarde.
@@ -192,7 +199,7 @@ def categorizar_pendentes(user_id: str = Depends(obter_utilizador_atual)) -> lis
     # Todas as pendentes vão numa só chamada à IA, por isso conta como uma pergunta.
     registar_pergunta(user_id)
     try:
-        categorias = categorizar(pendentes)
+        categorias = categorizar(pendentes, user_id=user_id)
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="A categorização automática falhou. Tenta mais tarde.")
@@ -220,14 +227,31 @@ TAMANHO_MAXIMO_CSV = 1 * 1024 * 1024
 
 
 def ler_pdf_enviado(pdf: bytes, user_id: str) -> list[TransacaoImportada]:
-    """A IA lê o extrato em PDF. Responde 422 se não for válido e 503 se a IA falhar."""
+    """A IA lê o extrato em PDF. Responde 400 se tiver páginas a mais, 422 se não for válido e 503 se a IA falhar."""
     if len(pdf) > TAMANHO_MAXIMO_PDF:
         raise HTTPException(status_code=422, detail="PDF demasiado grande. Máx. 10 MB.")
+
+    # As páginas contam-se antes de chamar a IA e antes de gastar o pedido: um PDF recusado não custa nada.
+    try:
+        paginas = contar_paginas_pdf(pdf)
+    except PdfIlegivel as erro:
+        print(erro)
+        raise HTTPException(status_code=422, detail="Não consegui ler o PDF. Se tiver palavra-passe, tira-a.")
+    if paginas > MAX_PAGINAS_PDF:
+        # Acima do teto a contagem para a meio, por isso não sabemos o número exato.
+        quantas = f"mais de {MAX_ENTRADAS_ARVORE_PDF}" if paginas > MAX_ENTRADAS_ARVORE_PDF else str(paginas)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Este PDF tem {quantas} páginas. O máximo é {MAX_PAGINAS_PDF}. "
+                "Divide o extrato em partes mais pequenas."
+            ),
+        )
 
     # Ler um PDF é a chamada mais cara da importação, por isso conta para o limite diário.
     registar_pergunta(user_id)
     try:
-        extrato = ler_extrato_pdf(pdf)
+        extrato = ler_extrato_pdf(pdf, user_id=user_id)
     except ErroIA as erro:
         print(erro)
         raise HTTPException(
@@ -240,7 +264,8 @@ def ler_pdf_enviado(pdf: bytes, user_id: str) -> list[TransacaoImportada]:
 
 @app.post("/transacoes/importar", status_code=201)
 def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizador_atual)) -> ResultadoImportacao:
-    conteudo = ficheiro.file.read()
+    # Lê no máximo o limite + 1 byte: um ficheiro enorme não chega a entrar todo na memória.
+    conteudo = ficheiro.file.read(TAMANHO_MAXIMO_PDF + 1)
 
     # Todos os PDF começam por "%PDF": é mais seguro do que confiar no nome do ficheiro.
     if conteudo.startswith(b"%PDF"):
@@ -263,7 +288,7 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
         raise HTTPException(status_code=422, detail="O ficheiro não tem transações")
 
     try:
-        categorias = categorizar(novas)
+        categorias = categorizar(novas, user_id=user_id)
     except ErroIA as erro:
         raise HTTPException(status_code=503, detail="A categorização automática falhou. Tenta importar mais tarde. " )
 
@@ -311,7 +336,7 @@ def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -
         return executar_ferramenta(nome, argumentos, user_id)
 
     try:
-        resposta = conversar(pedido.pergunta, FERRAMENTAS, executar)
+        resposta = conversar(pedido.pergunta, FERRAMENTAS, executar, user_id=user_id)
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="O chat falhou. Tenta mais tarde.")
@@ -341,7 +366,7 @@ def resumo_do_mes(
     if not pode_usar_ia(user_id):
         return ResumoMes(resumo="Chegaste ao limite de pedidos à IA de hoje. O resumo volta depois da meia-noite.", alertas=[])
     try:
-        resumo = resumir_mes(dados)
+        resumo = resumir_mes(dados, user_id=user_id)
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="O resumo automático falhou. Tenta mais tarde.")
@@ -377,7 +402,7 @@ def sugestao_orcamento(
     # Conta para o limite diário, como as perguntas do chat (cada sugestão é uma chamada à IA).
     registar_pergunta(user_id)
     try:
-        return sugerir_orcamento(historico)
+        return sugerir_orcamento(historico, user_id=user_id)
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="A sugestão automática falhou. Tenta mais tarde.")
@@ -391,7 +416,7 @@ TAMANHO_MAXIMO = 5 * 1024 * 1024
 # A IA lê a fotografia de um talão. Não grava nada: o utilizador revê os produtos antes de guardar.
 @app.post("/compras/ler")
 def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual)) -> Talao:
-    imagem = foto.file.read()
+    imagem = foto.file.read(TAMANHO_MAXIMO + 1)
 
     if foto.content_type not in TIPOS_IMAGEM:
         raise HTTPException(status_code=422, detail="Formato de imagem não suportado. Usa JPEG, PNG ou WebP.")
@@ -403,7 +428,7 @@ def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual))
     # Só depois de a foto ser válida é que conta para o limite diário (uma foto errada não gasta perguntas).
     registar_pergunta(user_id)
     try:
-        talao = ler_talao(imagem, foto.content_type)
+        talao = ler_talao(imagem, foto.content_type, user_id=user_id)
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="A leitura do talão falhou. Tenta mais tarde.")
@@ -478,7 +503,7 @@ def plano_do_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_
 
     registar_pergunta(user_id)
     try:
-        return planear_poupanca(dados)
+        return planear_poupanca(dados, user_id=user_id)
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="O plano de poupança falhou. Tenta mais tarde.")
