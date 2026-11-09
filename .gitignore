@@ -20,3 +20,9 @@ CLAUDE.md
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Fotografias reais (talões) nunca vão para o GitHub
+dados_exemplo/*.jpg
+dados_exemplo/*.jpeg
+dados_exemplo/*.heic
+dados_exemplo/WhatsApp*

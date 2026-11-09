@@ -2,7 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 
-import { ErroApi, pedirApi, SessaoExpirada, type RespostaChat } from "@/lib/api";
+import AvisoLimite from "@/components/AvisoLimite";
+import { eLimiteDiario, pedirApi, SessaoExpirada, type RespostaChat } from "@/lib/api";
 
 type Mensagem = { autor: "tu" | "ia"; texto: string };
 
@@ -13,6 +14,7 @@ export default function Chat() {
   const [pergunta, setPergunta] = useState("");
   const [aPensar, setAPensar] = useState(false);
   const [erro, setErro] = useState("");
+  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite diário
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -23,6 +25,7 @@ export default function Chat() {
     setPergunta("");
     setAPensar(true);
     setErro("");
+    setSemPedidos(false);
 
     try {
       const resposta = await pedirApi<RespostaChat>("/chat", { pergunta: texto });
@@ -30,9 +33,9 @@ export default function Chat() {
     } catch (e) {
       if (e instanceof SessaoExpirada) {
         setErro("A tua sessão expirou. Faz login de novo.");
-      } else if (e instanceof ErroApi && e.status === 429 && typeof e.detalhe === "string") {
-        // Limite diário: a API já explica quantas perguntas e quando volta a dar.
-        setErro(e.detalhe);
+      } else if (eLimiteDiario(e)) {
+        // Limite diário: o AvisoLimite explica e leva ao "O meu plano".
+        setSemPedidos(true);
       } else {
         console.error(e);
         setErro("O chat falhou. Tenta mais tarde.");
@@ -67,6 +70,11 @@ export default function Chat() {
       </div>
 
       {erro && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{erro}</p>}
+      {semPedidos && (
+        <div className="mb-3">
+          <AvisoLimite />
+        </div>
+      )}
 
       <form onSubmit={enviar} className="flex gap-2">
         <input

@@ -43,8 +43,30 @@ export type CorteSugerido = { categoria: string; valor_mensal: number; motivo: s
 export type PlanoPoupanca = { viavel: boolean; explicacao: string; cortes: CorteSugerido[] };
 // Um ano do simulador de poupança (GET /simulador).
 export type AnoSimulado = { ano: number; depositado: number; valor: number };
-// O plano do utilizador e as perguntas à IA que já fez hoje (GET /plano).
-export type EstadoPlano = { plano: string | null; limite: number; usadas_hoje: number };
+// O plano do utilizador, os pedidos à IA que já fez hoje e o último dia do plano (GET /plano).
+// ativo_ate vem em ISO ("2026-12-31"), ou null no Free (não acaba).
+export type EstadoPlano = { plano: string | null; limite: number; usadas_hoje: number; ativo_ate: string | null };
+// Um plano à venda e o seu limite diário (GET /planos, público).
+export type PlanoDisponivel = { plano: string; limite_diario: number };
+
+// O email da conta, lido do próprio token do Supabase (um JWT: a parte do meio é JSON em base64url).
+// Serve só para pré-preencher mensagens; não é verificação nenhuma (essa é feita pela API).
+export function emailDaSessao(): string | null {
+  const token = lerToken();
+  const parte = token?.split(".")[1];
+  if (!parte) return null;
+  try {
+    // base64url -> base64 (com o "=" final que o JWT corta) -> bytes -> texto em UTF-8.
+    // O atob sozinho devolve um byte por letra e estragava emails com acentos (ex.: "joão@...").
+    const base64 = parte.replace(/-/g, "+").replace(/_/g, "/");
+    const completo = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const bytes = Uint8Array.from(atob(completo), (letra) => letra.charCodeAt(0));
+    const dados = JSON.parse(new TextDecoder().decode(bytes));
+    return typeof dados.email === "string" ? dados.email : null;
+  } catch {
+    return null;
+  }
+}
 
 // Lançado quando a API responde 401: o token não existe, é inválido ou expirou.
 export class SessaoExpirada extends Error {}
@@ -173,4 +195,45 @@ export async function enviarFicheiro<T>(caminho: string, campo: string, ficheiro
     body: formulario,
   });
   return lerResposta<T>(resposta);
+}
+
+// Se o erro é o 429 do limite diário de pedidos à IA (limites.py). Os ecrãs usam-no para mostrar o AvisoLimite.
+export function eLimiteDiario(erro: unknown): boolean {
+  return erro instanceof ErroApi && erro.status === 429;
+}
+
+// A sessão vista por uma página pública (ex.: /precos), segundo a resposta de GET /plano:
+// - "sem-sessao": não há token, ou a API respondeu 401 (token inválido ou expirado);
+// - "ativa": 200, com o plano de quem entrou;
+// - "plano-terminado": 403, o login está certo mas o acesso acabou;
+// - "desconhecida": a API falhou (rede, 5xx); não se sabe mais do que "há um token".
+export type SessaoPublica =
+  | { tipo: "sem-sessao" }
+  | { tipo: "ativa"; estado: EstadoPlano }
+  | { tipo: "plano-terminado" }
+  | { tipo: "desconhecida" };
+
+// Ao contrário do pedirApi, um 401 ou 403 não manda para outra página: só diz em que estado está a sessão.
+export async function sessaoPublica(): Promise<SessaoPublica> {
+  const token = lerToken();
+  if (!token) return { tipo: "sem-sessao" };
+  try {
+    const resposta = await fetchComTentativas(`${API_URL}/plano`, { headers: { Authorization: `Bearer ${token}` } });
+    if (resposta.status === 401) return { tipo: "sem-sessao" };
+    if (resposta.status === 403) return { tipo: "plano-terminado" };
+    if (!resposta.ok) return { tipo: "desconhecida" };
+    return { tipo: "ativa", estado: await resposta.json() };
+  } catch {
+    return { tipo: "desconhecida" };
+  }
+}
+
+// Os planos e os limites (GET /planos, público, sem token). null se a API falhar.
+export async function planosDisponiveis(): Promise<PlanoDisponivel[] | null> {
+  try {
+    const resposta = await fetchComTentativas(`${API_URL}/planos`);
+    return resposta.ok ? await resposta.json() : null;
+  } catch {
+    return null;
+  }
 }

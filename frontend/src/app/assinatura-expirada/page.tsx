@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import Logo from "@/components/Logo";
 import { apagarToken } from "@/lib/api";
+import { TEXTOS_EXPIRADA } from "@/lib/textosPlanos";
 
 // Aparece quando a API responde 403: o login está certo, mas o acesso já acabou (ou ainda não foi ativado).
 export default function PaginaAssinaturaExpirada() {
@@ -16,22 +18,25 @@ export default function PaginaAssinaturaExpirada() {
 
   return (
     <main className="flex flex-1 items-center justify-center bg-fundo p-4">
-      <div className="w-full max-w-sm space-y-4 rounded-xl border border-borda bg-cartao p-6 text-center">
+      <div className="w-full max-w-sm space-y-4 rounded-xl border border-borda bg-cartao p-6 text-center sm:p-8">
         <div className="flex justify-center pb-2">
           <Logo altura={48} />
         </div>
-        <h1 className="text-lg font-semibold text-texto">O teu acesso terminou</h1>
-        <p className="text-sm text-texto-suave">
-          A tua assinatura da Control Prices expirou. Os teus dados continuam guardados: assim que renovares, voltas a
-          ver tudo como deixaste.
-        </p>
-        <p className="text-sm text-texto-suave">Para renovar, fala com quem te deu o acesso.</p>
+        <h1 className="text-lg font-semibold text-texto">{TEXTOS_EXPIRADA.titulo}</h1>
+        <p className="text-sm text-texto-suave">{TEXTOS_EXPIRADA.texto1}</p>
+        <p className="pb-2 text-sm text-texto-suave">{TEXTOS_EXPIRADA.texto2}</p>
+        <Link
+          href="/precos"
+          className="flex min-h-11 w-full items-center justify-center rounded-md bg-destaque px-4 text-sm font-semibold text-white transition-colors hover:bg-destaque-hover dark:text-fundo focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque"
+        >
+          {TEXTOS_EXPIRADA.botaoPlanos}
+        </Link>
         <button
           type="button"
           onClick={sair}
-          className="w-full rounded-md border border-borda py-2 text-sm text-texto hover:bg-fundo"
+          className="flex min-h-11 w-full items-center justify-center rounded-md border border-borda px-4 text-sm font-medium text-texto transition-colors hover:bg-fundo focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque"
         >
-          Sair da conta
+          {TEXTOS_EXPIRADA.botaoSair}
         </button>
       </div>
     </main>

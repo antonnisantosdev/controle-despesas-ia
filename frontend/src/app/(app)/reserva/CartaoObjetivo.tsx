@@ -2,7 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 
-import { ErroApi, pedirApi, SessaoExpirada, type Objetivo, type PlanoPoupanca } from "@/lib/api";
+import AvisoLimite from "@/components/AvisoLimite";
+import { eLimiteDiario, ErroApi, pedirApi, SessaoExpirada, type Objetivo, type PlanoPoupanca } from "@/lib/api";
 
 import { euros } from "../dashboard/formatos";
 
@@ -32,12 +33,14 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
   const [aPlanear, setAPlanear] = useState(false);
   const [aConfirmar, setAConfirmar] = useState(false); // a pergunta "Apagar?" está visível
   const [erro, setErro] = useState("");
+  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite diário de pedidos à IA
 
   const percentagem = percentagemPoupada(objetivo.valor_poupado, objetivo.valor_alvo);
 
   function tratarErro(e: unknown, mensagem: string) {
     if (e instanceof SessaoExpirada) onSessaoExpirada(e);
-    // 429 (limite diário) e 503 (IA em baixo) trazem uma explicação da API.
+    else if (eLimiteDiario(e)) setSemPedidos(true);
+    // 503 (IA em baixo) traz uma explicação da API.
     else if (e instanceof ErroApi && typeof e.detalhe === "string") setErro(e.detalhe);
     else setErro(mensagem);
   }
@@ -66,6 +69,7 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
   async function pedirPlano() {
     setAPlanear(true);
     setErro("");
+    setSemPedidos(false);
     try {
       setPlano(await pedirApi<PlanoPoupanca>(`/objetivos/${objetivo.id}/plano`, {}));
     } catch (e) {
@@ -159,6 +163,7 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
       )}
 
       {erro && <p className="text-sm text-red-600 dark:text-red-400">{erro}</p>}
+      {semPedidos && <AvisoLimite />}
 
       {plano && (
         <div className="space-y-2 rounded-lg bg-fundo p-3 text-sm">

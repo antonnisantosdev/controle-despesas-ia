@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { apagarToken, enviarFicheiro, ErroApi, pedirApi, SessaoExpirada, type Compra, type Talao } from "@/lib/api";
+import AvisoLimite from "@/components/AvisoLimite";
+import { apagarToken, eLimiteDiario, enviarFicheiro, ErroApi, pedirApi, SessaoExpirada, type Compra, type Talao } from "@/lib/api";
 import { reduzirImagem } from "@/lib/imagem";
 
 import { euros } from "../dashboard/formatos";
@@ -22,6 +23,7 @@ export default function PaginaCompras() {
   const [aLer, setALer] = useState(false);
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
+  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite diário de pedidos à IA
 
   function tratarSessao(e: unknown) {
     if (e instanceof SessaoExpirada) {
@@ -45,13 +47,15 @@ export default function PaginaCompras() {
     setALer(true);
     setErro("");
     setAviso("");
+    setSemPedidos(false);
     setTalao(null);
     try {
       const pequena = await reduzirImagem(ficheiro);
       setTalao(await enviarFicheiro<Talao>("/compras/ler", "foto", pequena));
     } catch (e) {
       if (e instanceof SessaoExpirada) tratarSessao(e);
-      // 413/415/422 (foto inválida), 429 (limite diário) e 503 (IA em baixo) trazem uma explicação da API.
+      else if (eLimiteDiario(e)) setSemPedidos(true);
+      // 413/415/422 (foto inválida) e 503 (IA em baixo) trazem uma explicação da API.
       else if (e instanceof ErroApi && typeof e.detalhe === "string") setErro(e.detalhe);
       else setErro("Não foi possível ler a fotografia. Tenta outra vez.");
     } finally {
@@ -98,6 +102,7 @@ export default function PaginaCompras() {
         </header>
 
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
+        {semPedidos && <AvisoLimite />}
         {aviso && (
           <p className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
             {aviso}

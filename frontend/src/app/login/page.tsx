@@ -99,6 +99,14 @@ export default function PaginaLogin() {
             Cria uma grátis
           </Link>
         </p>
+        <p className="-mt-2 text-center text-xs">
+          <Link
+            href="/precos"
+            className="inline-flex min-h-11 items-center rounded-md px-2 text-texto-suave hover:text-texto hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque"
+          >
+            Ver planos
+          </Link>
+        </p>
       </form>
       <AvisoServidor />
     </main>

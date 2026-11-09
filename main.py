@@ -14,7 +14,7 @@ from database import ler_todas, supabase
 from ferramentas import FERRAMENTAS, executar_ferramenta
 from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_mes, sugerir_orcamento
 from importar_csv import ErroImportacao, ler_extrato, transacoes_do_pdf
-from limites import estado_do_plano, pode_usar_ia, registar_pergunta
+from limites import estado_do_plano, planos_disponiveis, pode_usar_ia, registar_pergunta
 from objetivos import (
     apagar_objetivo,
     atualizar_poupado,
@@ -40,6 +40,7 @@ from models import (
     NovoObjetivo,
     Objetivo,
     PerguntaChat,
+    PlanoDisponivel,
     PlanoPoupanca,
     PoupadoAtualizar,
     RespostaChat,
@@ -338,7 +339,7 @@ def resumo_do_mes(
         return RESUMOS_JA_FEITOS[chave]
 
     if not pode_usar_ia(user_id):
-        return ResumoMes(resumo="Chegaste ao limite diário de pedidos à IA. O resumo volta amanhã.", alertas=[])
+        return ResumoMes(resumo="Chegaste ao limite de pedidos à IA de hoje. O resumo volta depois da meia-noite.", alertas=[])
     try:
         resumo = resumir_mes(dados)
     except ErroIA as erro:
@@ -500,3 +501,10 @@ def simulador(
 @app.get("/plano")
 def plano(user_id: str = Depends(obter_utilizador_atual)) -> EstadoPlano:
     return estado_do_plano(user_id)
+
+
+# Os planos à venda e os seus limites (para a página de preços). Público: não precisa de login
+# e não mostra dados de ninguém, só o que está em LIMITES_POR_PLANO.
+@app.get("/planos")
+def planos() -> list[PlanoDisponivel]:
+    return planos_disponiveis()

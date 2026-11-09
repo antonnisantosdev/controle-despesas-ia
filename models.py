@@ -239,6 +239,14 @@ class EstadoPlano(BaseModel):
     plano: str | None
     limite: int
     usadas_hoje: int
+    # Último dia de acesso dos planos pagos; None no Free (não acaba).
+    ativo_ate: date | None
+
+
+# Um plano à venda e o seu limite diário de perguntas à IA (GET /planos, público).
+class PlanoDisponivel(BaseModel):
+    plano: str
+    limite_diario: int
 
 
 # Registo público (POST /registo). O EmailStr recusa emails mal escritos antes de chegarem ao Supabase.

@@ -3,8 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import AvisoLimite from "@/components/AvisoLimite";
 import {
   apagarToken,
+  eLimiteDiario,
   ErroApi,
   pedirApi,
   SessaoExpirada,
@@ -29,6 +31,7 @@ export default function PaginaPlaneamento() {
   const [resultado, setResultado] = useState<{ mes: string; linhas: LinhaOrcamento[] } | null>(null);
   const [versao, setVersao] = useState(0);
   const [erro, setErro] = useState("");
+  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite diário de pedidos à IA
   const [novaCategoria, setNovaCategoria] = useState("");
   const [sugestoes, setSugestoes] = useState<SugestaoCategoria[] | null>(null);
   const [aPedirSugestao, setAPedirSugestao] = useState(false);
@@ -86,12 +89,14 @@ export default function PaginaPlaneamento() {
   async function pedirSugestao() {
     setAPedirSugestao(true);
     setErro("");
+    setSemPedidos(false);
     try {
       const resposta = await pedirApi<SugestaoOrcamento>(`/orcamentos/sugestao?mes=${mes}`, {});
       setSugestoes(resposta.sugestoes);
     } catch (e) {
       if (e instanceof SessaoExpirada) tratarErro(e);
-      // 429 (limite diário) e 503 (IA em baixo) já trazem uma explicação da API.
+      else if (eLimiteDiario(e)) setSemPedidos(true);
+      // 503 (IA em baixo) já traz uma explicação da API.
       else if (e instanceof ErroApi && typeof e.detalhe === "string") setErro(e.detalhe);
       else setErro("Não foi possível pedir a sugestão. Tenta outra vez.");
     } finally {
@@ -138,6 +143,7 @@ export default function PaginaPlaneamento() {
         </header>
 
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
+        {semPedidos && <AvisoLimite />}
 
         {sugestoes && <SugestoesIA sugestoes={sugestoes} onAceitar={guardar} onFechar={() => setSugestoes(null)} />}
 

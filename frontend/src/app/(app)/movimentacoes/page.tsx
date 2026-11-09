@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import AvisoLimite from "@/components/AvisoLimite";
 import {
   apagarToken,
   pedirApi,
@@ -33,6 +34,8 @@ export default function PaginaMovimentacoes() {
   const [formAberto, setFormAberto] = useState(false);
   // Resultado da última importação: uma mensagem e, se o ficheiro tiver erros, as linhas inválidas.
   const [aviso, setAviso] = useState<{ tipo: "sucesso" | "erro"; mensagem: string; erros: string[] } | null>(null);
+  // A importação usa a IA: true quando a API respondeu 429 (limite diário de pedidos à IA).
+  const [semPedidos, setSemPedidos] = useState(false);
   // Muda sempre que é criada uma movimentação, para a lista voltar a ser pedida à API.
   const [versao, setVersao] = useState(0);
   const aCarregar = lista?.mes !== mes;
@@ -74,6 +77,7 @@ export default function PaginaMovimentacoes() {
 
   // Depois de importar: diz quantas entraram e salta para o mês mais recente do extrato.
   function aposImportar(resultado: ResultadoImportacao) {
+    setSemPedidos(false);
     setAviso({
       tipo: "sucesso",
       mensagem: `${resultado.importadas} importada(s), ${resultado.duplicadas} já existia(m).`,
@@ -150,8 +154,15 @@ export default function PaginaMovimentacoes() {
             </select>
             <BotaoImportar
               onImportado={aposImportar}
-              onErro={(mensagem, erros) => setAviso({ tipo: "erro", mensagem, erros })}
+              onErro={(mensagem, erros) => {
+                setSemPedidos(false);
+                setAviso({ tipo: "erro", mensagem, erros });
+              }}
               onSessaoExpirada={tratarErro}
+              onLimiteDiario={() => {
+                setAviso(null);
+                setSemPedidos(true);
+              }}
             />
             <button
               type="button"
@@ -186,6 +197,8 @@ export default function PaginaMovimentacoes() {
             )}
           </div>
         )}
+
+        {semPedidos && <AvisoLimite />}
 
         {formAberto && <FormNovaMovimentacao onCriada={aposCriar} onFechar={() => setFormAberto(false)} />}
 

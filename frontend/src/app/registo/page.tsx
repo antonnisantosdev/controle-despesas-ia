@@ -80,7 +80,7 @@ export default function PaginaRegisto() {
         ) : (
           <form onSubmit={criarConta} className="space-y-4">
             <p className="text-center text-sm text-texto-suave">
-              Cria a tua conta grátis. O plano Free inclui 5 perguntas à IA por dia.
+              Cria a tua conta grátis. O plano Free inclui 5 pedidos à IA por dia.
             </p>
 
             <label className="block">
@@ -133,6 +133,14 @@ export default function PaginaRegisto() {
               Já tens conta?{" "}
               <Link href="/login" className="font-medium text-destaque hover:underline">
                 Entra
+              </Link>
+            </p>
+            <p className="-mt-2 text-center text-xs">
+              <Link
+                href="/precos"
+                className="inline-flex min-h-11 items-center rounded-md px-2 text-texto-suave hover:text-texto hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque"
+              >
+                Ver planos
               </Link>
             </p>
           </form>

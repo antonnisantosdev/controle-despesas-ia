@@ -8,7 +8,7 @@ from datetime import date
 from fastapi import HTTPException
 
 from database import supabase
-from models import EstadoPlano
+from models import EstadoPlano, PlanoDisponivel
 
 # Perguntas à IA por dia em cada plano. Para mudar um limite, muda-se só aqui.
 LIMITES_POR_PLANO = {"free": 5, "essencial": 30, "completo": 100}
@@ -43,10 +43,32 @@ def perguntas_de_hoje(user_id: str) -> int:
     return resposta.count or 0
 
 
+def assinatura_do_utilizador(user_id: str) -> tuple[str | None, date | None]:
+    """O plano e o ativo_ate da assinatura, numa só consulta. (None, None) se não houver linha."""
+    resposta = supabase.table("assinaturas").select("plano, ativo_ate").eq("user_id", user_id).execute()
+    if not resposta.data:
+        return None, None
+    linha = resposta.data[0]
+    ativo_ate = date.fromisoformat(linha["ativo_ate"]) if linha.get("ativo_ate") else None
+    return linha["plano"], ativo_ate
+
+
 def estado_do_plano(user_id: str) -> EstadoPlano:
-    """O plano, o limite e as perguntas de hoje: o que o menu lateral mostra."""
-    plano = plano_do_utilizador(user_id)
-    return EstadoPlano(plano=plano, limite=limite_do_plano(plano), usadas_hoje=perguntas_de_hoje(user_id))
+    """O plano, o limite, as perguntas de hoje e até quando dura: o que o menu lateral mostra."""
+    plano, ativo_ate = assinatura_do_utilizador(user_id)
+    if plano == "free":
+        ativo_ate = None  # o Free não acaba, mesmo que a coluna tenha uma data perdida
+    return EstadoPlano(
+        plano=plano,
+        limite=limite_do_plano(plano),
+        usadas_hoje=perguntas_de_hoje(user_id),
+        ativo_ate=ativo_ate,
+    )
+
+
+def planos_disponiveis() -> list[PlanoDisponivel]:
+    """Todos os planos e os seus limites, pela ordem de LIMITES_POR_PLANO (free, essencial, completo)."""
+    return [PlanoDisponivel(plano=plano, limite_diario=limite) for plano, limite in LIMITES_POR_PLANO.items()]
 
 
 def registar_pergunta(user_id: str) -> None:
@@ -56,7 +78,10 @@ def registar_pergunta(user_id: str) -> None:
     if perguntas_de_hoje(user_id) >= limite:
         raise HTTPException(
             status_code=429,
-            detail=f"Chegaste ao limite diário de {limite} perguntas do teu plano. Volta amanhã!",
+            detail=(
+                f"Chegaste ao limite de hoje. Já usaste os {limite} pedidos à IA do teu plano. "
+                "O contador volta a zero à meia-noite."
+            ),
         )
 
     # Ainda pode perguntar: esta pergunta passa a contar para o total de hoje.

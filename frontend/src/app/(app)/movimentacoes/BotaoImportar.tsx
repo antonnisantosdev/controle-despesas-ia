@@ -2,16 +2,17 @@
 
 import { useRef, useState } from "react";
 
-import { enviarFicheiro, ErroApi, SessaoExpirada, type ResultadoImportacao } from "@/lib/api";
+import { eLimiteDiario, enviarFicheiro, ErroApi, SessaoExpirada, type ResultadoImportacao } from "@/lib/api";
 
 type Props = {
   onImportado: (resultado: ResultadoImportacao) => void;
   onErro: (mensagem: string, erros: string[]) => void;
   onSessaoExpirada: (e: unknown) => void;
+  onLimiteDiario: () => void; // 429: a página mostra o AvisoLimite
 };
 
 // Botão que abre a janela "Escolher ficheiro" e envia o CSV ou o PDF para POST /transacoes/importar.
-export default function BotaoImportar({ onImportado, onErro, onSessaoExpirada }: Props) {
+export default function BotaoImportar({ onImportado, onErro, onSessaoExpirada, onLimiteDiario }: Props) {
   // useRef: uma ligação direta ao <input type="file"> escondido, para o "clicar" a partir do botão.
   const entradaFicheiro = useRef<HTMLInputElement>(null);
   const [aImportar, setAImportar] = useState(false);
@@ -24,6 +25,10 @@ export default function BotaoImportar({ onImportado, onErro, onSessaoExpirada }:
     } catch (e) {
       if (e instanceof SessaoExpirada) {
         onSessaoExpirada(e);
+        return;
+      }
+      if (eLimiteDiario(e)) {
+        onLimiteDiario();
         return;
       }
       // O "detail" do FastAPI chega em duas formas: um texto simples, ou o objeto

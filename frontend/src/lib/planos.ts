@@ -1,0 +1,110 @@
+// Configuração dos planos: ordem, limites de reserva, preços e contactos para "Pedir acesso".
+// As regras a sério (limites, quem tem acesso) estão no backend (limites.py, auth.py); isto é só para mostrar.
+
+import { FRASE_EMAIL, TEXTOS_MENSAGEM } from "./textosPlanos";
+
+export type IdPlano = "free" | "essencial" | "completo";
+
+// Do mais pequeno para o maior: "planos superiores" são os que vêm depois do atual.
+export const ORDEM_PLANOS: IdPlano[] = ["free", "essencial", "completo"];
+
+export const NOMES_PLANOS: Record<IdPlano, string> = { free: "Free", essencial: "Essencial", completo: "Completo" };
+
+// Só para quando GET /planos falha ou a API ainda está a acordar. Os números certos vêm sempre da API
+// (LIMITES_POR_PLANO em limites.py); se lá mudarem, mudar também aqui.
+export const LIMITES_RESERVA: Record<IdPlano, number> = { free: 5, essencial: 30, completo: 100 };
+
+// Preço por plano pago, em euros. null = ainda não definido (mostra "Preço em breve").
+// Quem define os preços é o CEO: não pôr aqui valores sem o OK dele.
+export const PRECOS: Record<Exclude<IdPlano, "free">, number | null> = { essencial: null, completo: null };
+
+export function eIdPlano(valor: string | null | undefined): valor is IdPlano {
+  return valor === "free" || valor === "essencial" || valor === "completo";
+}
+
+export function nomeDoPlano(plano: string | null | undefined): string | null {
+  if (!plano) return null;
+  return eIdPlano(plano) ? NOMES_PLANOS[plano] : plano;
+}
+
+// Os planos acima do atual (sem plano conhecido: todos os pagos).
+export function planosSuperiores(atual: string | null | undefined): IdPlano[] {
+  const posicao = eIdPlano(atual) ? ORDEM_PLANOS.indexOf(atual) : 0;
+  return ORDEM_PLANOS.slice(posicao + 1);
+}
+
+// Troca {chave} pelo valor: preencher("Ativo até {data}", { data: "1/1" }) -> "Ativo até 1/1".
+export function preencher(texto: string, valores: Record<string, string | number>): string {
+  return texto.replace(/\{(\w+)\}/g, (inteira, chave: string) => (chave in valores ? String(valores[chave]) : inteira));
+}
+
+// --- Contactos ---
+// Lidos do .env.local (NEXT_PUBLIC_ chega ao browser: só contactos públicos, nunca segredos).
+// O Next.js troca process.env.NEXT_PUBLIC_... pelo valor na compilação, por isso têm de estar escritos por extenso.
+
+export type Contactos = { whatsapp: string | null; email: string | null };
+
+export function lerContactos(
+  whatsapp = process.env.NEXT_PUBLIC_CONTACTO_WHATSAPP,
+  email = process.env.NEXT_PUBLIC_CONTACTO_EMAIL,
+): Contactos {
+  const digitos = (whatsapp ?? "").replace(/\D/g, ""); // wa.me só aceita dígitos (ex.: 351912345678)
+  const limpo = (email ?? "").trim();
+  return { whatsapp: digitos || null, email: limpo || null };
+}
+
+export const CONTACTOS = lerContactos();
+
+export type Pedido = { plano: IdPlano; renovar: boolean; emailConta: string | null };
+
+// A mensagem pré-preenchida. Sem email da conta (página pública sem sessão), a frase do email sai.
+export function mensagemDoPedido({ plano, renovar, emailConta }: Pedido): string {
+  const modelo = renovar ? TEXTOS_MENSAGEM.mensagemRenovar : TEXTOS_MENSAGEM.mensagem;
+  const semEmail = emailConta ? modelo : modelo.replace(FRASE_EMAIL, "");
+  return preencher(semEmail, { plano: NOMES_PLANOS[plano], email: emailConta ?? "" });
+}
+
+export function assuntoDoPedido({ plano, renovar }: Pedido): string {
+  const modelo = renovar ? TEXTOS_MENSAGEM.emailAssuntoRenovar : TEXTOS_MENSAGEM.emailAssunto;
+  return preencher(modelo, { plano: NOMES_PLANOS[plano] });
+}
+
+export function linkWhatsapp(numero: string, pedido: Pedido): string {
+  return `https://wa.me/${numero}?text=${encodeURIComponent(mensagemDoPedido(pedido))}`;
+}
+
+export function linkEmail(email: string, pedido: Pedido): string {
+  const assunto = encodeURIComponent(assuntoDoPedido(pedido));
+  const corpo = encodeURIComponent(mensagemDoPedido(pedido));
+  return `mailto:${email}?subject=${assunto}&body=${corpo}`;
+}
+
+// --- Datas ---
+
+// "2026-12-31" -> "31 de dezembro de 2026"
+export function dataPorExtenso(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" });
+}
+
+// Dias que faltam até ao último dia do plano (0 = acaba hoje; negativo = já acabou).
+export function diasAteAoFim(iso: string, hoje: Date = new Date()): number {
+  const fim = new Date(`${iso}T00:00:00`);
+  const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  return Math.round((fim.getTime() - inicioHoje.getTime()) / 86_400_000);
+}
+
+// O aviso de renovar aparece nos últimos 7 dias do plano: faltam 6 dias, 5... até ao próprio dia (0).
+export function deveAvisarRenovar(iso: string | null, hoje: Date = new Date()): boolean {
+  if (!iso) return false;
+  const dias = diasAteAoFim(iso, hoje);
+  return dias >= 0 && dias < 7;
+}
+
+// Junta os limites que vieram de GET /planos aos de reserva (um plano em falta fica com o de reserva).
+export function juntarLimites(lista: { plano: string; limite_diario: number }[] | null): Record<IdPlano, number> {
+  const limites = { ...LIMITES_RESERVA };
+  for (const { plano, limite_diario } of lista ?? []) {
+    if (eIdPlano(plano)) limites[plano] = limite_diario;
+  }
+  return limites;
+}
