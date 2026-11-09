@@ -1,6 +1,7 @@
-"""Planos: o limite diário de perguntas à IA depende do plano da assinatura."""
+"""Planos: o limite de pedidos à IA (por mês no Free, por dia nos pagos) e as funções só dos planos pagos."""
 
-from datetime import date
+from datetime import date, datetime, timezone
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -8,24 +9,44 @@ from fastapi.testclient import TestClient
 
 import limites
 import main
+from models import ExtratoPdf, ItemTalao, MovimentoPdf, Talao
+
+UTC = timezone.utc
+EXTRATO = (Path(__file__).parent.parent / "dados_exemplo" / "extrato_exemplo.csv").read_bytes()
 
 
 @pytest.mark.parametrize(
-    ("plano", "esperado"),
-    [("free", 5), ("essencial", 20), ("completo", 50)],
+    ("plano", "limite", "periodo"),
+    [("free", 30, "mes"), ("essencial", 20, "dia"), ("completo", 50, "dia")],
 )
-def test_cada_plano_tem_o_seu_limite(plano, esperado):
-    assert limites.limite_do_plano(plano) == esperado
+def test_cada_plano_tem_o_seu_limite_e_periodo(plano, limite, periodo):
+    assert limites.limite_do_plano(plano) == limite
+    assert limites.periodo_do_plano(plano) == periodo
+
+
+@pytest.mark.parametrize("plano", [None, "Completo", "premium"])
+def test_plano_desconhecido_nao_deixa_usar_a_ia(plano):
+    # Na dúvida, fecha: um erro na coluna plano nunca pode gastar créditos da IA.
+    assert limites.limite_do_plano(plano) == 0
+
+
+# --- Contagem na tabela uso_ia ---
 
 
 class UsoIaFalso:
-    """Imita a tabela uso_ia: responde com quantas perguntas já se fizeram hoje."""
+    """Imita a tabela uso_ia: guarda a hora (UTC) de cada pedido e conta os que são >= ao filtro gte."""
 
-    def __init__(self, feitas_hoje):
-        self.count = feitas_hoje
+    def __init__(self, pedidos: list[datetime]):
+        self.pedidos = list(pedidos)
         self.inseridas = 0
+        self.desde: datetime | None = None
+        self.count = 0
 
     def table(self, nome):
+        return self
+
+    def gte(self, campo, valor):
+        self.desde = datetime.fromisoformat(valor)
         return self
 
     def insert(self, dados):
@@ -36,69 +57,362 @@ class UsoIaFalso:
         return lambda *args, **opcoes: self
 
     def execute(self):
+        if self.desde is not None:
+            self.count = sum(1 for pedido in self.pedidos if pedido >= self.desde)
         return self
 
 
-def test_o_free_bloqueia_a_sexta_pergunta(monkeypatch):
-    monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: "free")
-    monkeypatch.setattr(limites, "supabase", UsoIaFalso(feitas_hoje=5))
+def preparar(monkeypatch, plano, pedidos, agora):
+    """Fixa o plano, os pedidos já feitos e a hora atual (UTC)."""
+    uso = UsoIaFalso(pedidos)
+    monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: plano)
+    monkeypatch.setattr(limites, "supabase", uso)
+    monkeypatch.setattr(limites, "agora_utc", lambda: agora)
+    return uso
+
+
+AGORA = datetime(2026, 11, 20, 15, 0, tzinfo=UTC)  # inverno: Lisboa = UTC
+
+
+def test_o_free_conta_os_pedidos_do_mes_inteiro_e_bloqueia_o_31(monkeypatch):
+    # 30 pedidos espalhados por novembro, nenhum hoje: o limite do Free é do mês, não do dia.
+    pedidos = [datetime(2026, 11, 1 + i % 19, 10, 0, tzinfo=UTC) for i in range(30)]
+    uso = preparar(monkeypatch, "free", pedidos, AGORA)
 
     with pytest.raises(HTTPException) as erro:
         limites.registar_pergunta("utilizador-teste")
     assert erro.value.status_code == 429
+    assert erro.value.detail == (
+        "Chegaste ao limite deste mês. Já usaste os 30 pedidos à IA deste mês. O contador volta a zero no dia 1."
+    )
+    assert uso.inseridas == 0
 
 
-def test_o_aviso_do_limite_fala_em_pedidos_a_ia_e_diz_o_limite(monkeypatch):
-    # O frontend e o texto aprovado usam "pedidos à IA" (não "perguntas").
-    monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: "essencial")
-    monkeypatch.setattr(limites, "supabase", UsoIaFalso(feitas_hoje=20))
+def test_o_free_ainda_faz_o_30_pedido(monkeypatch):
+    uso = preparar(monkeypatch, "free", [datetime(2026, 11, 2, 10, 0, tzinfo=UTC)] * 29, AGORA)
+
+    limites.registar_pergunta("utilizador-teste")
+    assert uso.inseridas == 1
+
+
+def test_os_pedidos_do_mes_passado_nao_contam_no_free(monkeypatch):
+    uso = preparar(monkeypatch, "free", [datetime(2026, 10, 31, 10, 0, tzinfo=UTC)] * 30, AGORA)
+
+    limites.registar_pergunta("utilizador-teste")
+    assert uso.inseridas == 1
+
+
+@pytest.mark.parametrize(("plano", "limite"), [("essencial", 20), ("completo", 50)])
+def test_os_pagos_bloqueiam_quando_acabam_os_pedidos_de_hoje(monkeypatch, plano, limite):
+    preparar(monkeypatch, plano, [datetime(2026, 11, 20, 9, 0, tzinfo=UTC)] * limite, AGORA)
 
     with pytest.raises(HTTPException) as erro:
         limites.registar_pergunta("utilizador-teste")
+    assert erro.value.status_code == 429
     assert erro.value.detail == (
-        "Chegaste ao limite de hoje. Já usaste os 20 pedidos à IA do teu plano. O contador volta a zero à meia-noite."
+        f"Chegaste ao limite de hoje. Já usaste os {limite} pedidos à IA do teu plano. "
+        "O contador volta a zero à meia-noite."
     )
 
 
-def test_o_completo_ainda_deixa_perguntar_com_as_mesmas_perguntas(monkeypatch):
-    uso = UsoIaFalso(feitas_hoje=5)
-    monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: "completo")
-    monkeypatch.setattr(limites, "supabase", uso)
+@pytest.mark.parametrize(("plano", "limite"), [("essencial", 20), ("completo", 50)])
+def test_os_pedidos_de_ontem_nao_contam_nos_pagos(monkeypatch, plano, limite):
+    uso = preparar(monkeypatch, plano, [datetime(2026, 11, 19, 23, 0, tzinfo=UTC)] * limite, AGORA)
 
     limites.registar_pergunta("utilizador-teste")
-    assert uso.inseridas == 1  # a pergunta ficou contada
+    assert uso.inseridas == 1
 
 
-@pytest.mark.parametrize("plano", [None, "Completo", "premium"])
-def test_plano_desconhecido_nao_deixa_usar_a_ia(plano):
-    # Na dúvida, fecha: um erro na coluna plano nunca pode gastar créditos da IA.
-    assert limites.limite_do_plano(plano) == 0
+def test_o_dia_vira_a_meia_noite_de_lisboa_no_verao(monkeypatch):
+    # 23:30 UTC de 15 de julho já é 00:30 de 16 em Lisboa (UTC+1): os pedidos das 22:30 UTC
+    # (23:30 de 15 em Lisboa) são de ontem e já não contam.
+    agora = datetime(2026, 7, 15, 23, 30, tzinfo=UTC)
+    uso = preparar(monkeypatch, "essencial", [datetime(2026, 7, 15, 22, 30, tzinfo=UTC)] * 20, agora)
+
+    limites.registar_pergunta("utilizador-teste")
+    assert uso.inseridas == 1
+    assert uso.desde == datetime(2026, 7, 15, 23, 0, tzinfo=UTC)
 
 
-def test_a_rota_plano_mostra_o_limite_e_as_perguntas_de_hoje(cliente, monkeypatch):
+def test_no_verao_um_pedido_depois_da_meia_noite_de_lisboa_conta_para_hoje(monkeypatch):
+    agora = datetime(2026, 7, 15, 23, 30, tzinfo=UTC)
+    preparar(monkeypatch, "essencial", [datetime(2026, 7, 15, 23, 5, tzinfo=UTC)] * 20, agora)
+
+    with pytest.raises(HTTPException):
+        limites.registar_pergunta("utilizador-teste")
+
+
+def test_o_mes_vira_no_dia_1_de_lisboa(monkeypatch):
+    # 23:30 UTC de 31 de julho já é 1 de agosto em Lisboa: os 30 pedidos de julho deixam de contar.
+    agora = datetime(2026, 7, 31, 23, 30, tzinfo=UTC)
+    uso = preparar(monkeypatch, "free", [datetime(2026, 7, 31, 22, 0, tzinfo=UTC)] * 30, agora)
+
+    limites.registar_pergunta("utilizador-teste")
+    assert uso.inseridas == 1
+    assert uso.desde == datetime(2026, 7, 31, 23, 0, tzinfo=UTC)
+
+
+CASOS_INICIO = [
+    # (período, agora em UTC, início esperado em UTC)
+    ("dia", datetime(2026, 1, 10, 0, 30, tzinfo=UTC), datetime(2026, 1, 10, 0, 0, tzinfo=UTC)),  # inverno
+    ("dia", datetime(2026, 7, 15, 22, 59, tzinfo=UTC), datetime(2026, 7, 14, 23, 0, tzinfo=UTC)),  # 23:59 em Lisboa
+    ("dia", datetime(2026, 7, 15, 23, 0, tzinfo=UTC), datetime(2026, 7, 15, 23, 0, tzinfo=UTC)),  # meia-noite certa
+    ("dia", datetime(2026, 3, 29, 12, 0, tzinfo=UTC), datetime(2026, 3, 29, 0, 0, tzinfo=UTC)),  # dia da mudança para o verão
+    ("dia", datetime(2026, 10, 25, 12, 0, tzinfo=UTC), datetime(2026, 10, 24, 23, 0, tzinfo=UTC)),  # dia da mudança para o inverno
+    ("mes", datetime(2026, 11, 20, 15, 0, tzinfo=UTC), datetime(2026, 11, 1, 0, 0, tzinfo=UTC)),
+    ("mes", datetime(2026, 8, 1, 0, 30, tzinfo=UTC), datetime(2026, 7, 31, 23, 0, tzinfo=UTC)),  # 01:30 de 1 de agosto
+    ("mes", datetime(2026, 12, 31, 23, 59, tzinfo=UTC), datetime(2026, 12, 1, 0, 0, tzinfo=UTC)),
+]
+
+
+@pytest.mark.parametrize(("periodo", "agora", "esperado"), CASOS_INICIO)
+def test_inicio_do_periodo_em_hora_de_lisboa(periodo, agora, esperado):
+    assert limites.inicio_do_periodo(periodo, agora) == esperado
+
+
+# --- Funções só dos planos pagos ---
+
+
+@pytest.mark.parametrize("funcao", ["importar_pdf", "ler_talao"])
+def test_pdf_e_taloes_sao_so_dos_planos_pagos(funcao):
+    assert not limites.plano_inclui("free", funcao)
+    assert not limites.plano_inclui(None, funcao)
+    assert limites.plano_inclui("essencial", funcao)
+    assert limites.plano_inclui("completo", funcao)
+
+
+def test_o_resto_e_de_todos_os_planos():
+    assert limites.plano_inclui("free", "chat")
+
+
+def importar_pdf(cliente):
+    return cliente.post(
+        "/transacoes/importar", files={"ficheiro": ("extrato.pdf", b"%PDF-1.4 extrato inventado", "application/pdf")}
+    )
+
+
+# Uma "fotografia" inventada: começa como um JPEG verdadeiro (FF D8 FF) e tem mais de 1 KB.
+JPEG_INVENTADO = b"\xff\xd8\xff\xe0" + b"x" * 2048
+
+
+def ler_talao(cliente, imagem=JPEG_INVENTADO, tipo="image/jpeg"):
+    return cliente.post("/compras/ler", files={"foto": ("talao.jpg", imagem, tipo)})
+
+
+def test_o_free_nao_importa_pdf_e_nao_gasta_pedido(cliente, limite, monkeypatch):
+    limite.plano = "free"
+    paginas_contadas = []
+    monkeypatch.setattr(main, "contar_paginas_pdf", lambda pdf: paginas_contadas.append(pdf) or 1)
+
+    resposta = importar_pdf(cliente)
+
+    # 402 e não 403: o 403 faz o frontend mandar para "O teu plano terminou".
+    assert resposta.status_code == 402
+    assert resposta.json()["detail"] == (
+        "A importação de extratos em PDF está disponível nos planos Essencial e Completo. "
+        "No Free, podes importar o extrato em CSV."
+    )
+    assert limite.perguntas == 0
+    assert paginas_contadas == []
+
+
+def test_ler_pdf_enviado_tambem_recusa_o_free(limite, monkeypatch):
+    # Segunda proteção: mesmo chamada fora da rota, a função não conta páginas nem gasta pedidos no Free.
+    limite.plano = "free"
+    paginas_contadas = []
+    monkeypatch.setattr(main, "contar_paginas_pdf", lambda pdf: paginas_contadas.append(pdf) or 1)
+
+    with pytest.raises(HTTPException) as erro:
+        main.ler_pdf_enviado(b"%PDF-1.4 extrato inventado", "utilizador-teste")
+
+    assert erro.value.status_code == 402
+    assert limite.perguntas == 0
+    assert paginas_contadas == []
+
+
+def importar_csv(cliente):
+    return cliente.post("/transacoes/importar", files={"ficheiro": ("extrato.csv", EXTRATO, "text/csv")})
+
+
+def test_o_free_com_pedidos_importa_csv_categorizado_e_gasta_um(cliente, limite, monkeypatch):
+    limite.plano = "free"
+    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None: ["outros"] * len(transacoes))
+
+    resposta = importar_csv(cliente)
+
+    assert resposta.status_code == 201
+    assert limite.perguntas == 1
+    corpo = resposta.json()
+    assert corpo["aviso"] is None
+    assert {transacao["categoria"] for transacao in corpo["transacoes"]} == {"outros"}
+
+
+def test_sem_pedidos_o_csv_importa_na_mesma_sem_categorias(cliente, limite, monkeypatch):
+    # Os dados são do utilizador: sem pedidos à IA, importam-se na mesma, sem categoria.
+    limite.plano = "free"
+    limite.maximo = 0
+    chamadas = []
+    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None: chamadas.append(transacoes))
+
+    resposta = importar_csv(cliente)
+
+    assert resposta.status_code == 201
+    corpo = resposta.json()
+    assert corpo["importadas"] == 11
+    assert corpo["aviso"] == (
+        "Importámos as movimentações sem categorias porque chegaste ao limite de pedidos à IA. "
+        "Podes categorizá-las mais tarde."
+    )
+    # Categoria vazia (NULL): é assim que o POST /transacoes/categorizar as encontra.
+    assert {transacao["categoria"] for transacao in corpo["transacoes"]} == {None}
+    assert chamadas == []
+    assert limite.perguntas == 0
+
+
+def test_o_free_nao_le_taloes_e_nao_gasta_pedido(cliente, limite, monkeypatch):
+    limite.plano = "free"
+    chamadas = []
+    monkeypatch.setattr(main, "ler_talao", lambda *args, **opcoes: chamadas.append(args))
+
+    resposta = ler_talao(cliente)
+
+    assert resposta.status_code == 402
+    assert resposta.json()["detail"] == "A leitura de talões está disponível nos planos Essencial e Completo."
+    assert limite.perguntas == 0
+    assert chamadas == []
+
+
+@pytest.mark.parametrize("plano", ["essencial", "completo"])
+def test_os_pagos_leem_taloes(cliente, limite, monkeypatch, plano):
+    limite.plano = plano
+    talao = Talao(
+        loja="Loja Inventada", data=None, itens=[ItemTalao(descricao="Pão", quantidade=1, preco=0.5)], total=0.5,
+        categoria="alimentação",
+    )
+    monkeypatch.setattr(main, "ler_talao", lambda *args, **opcoes: talao)
+
+    resposta = ler_talao(cliente)
+
+    assert resposta.status_code == 200
+    assert limite.perguntas == 1
+
+
+@pytest.mark.parametrize(
+    ("imagem", "esperado"),
+    [
+        (b"\xff\xd8\xff\xe0resto", "image/jpeg"),
+        (b"\x89PNG\r\n\x1a\nresto", "image/png"),
+        (b"RIFF\x10\x00\x00\x00WEBPresto", "image/webp"),
+        (b"RIFF\x10\x00\x00\x00WAVEresto", None),  # RIFF, mas é som
+        (b"%PDF-1.4 resto", None),
+        (b"x" * 2048, None),
+    ],
+)
+def test_o_formato_da_imagem_ve_se_pelos_primeiros_bytes(imagem, esperado):
+    assert main.eh_imagem_suportada(imagem) == esperado
+
+
+def test_a_ia_recebe_o_tipo_dos_bytes_e_nao_o_do_browser(cliente, limite, monkeypatch):
+    # O browser diz JPEG, mas os bytes são de um PNG: a IA tem de receber "image/png".
+    tipos = []
+    talao = Talao(
+        loja="Loja Inventada", data=None, itens=[ItemTalao(descricao="Pão", quantidade=1, preco=0.5)], total=0.5,
+        categoria="alimentação",
+    )
+    monkeypatch.setattr(main, "ler_talao", lambda imagem, tipo, **opcoes: tipos.append(tipo) or talao)
+
+    resposta = ler_talao(cliente, imagem=b"\x89PNG\r\n\x1a\n" + b"x" * 2048, tipo="image/jpeg")
+
+    assert resposta.status_code == 200
+    assert tipos == ["image/png"]
+
+
+def test_talao_com_bytes_que_nao_sao_imagem_responde_422_sem_gastar_pedido(cliente, limite, monkeypatch):
+    # O content_type diz JPEG, mas o ficheiro não é: recusa-se antes de gastar o pedido.
+    chamadas = []
+    monkeypatch.setattr(main, "ler_talao", lambda *args, **opcoes: chamadas.append(args))
+
+    resposta = ler_talao(cliente, imagem=b"x" * 2048)
+
+    assert resposta.status_code == 422
+    assert resposta.json()["detail"] == "Formato de imagem não suportado. Usa JPEG, PNG ou WebP."
+    assert limite.perguntas == 0
+    assert chamadas == []
+
+
+def test_o_free_recebe_402_antes_de_validar_os_bytes(cliente, limite):
+    limite.plano = "free"
+
+    assert ler_talao(cliente, imagem=b"x" * 2048).status_code == 402
+
+
+def test_os_pagos_importam_pdf(cliente, limite, monkeypatch):
+    limite.plano = "completo"
+    paginas_contadas = []
+    monkeypatch.setattr(main, "contar_paginas_pdf", lambda pdf: paginas_contadas.append(pdf) or 1)
+    monkeypatch.setattr(
+        main,
+        "ler_extrato_pdf",
+        lambda pdf, user_id=None: ExtratoPdf(
+            movimentos=[MovimentoPdf(data="2026-10-01", descricao="CAFE", valor=-1.2, saldo=None)]
+        ),
+    )
+    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None: ["outros"] * len(transacoes))
+
+    resposta = importar_pdf(cliente)
+
+    assert resposta.status_code == 201
+    # O plano verifica-se na rota e na função, mas o pedido e as páginas contam uma só vez.
+    assert limite.perguntas == 1
+    assert len(paginas_contadas) == 1
+
+
+def test_o_resumo_do_free_sem_pedidos_fala_do_mes(cliente, limite, monkeypatch):
+    limite.plano = "free"
+    limite.maximo = 0
+    monkeypatch.setattr(main, "recolher_dados", lambda user_id, mes: {"transacoes_no_mes": 1, "despesas": 3.33})
+
+    resposta = cliente.get("/resumo?mes=2026-08")
+
+    assert resposta.json()["resumo"] == "Chegaste ao limite de pedidos à IA deste mês. O resumo volta no dia 1."
+
+
+# --- GET /plano e GET /planos ---
+
+
+def test_a_rota_plano_mostra_o_limite_o_periodo_e_os_pedidos_usados(cliente, monkeypatch):
     monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: ("free", None))
-    monkeypatch.setattr(limites, "perguntas_de_hoje", lambda user_id: 3)
+    monkeypatch.setattr(limites, "pedidos_no_periodo", lambda user_id, periodo: 3 if periodo == "mes" else 99)
 
     resposta = cliente.get("/plano")
 
     assert resposta.status_code == 200
-    assert resposta.json() == {"plano": "free", "limite": 5, "usadas_hoje": 3, "ativo_ate": None}
+    assert resposta.json() == {
+        "plano": "free",
+        "limite": 30,
+        "periodo": "mes",
+        "usadas": 3,
+        "usadas_hoje": 3,  # nome antigo, mesmo número
+        "ativo_ate": None,
+    }
 
 
-def test_a_rota_plano_mostra_ate_quando_dura_um_plano_pago(cliente, monkeypatch):
+def test_a_rota_plano_conta_por_dia_nos_pagos(cliente, monkeypatch):
     monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: ("essencial", date(2026, 12, 31)))
-    monkeypatch.setattr(limites, "perguntas_de_hoje", lambda user_id: 0)
+    monkeypatch.setattr(limites, "pedidos_no_periodo", lambda user_id, periodo: 7 if periodo == "dia" else 99)
 
     resposta = cliente.get("/plano")
 
     assert resposta.status_code == 200
-    assert resposta.json()["ativo_ate"] == "2026-12-31"
+    corpo = resposta.json()
+    assert (corpo["periodo"], corpo["usadas"], corpo["limite"]) == ("dia", 7, 20)
+    assert corpo["ativo_ate"] == "2026-12-31"
 
 
 def test_o_free_nunca_mostra_data_de_fim(monkeypatch):
     # Mesmo que a coluna ativo_ate tenha uma data perdida, o Free não acaba.
     monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: ("free", date(2026, 1, 1)))
-    monkeypatch.setattr(limites, "perguntas_de_hoje", lambda user_id: 0)
+    monkeypatch.setattr(limites, "pedidos_no_periodo", lambda user_id, periodo: 0)
 
     assert limites.estado_do_plano("utilizador-teste").ativo_ate is None
 
@@ -135,16 +449,19 @@ def test_a_rota_planos_lista_os_planos_por_ordem_sem_login():
 
     assert resposta.status_code == 200
     assert resposta.json() == [
-        {"plano": "free", "limite_diario": 5},
-        {"plano": "essencial", "limite_diario": 20},
-        {"plano": "completo", "limite_diario": 50},
+        {"plano": "free", "limite_diario": 30, "periodo": "mes"},
+        {"plano": "essencial", "limite_diario": 20, "periodo": "dia"},
+        {"plano": "completo", "limite_diario": 50, "periodo": "dia"},
     ]
 
 
 def test_a_rota_planos_segue_os_limites_de_limites_py(monkeypatch):
     # Os números vêm só de LIMITES_POR_PLANO: mudar lá muda a página de preços.
-    monkeypatch.setattr(limites, "LIMITES_POR_PLANO", {"free": 1, "completo": 2})
+    monkeypatch.setattr(limites, "LIMITES_POR_PLANO", {"free": (1, "mes"), "completo": (2, "dia")})
 
     resposta = TestClient(main.app).get("/planos")
 
-    assert resposta.json() == [{"plano": "free", "limite_diario": 1}, {"plano": "completo", "limite_diario": 2}]
+    assert resposta.json() == [
+        {"plano": "free", "limite_diario": 1, "periodo": "mes"},
+        {"plano": "completo", "limite_diario": 2, "periodo": "dia"},
+    ]

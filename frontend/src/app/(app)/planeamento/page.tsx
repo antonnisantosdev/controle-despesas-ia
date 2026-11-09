@@ -31,7 +31,7 @@ export default function PaginaPlaneamento() {
   const [resultado, setResultado] = useState<{ mes: string; linhas: LinhaOrcamento[] } | null>(null);
   const [versao, setVersao] = useState(0);
   const [erro, setErro] = useState("");
-  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite diário de pedidos à IA
+  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite de pedidos à IA
   const [novaCategoria, setNovaCategoria] = useState("");
   const [sugestoes, setSugestoes] = useState<SugestaoCategoria[] | null>(null);
   const [aPedirSugestao, setAPedirSugestao] = useState(false);

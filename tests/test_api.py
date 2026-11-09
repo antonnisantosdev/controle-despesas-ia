@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 import main
 from ia import ErroIA
-from models import ExtratoPdf, ResumoMes
+from models import ExtratoPdf, MovimentoPdf, ResumoMes
 
 EXTRATO = (Path(__file__).parent.parent / "dados_exemplo" / "extrato_exemplo.csv").read_bytes()
 
@@ -32,6 +32,13 @@ def ia(monkeypatch):
 
 def importar(cliente, conteudo, nome="extrato.csv"):
     return cliente.post("/transacoes/importar", files={"ficheiro": (nome, conteudo, "text/csv")})
+
+
+def test_a_raiz_responde_200_sem_login():
+    # O frontend usa o GET / para acordar a API antes de um POST ou PATCH (api.ts, acordarApi).
+    resposta = TestClient(main.app).get("/")
+
+    assert resposta.status_code == 200
 
 
 def test_sem_login_responde_401():
@@ -60,13 +67,38 @@ def test_csv_demasiado_grande_nao_gasta_perguntas(cliente, ia, limite):
     assert limite.perguntas == 0
 
 
-def test_se_a_ia_falhar_nada_e_gravado(cliente, monkeypatch, base_dados):
-    def ia_em_baixo(transacoes, user_id=None):
-        raise ErroIA("sem rede")
+def ia_em_baixo(transacoes, user_id=None):
+    raise ErroIA("sem rede")
 
+
+def test_se_a_ia_falhar_o_csv_grava_se_sem_categorias(cliente, monkeypatch, base_dados, limite):
+    # Os dados do CSV já estão lidos: não se perdem por a IA não responder.
     monkeypatch.setattr(main, "categorizar", ia_em_baixo)
 
     resposta = importar(cliente, EXTRATO)
+
+    assert resposta.status_code == 201
+    corpo = resposta.json()
+    assert corpo["importadas"] == 11
+    assert corpo["aviso"] == (
+        "Importámos as movimentações sem categorias porque a IA não respondeu. Podes categorizá-las mais tarde."
+    )
+    assert {linha["categoria"] for linha in base_dados.gravado} == {None}
+    assert limite.perguntas == 1  # o pedido fica gasto: a chamada à IA foi feita
+
+
+def test_se_a_ia_falhar_ao_categorizar_o_pdf_responde_503_e_nada_e_gravado(cliente, monkeypatch, base_dados):
+    monkeypatch.setattr(main, "contar_paginas_pdf", lambda pdf: 1)
+    monkeypatch.setattr(
+        main,
+        "ler_extrato_pdf",
+        lambda pdf, user_id=None: ExtratoPdf(
+            movimentos=[MovimentoPdf(data="2026-10-01", descricao="CAFE", valor=-1.2, saldo=None)]
+        ),
+    )
+    monkeypatch.setattr(main, "categorizar", ia_em_baixo)
+
+    resposta = importar(cliente, b"%PDF-1.4 extrato inventado", nome="extrato.pdf")
 
     assert resposta.status_code == 503
     assert base_dados.gravado == []

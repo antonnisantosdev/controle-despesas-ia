@@ -5,6 +5,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from supabase import AuthApiError, create_client
 
 from database import SUPABASE_KEY, SUPABASE_URL, supabase
+# O limites.py não importa o auth.py, por isso não há importação circular.
+from limites import hoje_em_lisboa
 
 # Lê o cabeçalho "Authorization: Bearer <token>" de cada pedido.
 # Também faz aparecer o botão "Authorize" no /docs.
@@ -50,7 +52,7 @@ def verificar_assinatura(user_id: str) -> None:
 
     linha = resposta.data[0]
     ativo_ate = date.fromisoformat(linha["ativo_ate"]) if linha["ativo_ate"] else None
-    if not assinatura_ativa(linha["plano"], ativo_ate, date.today()):
+    if not assinatura_ativa(linha["plano"], ativo_ate, hoje_em_lisboa()):
         raise HTTPException(status_code=403, detail="A tua assinatura expirou")
 
 

@@ -31,7 +31,13 @@ export type Transacao = {
 export type LinhaOrcamento = { categoria: string; limite: number | null; gasto: number };
 export type SugestaoCategoria = { categoria: string; limite: number; explicacao: string };
 export type SugestaoOrcamento = { sugestoes: SugestaoCategoria[] };
-export type ResultadoImportacao = { importadas: number; duplicadas: number; transacoes: Transacao[] };
+// aviso: texto para mostrar (ex.: importou sem categorias porque acabaram os pedidos à IA). Uma API antiga não o envia.
+export type ResultadoImportacao = {
+  importadas: number;
+  duplicadas: number;
+  transacoes: Transacao[];
+  aviso?: string | null;
+};
 export type Alerta = { nivel: "info" | "atencao"; mensagem: string };
 export type ResumoMes = { resumo: string; alertas: Alerta[] };
 export type ItemTalao = { descricao: string; quantidade: number; preco: number };
@@ -43,11 +49,43 @@ export type CorteSugerido = { categoria: string; valor_mensal: number; motivo: s
 export type PlanoPoupanca = { viavel: boolean; explicacao: string; cortes: CorteSugerido[] };
 // Um ano do simulador de poupança (GET /simulador).
 export type AnoSimulado = { ano: number; depositado: number; valor: number };
-// O plano do utilizador, os pedidos à IA que já fez hoje e o último dia do plano (GET /plano).
-// ativo_ate vem em ISO ("2026-12-31"), ou null no Free (não acaba).
-export type EstadoPlano = { plano: string | null; limite: number; usadas_hoje: number; ativo_ate: string | null };
-// Um plano à venda e o seu limite diário (GET /planos, público).
-export type PlanoDisponivel = { plano: string; limite_diario: number };
+// "dia" nos planos pagos, "mes" no Free: o período em que se contam os pedidos à IA (limites.py).
+export type Periodo = "dia" | "mes";
+// O plano do utilizador, os pedidos à IA que já fez no período e o último dia do plano (GET /plano),
+// já normalizado por normalizarEstadoPlano(). ativo_ate vem em ISO ("2026-12-31"), ou null no Free (não acaba).
+export type EstadoPlano = {
+  plano: string | null;
+  limite: number;
+  periodo: Periodo;
+  usadas: number;
+  ativo_ate: string | null;
+};
+// O que GET /plano devolve. Uma API antiga (durante o deploy) só traz usadas_hoje e não traz periodo.
+type EstadoPlanoDaApi = Omit<EstadoPlano, "usadas" | "periodo"> & {
+  usadas?: number;
+  usadas_hoje?: number;
+  periodo?: Periodo;
+};
+
+// Põe o estado sempre na forma nova, para nenhum ecrã fazer contas com undefined (NaN).
+// Sem periodo, conta por dia (era assim antes de o Free passar a contar por mês).
+export function normalizarEstadoPlano(bruto: EstadoPlanoDaApi): EstadoPlano {
+  return {
+    plano: bruto.plano,
+    limite: bruto.limite,
+    periodo: bruto.periodo === "mes" ? "mes" : "dia",
+    usadas: bruto.usadas ?? bruto.usadas_hoje ?? 0,
+    ativo_ate: bruto.ativo_ate,
+  };
+}
+
+// GET /plano, já normalizado. Usar sempre esta em vez de pedirApi("/plano").
+export async function pedirEstadoPlano(): Promise<EstadoPlano> {
+  return normalizarEstadoPlano(await pedirApi<EstadoPlanoDaApi>("/plano"));
+}
+// Um plano à venda e o seu limite de pedidos à IA no período (GET /planos, público).
+// limite_diario é o nome antigo: no Free é o limite do mês.
+export type PlanoDisponivel = { plano: string; limite_diario: number; periodo: Periodo };
 
 // O email da conta, lido do próprio token do Supabase (um JWT: a parte do meio é JSON em base64url).
 // Serve só para pré-preencher mensagens; não é verificação nenhuma (essa é feita pela API).
@@ -82,6 +120,13 @@ export class ErroApi extends Error {
     this.status = status;
     this.detalhe = detalhe;
   }
+}
+
+// A mensagem que a API mandou num 422 (ex. "Chegaste ao máximo de 20 000 movimentações…"),
+// ou o texto genérico quando não há uma mensagem de texto para mostrar.
+export function mensagemDaApi(e: unknown, generica: string): string {
+  if (e instanceof ErroApi && e.status === 422 && typeof e.detalhe === "string") return e.detalhe;
+  return generica;
 }
 
 function lerTokenOuFalhar(): string {
@@ -132,9 +177,16 @@ function avisarAAcordar(aAcordar: boolean) {
 
 // Decide se um pedido que falhou deve ser repetido.
 // status é null quando nem houve resposta (erro de rede, ou o browser bloqueou-a por CORS).
-function deveTentarOutraVez(metodo: string, status: number | null): boolean {
-  // 502/503/504: quem respondeu foi o Render, a API nem recebeu o pedido. Repetir é seguro com qualquer método.
-  if (status === 502 || status === 503 || status === 504) return true;
+function deveTentarOutraVez(metodo: string, resposta: Response | null): boolean {
+  const status = resposta?.status ?? null;
+
+  // 502/503/504 do Render (página HTML): a API nem recebeu o pedido. Repetir é seguro com qualquer método.
+  // Um 503 em JSON vem da nossa API (ex. a IA falhou) e o pedido à IA já foi contado:
+  // repetir gastaria mais pedidos do utilizador, por isso não se repete.
+  if (status === 502 || status === 503 || status === 504) {
+    const vemDaApi = resposta?.headers.get("content-type")?.includes("application/json") ?? false;
+    return !vemDaApi;
+  }
 
   // Sem resposta: não se sabe se o pedido chegou à API. Só se repetem os métodos idempotentes
   // (repetir dá o mesmo resultado). Um POST repetido podia gravar duas vezes ou contar duas perguntas à IA.
@@ -145,8 +197,8 @@ function deveTentarOutraVez(metodo: string, status: number | null): boolean {
 }
 
 // Um fetch que, se a API estiver a acordar, espera e tenta outra vez (até ao fim de ESPERAS_SEGUNDOS).
-export async function fetchComTentativas(url: string, opcoes: RequestInit = {}): Promise<Response> {
-  const metodo = opcoes.method ?? "GET";
+async function fetchComEsperas(url: string, opcoes: RequestInit = {}): Promise<Response> {
+  const metodo = (opcoes.method ?? "GET").toUpperCase();
   try {
     for (let tentativa = 0; ; tentativa++) {
       let resposta: Response | null = null;
@@ -158,7 +210,7 @@ export async function fetchComTentativas(url: string, opcoes: RequestInit = {}):
       }
 
       const esgotou = tentativa >= ESPERAS_SEGUNDOS.length;
-      if (esgotou || !deveTentarOutraVez(metodo, resposta?.status ?? null)) {
+      if (esgotou || !deveTentarOutraVez(metodo, resposta)) {
         if (resposta) return resposta;
         throw erroRede;
       }
@@ -169,6 +221,37 @@ export async function fetchComTentativas(url: string, opcoes: RequestInit = {}):
   } finally {
     avisarAAcordar(false);
   }
+}
+
+// Durante quanto tempo, depois de um GET / com 200, se considera que a API está acordada.
+// O Render só adormece ao fim de 15 minutos sem pedidos, por isso 5 minutos é uma margem segura.
+const MINUTOS_ACORDADA = 5;
+
+// Até quando (Date.now(), em milissegundos) a API está de certeza acordada. 0 = não se sabe.
+let acordadaAte = 0;
+
+// Acorda a API com um GET / (não grava nada nem gasta pedidos), com as mesmas esperas e o mesmo aviso
+// "A acordar o servidor...". Se falhar, não faz mal: o pedido a seguir mostra o erro verdadeiro.
+async function acordarApi(): Promise<void> {
+  if (Date.now() < acordadaAte) return;
+  try {
+    const resposta = await fetchComEsperas(`${API_URL}/`);
+    if (resposta.status === 200) acordadaAte = Date.now() + MINUTOS_ACORDADA * 60 * 1000;
+  } catch {
+    // Sem rede: o POST a seguir falha e a página mostra o erro.
+  }
+}
+
+// GET, PUT e DELETE: repetem-se enquanto a API acorda (repetir dá o mesmo resultado).
+// POST e PATCH: primeiro acorda-se a API com um GET /, e só depois o pedido é enviado, uma única vez.
+// Repetir um POST podia gravar duas vezes ou gastar dois pedidos à IA do utilizador.
+export async function fetchComTentativas(url: string, opcoes: RequestInit = {}): Promise<Response> {
+  const metodo = (opcoes.method ?? "GET").toUpperCase();
+  if (metodo === "POST" || metodo === "PATCH") {
+    await acordarApi();
+    return fetch(url, opcoes);
+  }
+  return fetchComEsperas(url, opcoes);
 }
 
 // Faz um pedido à API com o token do login e devolve o JSON da resposta.
@@ -197,9 +280,15 @@ export async function enviarFicheiro<T>(caminho: string, campo: string, ficheiro
   return lerResposta<T>(resposta);
 }
 
-// Se o erro é o 429 do limite diário de pedidos à IA (limites.py). Os ecrãs usam-no para mostrar o AvisoLimite.
+// Se o erro é o 429 do limite de pedidos à IA (limites.py). Os ecrãs usam-no para mostrar o AvisoLimite.
 export function eLimiteDiario(erro: unknown): boolean {
   return erro instanceof ErroApi && erro.status === 429;
+}
+
+// Se o erro é o 402 de uma função só dos planos pagos (PDF, talões). Os ecrãs mostram o AvisoPlanoPago.
+// (402 e não 403: o 403 é o plano terminado, que manda para /assinatura-expirada.)
+export function eSoPlanosPagos(erro: unknown): erro is ErroApi {
+  return erro instanceof ErroApi && erro.status === 402;
 }
 
 // A sessão vista por uma página pública (ex.: /precos), segundo a resposta de GET /plano:
@@ -222,7 +311,7 @@ export async function sessaoPublica(): Promise<SessaoPublica> {
     if (resposta.status === 401) return { tipo: "sem-sessao" };
     if (resposta.status === 403) return { tipo: "plano-terminado" };
     if (!resposta.ok) return { tipo: "desconhecida" };
-    return { tipo: "ativa", estado: await resposta.json() };
+    return { tipo: "ativa", estado: normalizarEstadoPlano(await resposta.json()) };
   } catch {
     return { tipo: "desconhecida" };
   }

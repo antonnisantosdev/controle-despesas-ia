@@ -6,7 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import AvisoServidor from "@/components/AvisoServidor";
 import Logo from "@/components/Logo";
 import { API_URL, fetchComTentativas } from "@/lib/api";
-import { LIMITES_RESERVA } from "@/lib/planos";
+import { LIMITES_RESERVA, textoDosPedidos } from "@/lib/planos";
 
 const ESTILO_CAMPO = "mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto";
 
@@ -81,7 +81,7 @@ export default function PaginaRegisto() {
         ) : (
           <form onSubmit={criarConta} className="space-y-4">
             <p className="text-center text-sm text-texto-suave">
-              Cria a tua conta grátis. O plano Free inclui {LIMITES_RESERVA.free} pedidos à IA por dia.
+              Cria a tua conta grátis. O plano Free inclui {textoDosPedidos(LIMITES_RESERVA.free)} e importação de extratos em CSV.
             </p>
 
             <label className="block">

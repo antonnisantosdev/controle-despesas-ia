@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
-import { pedirApi, SessaoExpirada, type Compra, type ItemTalao, type Talao } from "@/lib/api";
+import { mensagemDaApi, pedirApi, SessaoExpirada, type Compra, type ItemTalao, type Talao } from "@/lib/api";
 import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
 
 import { euros } from "../dashboard/formatos";
@@ -61,7 +61,7 @@ export default function RevisaoTalao({ talao, onGravada, onCancelar, onSessaoExp
       onGravada(compra);
     } catch (e) {
       if (e instanceof SessaoExpirada) onSessaoExpirada(e);
-      else setErro("Não foi possível gravar a compra. Confirma os dados e tenta outra vez.");
+      else setErro(mensagemDaApi(e, "Não foi possível gravar a compra. Confirma os dados e tenta outra vez."));
     } finally {
       setAGravar(false);
     }

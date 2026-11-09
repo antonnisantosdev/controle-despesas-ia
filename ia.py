@@ -9,13 +9,13 @@ import json
 import os
 import time
 from collections.abc import Callable
-from datetime import date
 
 import anthropic
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from database import supabase
+from limites import hoje_em_lisboa
 from models import Categoria, ExtratoPdf, PlanoPoupanca, ResumoMes, SugestaoOrcamento, Talao, TransacaoCriar
 
 load_dotenv()
@@ -211,7 +211,7 @@ def _conversar_claude(
     pergunta: str, ferramentas: list[dict], executar: Callable[[str, dict], str], user_id: str | None
 ) -> str:
     cliente = anthropic.Anthropic()
-    instrucoes = f"{INSTRUCOES_CHAT}\nHoje é {date.today().isoformat()}."
+    instrucoes = f"{INSTRUCOES_CHAT}\nHoje é {hoje_em_lisboa().isoformat()}."
     mensagens = [{"role": "user", "content": pergunta}]
 
     for _ in range(MAX_VOLTAS):

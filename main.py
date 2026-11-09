@@ -1,6 +1,5 @@
 import json
 import os
-from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,13 +14,25 @@ from ferramentas import FERRAMENTAS, executar_ferramenta
 from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_mes, sugerir_orcamento
 from importar_csv import (
     MAX_ENTRADAS_ARVORE_PDF,
+    MAX_MOVIMENTOS_CSV,
     ErroImportacao,
+    ExtratoGrandeDemais,
     PdfIlegivel,
     contar_paginas_pdf,
     ler_extrato,
     transacoes_do_pdf,
 )
-from limites import MAX_PAGINAS_PDF, estado_do_plano, planos_disponiveis, pode_usar_ia, registar_pergunta
+from limites import (
+    MAX_PAGINAS_PDF,
+    aviso_resumo_sem_pedidos,
+    estado_do_plano,
+    exigir_espaco_na_conta,
+    exigir_funcao,
+    hoje_em_lisboa,
+    planos_disponiveis,
+    pode_usar_ia,
+    registar_pergunta,
+)
 from objetivos import (
     apagar_objetivo,
     atualizar_poupado,
@@ -134,6 +145,25 @@ def listar_transacoes(
     return ler_todas(nova_consulta)
 
 
+def contar_transacoes(user_id: str) -> int:
+    """Quantas movimentações o utilizador tem. head=True: o Supabase devolve só o número, sem linhas."""
+    resposta = supabase.table("transacoes").select("id", count="exact", head=True).eq("user_id", user_id).execute()
+    return resposta.count or 0
+
+
+# Quantas movimentações estão sem categoria (para o botão "Categorizar"). Só o número, sem as linhas.
+@app.get("/transacoes/sem-categoria/contagem")
+def contar_sem_categoria(user_id: str = Depends(obter_utilizador_atual)) -> dict[str, int]:
+    resposta = (
+        supabase.table("transacoes")
+        .select("id", count="exact", head=True)
+        .eq("user_id", user_id)
+        .is_("categoria", "null")
+        .execute()
+    )
+    return {"total": resposta.count or 0}
+
+
 @app.get("/transacoes/{transacao_id}")
 def obter_transacao(transacao_id: int, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
     def nova_consulta():
@@ -148,6 +178,8 @@ def obter_transacao(transacao_id: int, user_id: str = Depends(obter_utilizador_a
 # Cria uma movimentação à mão (dinheiro, MB Way...). Sem categoria, a IA escolhe uma.
 @app.post("/transacoes", status_code=201)
 def criar_transacao(nova: NovaMovimentacao, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
+    # Antes de gastar um pedido à IA: a conta tem de ter espaço para mais uma.
+    exigir_espaco_na_conta(contar_transacoes(user_id), 1)
     categoria = nova.categoria
     if not categoria and pode_usar_ia(user_id):
         try:
@@ -181,22 +213,31 @@ def corrigir_categoria(
     return resposta.data[0]
 
 
+# Pendentes máximas por clique em "Categorizar": cabem numa chamada à IA sem um prompt enorme.
+# Quem tiver mais carrega outra vez (cada clique gasta um pedido).
+MAX_PENDENTES_POR_PEDIDO = 300
+
+
 # Categoriza com IA as transações que ficaram sem categoria (antigas, ou de uma importação em que a IA falhou).
 @app.post("/transacoes/categorizar")
 def categorizar_pendentes(user_id: str = Depends(obter_utilizador_atual)) -> list[Transacao]:
     # .is_("categoria", "null") é o "WHERE categoria IS NULL" do SQL (o .eq não serve para NULL).
+    # Vão as mais recentes primeiro (são as que aparecem no dashboard), no máximo MAX_PENDENTES_POR_PEDIDO.
     resposta = (
         supabase.table("transacoes")
         .select("*")
         .eq("user_id", user_id)
         .is_("categoria", "null")
+        .order("data", desc=True)
+        .order("id", desc=True)
+        .limit(MAX_PENDENTES_POR_PEDIDO)
         .execute()
     )
     pendentes = [Transacao(**linha) for linha in resposta.data]
     if not pendentes:
         return []
 
-    # Todas as pendentes vão numa só chamada à IA, por isso conta como uma pergunta.
+    # O lote inteiro vai numa só chamada à IA, por isso conta como uma pergunta.
     registar_pergunta(user_id)
     try:
         categorias = categorizar(pendentes, user_id=user_id)
@@ -225,9 +266,43 @@ TAMANHO_MAXIMO_PDF = 10 * 1024 * 1024
 # Tamanho máximo de um extrato em CSV. Um ano de movimentos em CSV tem uns 100 KB.
 TAMANHO_MAXIMO_CSV = 1 * 1024 * 1024
 
+AVISO_IMPORTACAO_SEM_IA = (
+    "Importámos as movimentações sem categorias porque chegaste ao limite de pedidos à IA. "
+    "Podes categorizá-las mais tarde."
+)
+
+AVISO_IMPORTACAO_IA_EM_BAIXO = (
+    "Importámos as movimentações sem categorias porque a IA não respondeu. Podes categorizá-las mais tarde."
+)
+
+
+def ler_csv_enviado(csv: bytes) -> list[TransacaoImportada]:
+    """Lê o extrato em CSV, sem IA. Responde 422 se for grande demais ou tiver linhas inválidas."""
+    if len(csv) > TAMANHO_MAXIMO_CSV:
+        raise HTTPException(status_code=422, detail="CSV demasiado grande. Máx. 1 MB.")
+    try:
+        # "utf-8-sig" ignora a marca invisível (BOM) que o Excel põe no início dos CSV.
+        return ler_extrato(csv.decode("utf-8-sig"))
+    except ExtratoGrandeDemais:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Este extrato tem mais de {MAX_MOVIMENTOS_CSV} movimentos. Divide-o em partes mais pequenas.",
+        )
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=422,
+            detail="Não consegui ler o CSV. Grava-o com a codificação UTF-8 e tenta outra vez.",
+        )
+    except ErroImportacao as erro:
+        # Nada é gravado: o utilizador corrige o ficheiro e volta a importar.
+        raise HTTPException(status_code=422, detail={"mensagem": str(erro), "erros": erro.erros})
+
 
 def ler_pdf_enviado(pdf: bytes, user_id: str) -> list[TransacaoImportada]:
-    """A IA lê o extrato em PDF. Responde 400 se tiver páginas a mais, 422 se não for válido e 503 se a IA falhar."""
+    """A IA lê o extrato em PDF. Responde 402 no Free, 400 se tiver páginas a mais, 422 se não for válido e 503 se a IA falhar."""
+    # Segunda proteção (a rota já verifica): quem chamar esta função noutro sítio também fica protegido.
+    # Vem antes de contar páginas e de gastar o pedido.
+    exigir_funcao(user_id, "importar_pdf")
     if len(pdf) > TAMANHO_MAXIMO_PDF:
         raise HTTPException(status_code=422, detail="PDF demasiado grande. Máx. 10 MB.")
 
@@ -248,7 +323,7 @@ def ler_pdf_enviado(pdf: bytes, user_id: str) -> list[TransacaoImportada]:
             ),
         )
 
-    # Ler um PDF é a chamada mais cara da importação, por isso conta para o limite diário.
+    # Ler um PDF é a chamada mais cara da importação, por isso conta para o limite do plano.
     registar_pergunta(user_id)
     try:
         extrato = ler_extrato_pdf(pdf, user_id=user_id)
@@ -268,32 +343,46 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
     conteudo = ficheiro.file.read(TAMANHO_MAXIMO_PDF + 1)
 
     # Todos os PDF começam por "%PDF": é mais seguro do que confiar no nome do ficheiro.
-    if conteudo.startswith(b"%PDF"):
+    eh_pdf = conteudo.startswith(b"%PDF")
+    if eh_pdf:
+        # O PDF é só dos planos pagos: 402 antes de contar páginas e de gastar um pedido.
+        exigir_funcao(user_id, "importar_pdf")
+        # Ainda não se sabe quantos movimentos tem (só a IA o diz), mas uma conta já no teto
+        # é recusada antes de gastar o pedido e de pagar a leitura do PDF.
+        atuais = contar_transacoes(user_id)
+        exigir_espaco_na_conta(atuais, 1)
         novas = ler_pdf_enviado(conteudo, user_id)
     else:
-        if len(conteudo) > TAMANHO_MAXIMO_CSV:
-            raise HTTPException(status_code=422, detail="CSV demasiado grande. Máx. 1 MB.")
-        
-
-        try:
-            # "utf-8-sig" ignora a marca invisível (BOM) que o Excel põe no início dos CSV.
-            novas = ler_extrato(conteudo.decode("utf-8-sig"))
-        except ErroImportacao as erro:
-            # Nada é gravado: o utilizador corrige o ficheiro e volta a importar.
-            raise HTTPException(status_code=422, detail={"mensagem": str(erro), "erros": erro.erros})
-        # A categorização do CSV inteiro é uma só chamada à IA: conta como uma pergunta.
-        # (No PDF já contou ao ler o ficheiro: ler e categorizar fazem parte da mesma importação.)
-        registar_pergunta(user_id)
+        novas = ler_csv_enviado(conteudo)
+        atuais = contar_transacoes(user_id)
     if not novas:
         raise HTTPException(status_code=422, detail="O ficheiro não tem transações")
 
-    try:
-        categorias = categorizar(novas, user_id=user_id)
-    except ErroIA as erro:
-        raise HTTPException(status_code=503, detail="A categorização automática falhou. Tenta importar mais tarde. " )
+    # Antes de categorizar (no CSV, antes de gastar o pedido). As duplicadas também contam:
+    # só se sabe quais são ao gravar.
+    exigir_espaco_na_conta(atuais, len(novas))
 
-    for nova, categoria in zip(novas, categorias):
-        nova.categoria = categoria
+    # No PDF o pedido já contou ao ler o ficheiro (ler e categorizar fazem parte da mesma importação).
+    # No CSV, a categorização do ficheiro inteiro é uma só chamada à IA: conta como uma pergunta.
+    # Sem pedidos, o CSV importa-se na mesma, sem categorias: os dados são do utilizador.
+    aviso = None
+    if eh_pdf or pode_usar_ia(user_id):
+        try:
+            categorias = categorizar(novas, user_id=user_id)
+        except ErroIA as erro:
+            print(erro)
+            if eh_pdf:
+                raise HTTPException(
+                    status_code=503, detail="A categorização automática falhou. Tenta importar mais tarde."
+                )
+            # No CSV os dados já estão lidos: gravam-se sem categoria (o pedido fica gasto).
+            categorias = [None] * len(novas)
+            aviso = AVISO_IMPORTACAO_IA_EM_BAIXO
+        for nova, categoria in zip(novas, categorias):
+            nova.categoria = categoria
+    else:
+        # Ficam com categoria vazia (NULL): o POST /transacoes/categorizar trata-as mais tarde.
+        aviso = AVISO_IMPORTACAO_SEM_IA
 
     dados = [nova.model_dump(mode="json") | {"user_id": user_id} for nova in novas]
     # upsert com ignore_duplicates: as linhas cuja impressão digital já existe são saltadas
@@ -307,6 +396,7 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
         importadas=len(resposta.data),
         duplicadas=len(dados) - len(resposta.data),
         transacoes=resposta.data,
+        aviso=aviso,
     )
 
 # Gastos de um mês por categoria, para o gráfico do dashboard. Exemplo: /dashboard/categorias?mes=2026-10
@@ -328,7 +418,7 @@ def dashboard_mensal(user_id: str = Depends(obter_utilizador_atual)) -> list[Res
 # Chat sobre as finanças: a IA responde usando as ferramentas, sempre com os dados deste utilizador.
 @app.post("/chat")
 def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -> RespostaChat:
-    # Antes de gastar uma chamada à IA: conta a pergunta, ou responde 429 se o limite de hoje acabou.
+    # Antes de gastar uma chamada à IA: conta a pergunta, ou responde 429 se o limite do plano acabou.
     registar_pergunta(user_id)
 
     # Closure: uma função que "lembra" o user_id deste pedido. A IA só lhe passa o nome e os argumentos.
@@ -364,7 +454,7 @@ def resumo_do_mes(
         return RESUMOS_JA_FEITOS[chave]
 
     if not pode_usar_ia(user_id):
-        return ResumoMes(resumo="Chegaste ao limite de pedidos à IA de hoje. O resumo volta depois da meia-noite.", alertas=[])
+        return ResumoMes(resumo=aviso_resumo_sem_pedidos(user_id), alertas=[])
     try:
         resumo = resumir_mes(dados, user_id=user_id)
     except ErroIA as erro:
@@ -399,7 +489,7 @@ def sugestao_orcamento(
     historico = historico_para_sugestao(user_id, mes)
     if not historico:
         return SugestaoOrcamento(sugestoes=[])
-    # Conta para o limite diário, como as perguntas do chat (cada sugestão é uma chamada à IA).
+    # Conta para o limite do plano, como as perguntas do chat (cada sugestão é uma chamada à IA).
     registar_pergunta(user_id)
     try:
         return sugerir_orcamento(historico, user_id=user_id)
@@ -413,9 +503,25 @@ TIPOS_IMAGEM = {"image/jpeg", "image/png", "image/webp"}
 TAMANHO_MAXIMO = 5 * 1024 * 1024
 
 
+def eh_imagem_suportada(imagem: bytes) -> str | None:
+    """O tipo da imagem pelos primeiros bytes ("image/jpeg", "image/png" ou "image/webp"), ou None.
+
+    O content_type vem do browser e pode mentir: é este tipo que vai para a IA.
+    """
+    if imagem.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if imagem.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if imagem[:4] == b"RIFF" and imagem[8:12] == b"WEBP":  # WebP: RIFF, 4 bytes de tamanho, WEBP
+        return "image/webp"
+    return None
+
+
 # A IA lê a fotografia de um talão. Não grava nada: o utilizador revê os produtos antes de guardar.
 @app.post("/compras/ler")
 def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual)) -> Talao:
+    # Ler talões é só dos planos pagos: 402 antes de ler a foto e de gastar um pedido.
+    exigir_funcao(user_id, "ler_talao")
     imagem = foto.file.read(TAMANHO_MAXIMO + 1)
 
     if foto.content_type not in TIPOS_IMAGEM:
@@ -424,11 +530,14 @@ def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual))
         raise HTTPException(status_code=422, detail="Imagem demasiado grande. Máx. 5 MB.")
     elif len(imagem) < 1024:
         raise HTTPException(status_code=422, detail="Imagem demasiado pequena. Tenta outra fotografia.")
+    tipo = eh_imagem_suportada(imagem)
+    if tipo is None:
+        raise HTTPException(status_code=422, detail="Formato de imagem não suportado. Usa JPEG, PNG ou WebP.")
 
-    # Só depois de a foto ser válida é que conta para o limite diário (uma foto errada não gasta perguntas).
+    # Só depois de a foto ser válida é que conta para o limite do plano (uma foto errada não gasta perguntas).
     registar_pergunta(user_id)
     try:
-        talao = ler_talao(imagem, foto.content_type, user_id=user_id)
+        talao = ler_talao(imagem, tipo, user_id=user_id)
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="A leitura do talão falhou. Tenta mais tarde.")
@@ -441,6 +550,8 @@ def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual))
 # Grava o talão depois de o utilizador o rever: cria a transação com o total, a compra e os produtos.
 @app.post("/compras", status_code=201)
 def criar_compra(nova: NovaCompra, user_id: str = Depends(obter_utilizador_atual)) -> Compra:
+    # Guardar um talão cria uma transação: conta para o teto de movimentações da conta.
+    exigir_espaco_na_conta(contar_transacoes(user_id), 1)
     return gravar_compra(user_id, nova)
 
 
@@ -485,7 +596,7 @@ def plano_do_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_
     objetivo = obter_objetivo(user_id, objetivo_id)
     if objetivo is None:
         raise HTTPException(status_code=404, detail="Objetivo não encontrado")
-    dados = dados_do_plano(user_id, objetivo, date.today())
+    dados = dados_do_plano(user_id, objetivo, hoje_em_lisboa())
 
     # Casos em que a resposta é sempre a mesma: não vale a pena pagar uma chamada à IA.
     if dados["falta"] == 0:
@@ -521,7 +632,7 @@ def simulador(
     return simular_poupanca(mensal, anos, taxa)
 
 
-# O plano do utilizador e quantas perguntas à IA ainda tem hoje (o menu lateral mostra-o).
+# O plano do utilizador e quantos pedidos à IA já fez no dia (ou no mês, no Free). O menu lateral mostra-o.
 # Só lê: não conta como pergunta.
 @app.get("/plano")
 def plano(user_id: str = Depends(obter_utilizador_atual)) -> EstadoPlano:

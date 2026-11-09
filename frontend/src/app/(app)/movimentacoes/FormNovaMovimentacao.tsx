@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
-import { pedirApi, SessaoExpirada, type Transacao } from "@/lib/api";
+import { mensagemDaApi, pedirApi, SessaoExpirada, type Transacao } from "@/lib/api";
 import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
 
 // Data de hoje no formato do <input type="date"> (AAAA-MM-DD), na hora local.
@@ -51,7 +51,7 @@ export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
       setErro(
         e instanceof SessaoExpirada
           ? "A tua sessão expirou. Faz login de novo."
-          : "Não foi possível guardar. Confirma os dados e tenta outra vez.",
+          : mensagemDaApi(e, "Não foi possível guardar. Confirma os dados e tenta outra vez."),
       );
     } finally {
       setAGuardar(false);

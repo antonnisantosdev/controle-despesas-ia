@@ -4,17 +4,22 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import AvisoLimite from "@/components/AvisoLimite";
+import AvisoPlanoPago from "@/components/AvisoPlanoPago";
 import {
   apagarToken,
   pedirApi,
+  pedirEstadoPlano,
   SessaoExpirada,
   type ResultadoImportacao,
   type ResumoMensal,
   type Transacao,
 } from "@/lib/api";
 import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
+import { preencher, temFuncoesPagas } from "@/lib/planos";
+import { TEXTOS_CATEGORIZAR, TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
 
 import { euros, nomeMes } from "../dashboard/formatos";
+import BotaoCategorizar from "./BotaoCategorizar";
 import BotaoImportar from "./BotaoImportar";
 import FormNovaMovimentacao from "./FormNovaMovimentacao";
 
@@ -33,11 +38,24 @@ export default function PaginaMovimentacoes() {
   const [erro, setErro] = useState("");
   const [formAberto, setFormAberto] = useState(false);
   // Resultado da última importação: uma mensagem e, se o ficheiro tiver erros, as linhas inválidas.
-  const [aviso, setAviso] = useState<{ tipo: "sucesso" | "erro"; mensagem: string; erros: string[] } | null>(null);
-  // A importação usa a IA: true quando a API respondeu 429 (limite diário de pedidos à IA).
+  // nota: o aviso da API (ex.: importou sem categorias porque acabaram os pedidos à IA).
+  const [aviso, setAviso] = useState<{
+    tipo: "sucesso" | "erro";
+    mensagem: string;
+    erros: string[];
+    nota?: string | null;
+  } | null>(null);
+  // A importação usa a IA: true quando a API respondeu 429 (limite de pedidos à IA).
   const [semPedidos, setSemPedidos] = useState(false);
+  // 402: o PDF é só dos planos pagos. Guarda a mensagem da API para o AvisoPlanoPago.
+  const [soPlanosPagos, setSoPlanosPagos] = useState<string | null>(null);
+  // Free: só importa CSV. Avisa antes de escolher o ficheiro. Se o /plano falhar, aceita os dois (a API decide).
+  const [soCsv, setSoCsv] = useState(false);
   // Muda sempre que é criada uma movimentação, para a lista voltar a ser pedida à API.
   const [versao, setVersao] = useState(0);
+  // Transações sem categoria em TODOS os meses: a lista só tem o mês escolhido, mas o
+  // POST /transacoes/categorizar trata as de todos os meses (por lotes). 0 enquanto não se sabe (o botão fica escondido).
+  const [semCategoria, setSemCategoria] = useState(0);
   const aCarregar = lista?.mes !== mes;
 
   function tratarErro(e: unknown) {
@@ -58,6 +76,9 @@ export default function PaginaMovimentacoes() {
         if (lista.length > 0) setMes(lista[lista.length - 1]);
       })
       .catch(tratarErro);
+    pedirEstadoPlano()
+      .then((estado) => setSoCsv(!temFuncoesPagas(estado.plano)))
+      .catch(() => {}); // a sessão expirada já é tratada pelo pedido dos meses
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -78,10 +99,12 @@ export default function PaginaMovimentacoes() {
   // Depois de importar: diz quantas entraram e salta para o mês mais recente do extrato.
   function aposImportar(resultado: ResultadoImportacao) {
     setSemPedidos(false);
+    setSoPlanosPagos(null);
     setAviso({
       tipo: "sucesso",
       mensagem: `${resultado.importadas} importada(s), ${resultado.duplicadas} já existia(m).`,
       erros: [],
+      nota: resultado.aviso,
     });
     const datas = resultado.transacoes.map((t) => t.data).sort();
     if (datas.length > 0) mostrarMes(datas[datas.length - 1].slice(0, 7));
@@ -102,6 +125,28 @@ export default function PaginaMovimentacoes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mes, versao]);
 
+  // 3. Conta as transações sem categoria (todos os meses), para o botão "Categorizar".
+  // A API devolve só o número, sem as linhas. Volta a contar depois de criar, importar ou categorizar (versao).
+  useEffect(() => {
+    let cancelado = false;
+    pedirApi<{ total: number }>("/transacoes/sem-categoria/contagem")
+      .then((contagem) => {
+        if (!cancelado) setSemCategoria(contagem.total);
+      })
+      .catch(() => {}); // sem a contagem o botão não aparece; a sessão expirada já é tratada pela lista
+    return () => {
+      cancelado = true;
+    };
+  }, [versao]);
+
+  // Depois de a IA categorizar: diz quantas mudaram e volta a pedir a lista e a contagem.
+  function aposCategorizar(atualizadas: Transacao[]) {
+    setSemPedidos(false);
+    setSoPlanosPagos(null);
+    setAviso({ tipo: "sucesso", mensagem: preencher(TEXTOS_CATEGORIZAR.sucesso, { n: atualizadas.length }), erros: [] });
+    setVersao((v) => v + 1);
+  }
+
   const transacoes = aCarregar ? [] : (lista?.transacoes ?? []);
 
   // Muda a categoria de uma transação só no ecrã (sem falar com a API).
@@ -121,6 +166,8 @@ export default function PaginaMovimentacoes() {
     trocarNaLista(transacao.id, nova);
     try {
       await pedirApi(`/transacoes/${transacao.id}`, { categoria: nova }, "PATCH");
+      // Preencheu uma que estava vazia: há menos uma para o botão "Categorizar".
+      if (antiga === null) setSemCategoria((n) => Math.max(0, n - 1));
     } catch (e) {
       trocarNaLista(transacao.id, antiga);
       if (e instanceof SessaoExpirada) {
@@ -156,13 +203,21 @@ export default function PaginaMovimentacoes() {
               onImportado={aposImportar}
               onErro={(mensagem, erros) => {
                 setSemPedidos(false);
+                setSoPlanosPagos(null);
                 setAviso({ tipo: "erro", mensagem, erros });
               }}
               onSessaoExpirada={tratarErro}
               onLimiteDiario={() => {
                 setAviso(null);
+                setSoPlanosPagos(null);
                 setSemPedidos(true);
               }}
+              onSoPlanosPagos={(mensagem) => {
+                setAviso(null);
+                setSemPedidos(false);
+                setSoPlanosPagos(mensagem);
+              }}
+              soCsv={soCsv}
             />
             <button
               type="button"
@@ -174,6 +229,26 @@ export default function PaginaMovimentacoes() {
           </div>
         </header>
 
+        {soCsv && <p className="text-sm text-texto-suave">{TEXTOS_PLANO_PAGO.soCsv}</p>}
+
+        {semCategoria > 0 && (
+          <BotaoCategorizar
+            quantas={semCategoria}
+            onCategorizadas={aposCategorizar}
+            onErro={(mensagem) => {
+              setSemPedidos(false);
+              setSoPlanosPagos(null);
+              setAviso({ tipo: "erro", mensagem, erros: [] });
+            }}
+            onSessaoExpirada={tratarErro}
+            onLimiteDiario={() => {
+              setAviso(null);
+              setSoPlanosPagos(null);
+              setSemPedidos(true);
+            }}
+          />
+        )}
+
         {aviso && (
           <div
             className={`rounded-lg p-3 text-sm ${
@@ -183,7 +258,10 @@ export default function PaginaMovimentacoes() {
             }`}
           >
             <div className="flex items-start justify-between gap-4">
-              <p className="font-medium">{aviso.mensagem}</p>
+              <div>
+                <p className="font-medium">{aviso.mensagem}</p>
+                {aviso.nota && <p className="mt-1">{aviso.nota}</p>}
+              </div>
               <button type="button" onClick={() => setAviso(null)} aria-label="Fechar aviso" className="opacity-70 hover:opacity-100">
                 ✕
               </button>
@@ -199,6 +277,7 @@ export default function PaginaMovimentacoes() {
         )}
 
         {semPedidos && <AvisoLimite />}
+        {soPlanosPagos && <AvisoPlanoPago mensagem={soPlanosPagos} />}
 
         {formAberto && <FormNovaMovimentacao onCriada={aposCriar} onFechar={() => setFormAberto(false)} />}
 

@@ -1,10 +1,13 @@
 """Registo público e a regra de quando uma assinatura dá acesso."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
+from fastapi import HTTPException
 from supabase import AuthApiError
 
+import auth
+import limites
 import main
 from auth import assinatura_ativa
 
@@ -24,6 +27,42 @@ HOJE = date(2026, 11, 8)
 )
 def test_quando_a_assinatura_da_acesso(plano, ativo_ate, esperado):
     assert assinatura_ativa(plano, ativo_ate, HOJE) is esperado
+
+
+class AssinaturaFalsa:
+    """Imita a tabela assinaturas com uma só linha."""
+
+    def __init__(self, linha):
+        self.data = [linha]
+
+    def __getattr__(self, nome):
+        return lambda *args, **opcoes: self
+
+    def execute(self):
+        return self
+
+
+def test_hoje_em_lisboa_ja_e_amanha_as_23_30_utc_de_verao(monkeypatch):
+    monkeypatch.setattr(limites, "agora_utc", lambda: datetime(2026, 7, 31, 23, 30, tzinfo=timezone.utc))
+    assert limites.hoje_em_lisboa() == date(2026, 8, 1)
+
+
+def test_a_assinatura_acaba_a_meia_noite_de_lisboa(monkeypatch):
+    # 23:30 UTC de 31 de julho já é 1 de agosto em Lisboa: um plano até 31 de julho já acabou,
+    # mesmo que no servidor (UTC) ainda seja dia 31.
+    monkeypatch.setattr(auth, "supabase", AssinaturaFalsa({"plano": "essencial", "ativo_ate": "2026-07-31"}))
+    monkeypatch.setattr(limites, "agora_utc", lambda: datetime(2026, 7, 31, 23, 30, tzinfo=timezone.utc))
+
+    with pytest.raises(HTTPException) as erro:
+        auth.verificar_assinatura("utilizador-teste")
+    assert erro.value.status_code == 403
+
+
+def test_a_assinatura_ainda_vale_no_ultimo_dia_em_lisboa(monkeypatch):
+    monkeypatch.setattr(auth, "supabase", AssinaturaFalsa({"plano": "essencial", "ativo_ate": "2026-07-31"}))
+    monkeypatch.setattr(limites, "agora_utc", lambda: datetime(2026, 7, 31, 22, 30, tzinfo=timezone.utc))
+
+    auth.verificar_assinatura("utilizador-teste")  # 23:30 de 31 em Lisboa: ainda dá acesso
 
 
 def test_registo_cria_a_conta(cliente, monkeypatch):

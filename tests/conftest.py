@@ -23,11 +23,15 @@ from auth import obter_utilizador_atual  # noqa: E402
 
 
 class BaseDadosFalsa:
-    """Imita o cliente do Supabase: guarda o que se grava e devolve-o como se tivesse entrado."""
+    """Imita o cliente do Supabase: guarda o que se grava e devolve-o como se tivesse entrado.
+
+    contagem é o que as consultas com count="exact" devolvem (as movimentações que a conta já tem).
+    """
 
     def __init__(self):
         self.gravado: list[dict] = []
         self._dados = None
+        self.contagem = 0
 
     def table(self, nome):
         self._dados = None
@@ -50,19 +54,25 @@ class BaseDadosFalsa:
             dados = [self._dados] if self._dados else []
         linhas = [{"id": i + 1, "categoria": None, "metodo_pagamento": None, **linha} for i, linha in enumerate(dados)]
         self.gravado.extend(linhas)
+        contagem = self.contagem
 
         class Resposta:
             data = linhas
+            count = contagem
 
         return Resposta
 
 
 class Limite:
-    """Imita o limite diário de perguntas à IA, sem tocar na tabela uso_ia."""
+    """Imita o limite de pedidos à IA e o plano, sem tocar nas tabelas uso_ia e assinaturas.
 
-    def __init__(self, maximo=30):
+    O plano é "essencial" por omissão: tem todas as funções (PDF e talões incluídos).
+    """
+
+    def __init__(self, maximo=30, plano="essencial"):
         self.maximo = maximo
         self.perguntas = 0
+        self.plano = plano
 
     def registar(self, user_id):
         if self.perguntas >= self.maximo:
@@ -76,6 +86,8 @@ def limite(monkeypatch):
     # O main e o limites.py usam a mesma função: troca-se nos dois sítios.
     monkeypatch.setattr(main, "registar_pergunta", limite.registar)
     monkeypatch.setattr(limites, "registar_pergunta", limite.registar)
+    # O plano lê-se sempre pelo limites.py (exigir_funcao, aviso do resumo): troca-se lá.
+    monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: limite.plano)
     return limite
 
 

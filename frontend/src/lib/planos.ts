@@ -1,7 +1,8 @@
 // Configuração dos planos: ordem, limites de reserva, preços e contactos para "Pedir acesso".
 // As regras a sério (limites, quem tem acesso) estão no backend (limites.py, auth.py); isto é só para mostrar.
 
-import { FRASE_EMAIL, TEXTOS_MENSAGEM } from "./textosPlanos";
+import type { Periodo } from "./api";
+import { FRASE_EMAIL, TEXTOS_MENSAGEM, TEXTOS_PRECOS } from "./textosPlanos";
 
 export type IdPlano = "free" | "essencial" | "completo";
 
@@ -10,9 +11,27 @@ export const ORDEM_PLANOS: IdPlano[] = ["free", "essencial", "completo"];
 
 export const NOMES_PLANOS: Record<IdPlano, string> = { free: "Free", essencial: "Essencial", completo: "Completo" };
 
+// Pedidos à IA de um plano e o período em que se contam (o Free conta por mês, os pagos por dia).
+export type LimitePlano = { limite: number; periodo: Periodo };
+
 // Só para quando GET /planos falha ou a API ainda está a acordar. Os números certos vêm sempre da API
 // (LIMITES_POR_PLANO em limites.py); se lá mudarem, mudar também aqui.
-export const LIMITES_RESERVA: Record<IdPlano, number> = { free: 5, essencial: 20, completo: 50 };
+export const LIMITES_RESERVA: Record<IdPlano, LimitePlano> = {
+  free: { limite: 30, periodo: "mes" },
+  essencial: { limite: 20, periodo: "dia" },
+  completo: { limite: 50, periodo: "dia" },
+};
+
+// "30 pedidos à IA por mês" / "20 pedidos à IA por dia".
+export function textoDosPedidos({ limite, periodo }: LimitePlano): string {
+  return preencher(periodo === "mes" ? TEXTOS_PRECOS.pedidosPorMes : TEXTOS_PRECOS.pedidosPorDia, { limite });
+}
+
+// Importar PDF e ler talões são só dos planos pagos (FUNCOES_PAGAS em limites.py). Isto só decide o que se
+// mostra: quem decide a sério é a API (responde 402).
+export function temFuncoesPagas(plano: string | null | undefined): boolean {
+  return plano === "essencial" || plano === "completo";
+}
 
 // Preço de cada plano pago, em euros com IVA incluído: por mês e por ano (preço de lançamento).
 // null = ainda não definido (mostra "Preço em breve").
@@ -117,10 +136,13 @@ export function deveAvisarRenovar(iso: string | null, hoje: Date = new Date()): 
 }
 
 // Junta os limites que vieram de GET /planos aos de reserva (um plano em falta fica com o de reserva).
-export function juntarLimites(lista: { plano: string; limite_diario: number }[] | null): Record<IdPlano, number> {
+// Uma API antiga, sem periodo, conta por dia (era assim antes de o Free passar a contar por mês).
+export function juntarLimites(
+  lista: { plano: string; limite_diario: number; periodo?: Periodo }[] | null,
+): Record<IdPlano, LimitePlano> {
   const limites = { ...LIMITES_RESERVA };
-  for (const { plano, limite_diario } of lista ?? []) {
-    if (eIdPlano(plano)) limites[plano] = limite_diario;
+  for (const { plano, limite_diario, periodo } of lista ?? []) {
+    if (eIdPlano(plano)) limites[plano] = { limite: limite_diario, periodo: periodo === "mes" ? "mes" : "dia" };
   }
   return limites;
 }

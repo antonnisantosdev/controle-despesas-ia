@@ -4,8 +4,22 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import AvisoLimite from "@/components/AvisoLimite";
-import { apagarToken, eLimiteDiario, enviarFicheiro, ErroApi, pedirApi, SessaoExpirada, type Compra, type Talao } from "@/lib/api";
+import AvisoPlanoPago from "@/components/AvisoPlanoPago";
+import {
+  apagarToken,
+  eLimiteDiario,
+  enviarFicheiro,
+  ErroApi,
+  eSoPlanosPagos,
+  pedirApi,
+  pedirEstadoPlano,
+  SessaoExpirada,
+  type Compra,
+  type Talao,
+} from "@/lib/api";
 import { reduzirImagem } from "@/lib/imagem";
+import { temFuncoesPagas } from "@/lib/planos";
+import { TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
 
 import { euros } from "../dashboard/formatos";
 import RevisaoTalao from "./RevisaoTalao";
@@ -23,7 +37,11 @@ export default function PaginaCompras() {
   const [aLer, setALer] = useState(false);
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
-  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite diário de pedidos à IA
+  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite de pedidos à IA
+  // Ler talões é só dos planos pagos: no Free fica a mensagem do aviso e o botão desaparece.
+  const [soPlanosPagos, setSoPlanosPagos] = useState<string | null>(null);
+  // O botão só aparece depois de o /plano responder (ou falhar): assim o Free não o vê piscar.
+  const [planoVerificado, setPlanoVerificado] = useState(false);
 
   function tratarSessao(e: unknown) {
     if (e instanceof SessaoExpirada) {
@@ -40,6 +58,14 @@ export default function PaginaCompras() {
         if (e instanceof SessaoExpirada) tratarSessao(e);
         else setErro("Não foi possível carregar as compras. Confirma que a API está a correr.");
       });
+    // Avisa logo no Free, sem esperar que a leitura falhe. Se o /plano falhar, o botão fica:
+    // a API responde 402 na mesma, e o aviso aparece nessa altura.
+    pedirEstadoPlano()
+      .then((estado) => {
+        if (!temFuncoesPagas(estado.plano)) setSoPlanosPagos(TEXTOS_PLANO_PAGO.talao);
+      })
+      .catch(() => {}) // a sessão expirada já é tratada pelo pedido das compras
+      .finally(() => setPlanoVerificado(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -55,6 +81,7 @@ export default function PaginaCompras() {
     } catch (e) {
       if (e instanceof SessaoExpirada) tratarSessao(e);
       else if (eLimiteDiario(e)) setSemPedidos(true);
+      else if (eSoPlanosPagos(e)) setSoPlanosPagos(typeof e.detalhe === "string" ? e.detalhe : TEXTOS_PLANO_PAGO.talao);
       // 413/415/422 (foto inválida) e 503 (IA em baixo) trazem uma explicação da API.
       else if (e instanceof ErroApi && typeof e.detalhe === "string") setErro(e.detalhe);
       else setErro("Não foi possível ler a fotografia. Tenta outra vez.");
@@ -91,18 +118,21 @@ export default function PaginaCompras() {
               if (ficheiro) lerFoto(ficheiro);
             }}
           />
-          <button
-            type="button"
-            disabled={aLer}
-            onClick={() => entradaFoto.current?.click()}
-            className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
-          >
-            {aLer ? "A IA está a ler o talão..." : "📷 Fotografar talão"}
-          </button>
+          {planoVerificado && !soPlanosPagos && (
+            <button
+              type="button"
+              disabled={aLer}
+              onClick={() => entradaFoto.current?.click()}
+              className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
+            >
+              {aLer ? "A IA está a ler o talão..." : "📷 Fotografar talão"}
+            </button>
+          )}
         </header>
 
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
         {semPedidos && <AvisoLimite />}
+        {soPlanosPagos && <AvisoPlanoPago mensagem={soPlanosPagos} />}
         {aviso && (
           <p className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
             {aviso}
@@ -116,7 +146,9 @@ export default function PaginaCompras() {
         <section className="divide-y divide-borda rounded-xl border border-borda bg-cartao">
           {compras === null && !erro && <p className="p-6 text-sm text-texto-suave">A carregar...</p>}
           {compras?.length === 0 && (
-            <p className="p-6 text-sm text-texto-suave">Ainda não tens compras. Fotografa um talão para começar.</p>
+            <p className="p-6 text-sm text-texto-suave">
+              {soPlanosPagos ? "Ainda não tens compras." : "Ainda não tens compras. Fotografa um talão para começar."}
+            </p>
           )}
           {compras?.map((compra) => (
             // <details>: abre e fecha sozinho ao clicar no <summary>, sem precisar de estado em React.

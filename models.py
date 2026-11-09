@@ -88,6 +88,8 @@ class ResultadoImportacao(BaseModel):
     importadas: int
     duplicadas: int
     transacoes: list[Transacao]
+    # Texto para mostrar ao utilizador (ex.: importou sem categorias porque acabaram os pedidos à IA).
+    aviso: str | None = None
 
 
 # Uma fatia do gráfico do dashboard: quanto se gastou numa categoria.
@@ -174,12 +176,21 @@ class Talao(BaseModel):
     categoria: Categoria
 
 
+# Um produto enviado pelo utilizador no POST /compras. Com tetos: a rota é pública para
+# qualquer conta e, sem eles, um só pedido podia gravar milhares de linhas de texto livre.
+class ItemCompra(BaseModel):
+    descricao: str = Field(min_length=1, max_length=200)
+    quantidade: float = Field(gt=0)
+    preco: float = Field(ge=0)
+
+
 # Corpo do POST /compras: o talão depois de o utilizador o rever no ecrã.
 # Mais rigoroso do que o Talao: aqui a data e o método de pagamento são obrigatórios.
 class NovaCompra(BaseModel):
     loja: str = Field(min_length=1, max_length=200)
     data: date
-    itens: list[ItemTalao] = Field(min_length=1)
+    # Um talão de supermercado grande tem umas dezenas de linhas; 200 dá folga.
+    itens: list[ItemCompra] = Field(min_length=1, max_length=200)
     total: float = Field(gt=0)
     categoria: Categoria
     metodo_pagamento: MetodoPagamento
@@ -238,15 +249,22 @@ class AnoSimulado(BaseModel):
 class EstadoPlano(BaseModel):
     plano: str | None
     limite: int
+    # "dia" nos planos pagos, "mes" no Free: o período em que se contam os pedidos.
+    periodo: Literal["dia", "mes"]
+    # Pedidos à IA já feitos no período.
+    usadas: int
+    # O mesmo número que usadas. Nome antigo, mantido para o frontend antigo não partir durante o deploy.
     usadas_hoje: int
     # Último dia de acesso dos planos pagos; None no Free (não acaba).
     ativo_ate: date | None
 
 
-# Um plano à venda e o seu limite diário de perguntas à IA (GET /planos, público).
+# Um plano à venda e o seu limite de pedidos à IA (GET /planos, público).
 class PlanoDisponivel(BaseModel):
     plano: str
+    # Pedidos à IA no período (o nome ficou de quando todos os planos contavam por dia).
     limite_diario: int
+    periodo: Literal["dia", "mes"]
 
 
 # Registo público (POST /registo). O EmailStr recusa emails mal escritos antes de chegarem ao Supabase.

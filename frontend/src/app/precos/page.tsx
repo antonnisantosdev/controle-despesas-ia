@@ -7,7 +7,16 @@ import AvisoServidor from "@/components/AvisoServidor";
 import BotaoPedirAcesso from "@/components/BotaoPedirAcesso";
 import Logo from "@/components/Logo";
 import { emailDaSessao, sessaoPublica, type EstadoPlano } from "@/lib/api";
-import { CONTACTOS, formatarEuros, ORDEM_PLANOS, PRECOS, preencher, type IdPlano } from "@/lib/planos";
+import {
+  CONTACTOS,
+  formatarEuros,
+  ORDEM_PLANOS,
+  PRECOS,
+  preencher,
+  textoDosPedidos,
+  type IdPlano,
+  type LimitePlano,
+} from "@/lib/planos";
 import { TEXTOS_CARTOES, TEXTOS_MEU_PLANO, TEXTOS_PRECOS } from "@/lib/textosPlanos";
 import { useLimitesPlanos } from "@/lib/useLimitesPlanos";
 
@@ -158,7 +167,7 @@ export default function PaginaPrecos() {
 
 type PropsCartao = {
   id: IdPlano;
-  limite: number;
+  limite: LimitePlano; // pedidos à IA e período (o Free conta por mês)
   atual: boolean; // é o plano de quem tem sessão
   temConta: boolean; // login válido (mesmo com o plano terminado)
   emailConta: string | null;
@@ -166,7 +175,7 @@ type PropsCartao = {
 
 function CartaoDePreco({ id, limite, atual, temConta, emailConta }: PropsCartao) {
   const textos = TEXTOS_CARTOES[id];
-  const pontos = [preencher(TEXTOS_PRECOS.pedidosPorDia, { limite }), ...textos.pontos];
+  const pontos = [textoDosPedidos(limite), ...textos.pontos];
 
   // A partir do ecrã médio, cada cartão ocupa 4 linhas da grelha da secção (subgrid): nome e frase, preço,
   // pontos e botão. As linhas são partilhadas pelos três cartões, por isso o preço fica à mesma altura
@@ -201,7 +210,9 @@ function CartaoDePreco({ id, limite, atual, temConta, emailConta }: PropsCartao)
         ))}
       </ul>
 
-      <div className="mt-auto pt-2">
+      {/* md:mt-0: na grelha, o mt-auto empurrava o botão do Free para o fundo da linha (os pagos têm mais
+          uma linha por baixo do botão), e ficava mais abaixo do que os "Pedir acesso". */}
+      <div className="mt-auto pt-2 md:mt-0">
         <BotaoDoCartao id={id} atual={atual} temConta={temConta} emailConta={emailConta} />
       </div>
     </article>

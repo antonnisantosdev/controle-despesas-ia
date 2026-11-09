@@ -18,6 +18,19 @@ class PdfIlegivel(Exception):
     """O PDF não se consegue abrir (estragado, ou protegido com palavra-passe)."""
 
 
+class ExtratoGrandeDemais(Exception):
+    """O CSV tem mais movimentos do que MAX_MOVIMENTOS_CSV."""
+
+
+# Movimentos máximos de um CSV. Um ano de um extrato normal tem bem menos; acima disto,
+# o ficheiro é recusado antes de chamar a IA (a categorização vai numa só chamada).
+MAX_MOVIMENTOS_CSV = 2000
+
+# Caracteres máximos da descrição de cada movimento (o mesmo teto da movimentação feita à mão).
+# Uma descrição enorme só serviria para encher o prompt da IA e a base de dados.
+MAX_CARACTERES_DESCRICAO = 200
+
+
 # Teto de entradas na árvore de páginas ao contar. Um PDF feito de propósito com dezenas de milhares
 # de páginas vazias cabe em poucos MB e faria o servidor gastar segundos de CPU e centenas de MB a contá-las.
 MAX_ENTRADAS_ARVORE_PDF = 200
@@ -48,11 +61,17 @@ def calcular_hash(linha: dict) -> str:
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()
 
 
+def cortar_descricao(descricao: str) -> str:
+    """Tira os espaços das pontas e corta a descrição a MAX_CARACTERES_DESCRICAO."""
+    return descricao.strip()[:MAX_CARACTERES_DESCRICAO]
+
+
 def converter_linha(linha: dict) -> TransacaoImportada:
+    # O hash usa a descrição original: o mesmo movimento importado antes deste corte continua a ser duplicado.
     return TransacaoImportada(
         data=datetime.strptime(linha["Data"], "%d-%m-%Y").date(),
         valor=float(linha["Montante"].replace(".", "").replace(",", ".")),
-        descricao=linha["Descrição"].strip(),
+        descricao=cortar_descricao(linha["Descrição"]),
         hash_importacao=calcular_hash(linha),
     )
 
@@ -64,6 +83,9 @@ def ler_extrato(conteudo: str) -> list[TransacaoImportada]:
 
     # A linha 1 do ficheiro é o cabeçalho, por isso os dados começam na linha 2.
     for numero, linha in enumerate(leitor, start=2):
+        # Para logo de ler: um ficheiro grande demais não chega a ser todo convertido.
+        if numero - 1 > MAX_MOVIMENTOS_CSV:
+            raise ExtratoGrandeDemais()
         try:
             transacao = converter_linha(linha)
             transacoes.append(transacao)
@@ -91,7 +113,7 @@ def transacoes_do_pdf(extrato: ExtratoPdf) -> list[TransacaoImportada]:
             TransacaoImportada(
                 data=movimento.data,
                 valor=movimento.valor,
-                descricao=movimento.descricao.strip(),
+                descricao=cortar_descricao(movimento.descricao),
                 hash_importacao=calcular_hash(linha),
             )
         )

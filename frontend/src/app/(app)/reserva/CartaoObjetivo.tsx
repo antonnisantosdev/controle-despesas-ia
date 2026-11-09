@@ -33,7 +33,7 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
   const [aPlanear, setAPlanear] = useState(false);
   const [aConfirmar, setAConfirmar] = useState(false); // a pergunta "Apagar?" está visível
   const [erro, setErro] = useState("");
-  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite diário de pedidos à IA
+  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite de pedidos à IA
 
   const percentagem = percentagemPoupada(objetivo.valor_poupado, objetivo.valor_alvo);
 

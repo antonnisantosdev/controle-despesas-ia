@@ -14,7 +14,7 @@ export default function Chat() {
   const [pergunta, setPergunta] = useState("");
   const [aPensar, setAPensar] = useState(false);
   const [erro, setErro] = useState("");
-  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite diário
+  const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite de pedidos à IA
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();

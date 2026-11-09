@@ -15,3 +15,6 @@ anthropic==2.3.0
 
 # Contar as páginas de um extrato em PDF antes de o enviar à IA
 pypdf==7.0.0
+
+# Fusos horários (hora de Lisboa) no Windows; no Linux já vêm com o sistema
+tzdata==2026.6

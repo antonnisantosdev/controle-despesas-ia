@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 import { corDaBarra } from "@/app/(app)/CartaoPlano";
 import BotaoPedirAcesso from "@/components/BotaoPedirAcesso";
-import { apagarToken, emailDaSessao, pedirApi, SessaoExpirada, type EstadoPlano } from "@/lib/api";
+import { apagarToken, emailDaSessao, pedirEstadoPlano, SessaoExpirada, type EstadoPlano } from "@/lib/api";
 import {
   dataPorExtenso,
   deveAvisarRenovar,
@@ -15,11 +15,13 @@ import {
   nomeDoPlano,
   planosSuperiores,
   preencher,
+  temFuncoesPagas,
+  textoDosPedidos,
 } from "@/lib/planos";
 import { useLimitesPlanos } from "@/lib/useLimitesPlanos";
-import { TEXTOS_CARTOES, TEXTOS_EXPIRADA, TEXTOS_MEU_PLANO, TEXTOS_PRECOS } from "@/lib/textosPlanos";
+import { TEXTOS_CARTOES, TEXTOS_EXPIRADA, TEXTOS_MEU_PLANO } from "@/lib/textosPlanos";
 
-// "O meu plano": o plano atual, os pedidos à IA de hoje, até quando dura e como mudar ou renovar.
+// "O meu plano": o plano atual, os pedidos à IA do período, até quando dura e como mudar ou renovar.
 export default function PaginaPlano() {
   const router = useRouter();
   const [estado, setEstado] = useState<EstadoPlano | null>(null);
@@ -27,7 +29,7 @@ export default function PaginaPlano() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    pedirApi<EstadoPlano>("/plano")
+    pedirEstadoPlano()
       .then((resposta) => {
         setEstado(resposta);
         setEmailConta(emailDaSessao()); // vai na mensagem do pedido, para sabermos que conta ativar
@@ -71,7 +73,9 @@ export default function PaginaPlano() {
 
 function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta: string | null }) {
   const nome = nomeDoPlano(estado.plano) ?? TEXTOS_MEU_PLANO.nomeSemPlano;
-  const usadas = Math.min(estado.usadas_hoje, estado.limite);
+  const usadas = Math.min(estado.usadas, estado.limite);
+  // O Free conta os pedidos por mês; os pagos, por dia.
+  const doMes = estado.periodo === "mes";
   const plano = eIdPlano(estado.plano) ? estado.plano : null;
   const avisar = plano !== null && plano !== "free" && deveAvisarRenovar(estado.ativo_ate);
   const superiores = planosSuperiores(estado.plano);
@@ -85,10 +89,13 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
           <p className="text-xs font-semibold uppercase tracking-wide text-destaque-hover">{TEXTOS_MEU_PLANO.planoAtual}</p>
           <p className="text-3xl font-bold tracking-tight text-texto">{nome}</p>
         </div>
-        {/* Os pedidos de hoje são o número mais importante do ecrã: texto forte e barra de progresso. */}
+        {/* Os pedidos do período são o número mais importante do ecrã: texto forte e barra de progresso. */}
         <div className="space-y-2">
           <p id="pedidos-hoje" className="text-base font-semibold text-texto">
-            {preencher(TEXTOS_MEU_PLANO.pedidosHoje, { usadas, limite: estado.limite })}
+            {preencher(doMes ? TEXTOS_MEU_PLANO.pedidosMes : TEXTOS_MEU_PLANO.pedidosHoje, {
+              usadas,
+              limite: estado.limite,
+            })}
           </p>
           <div
             className="h-2 overflow-hidden rounded-full bg-fundo"
@@ -100,7 +107,7 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
           >
             <div className={`h-full rounded-full ${corDaBarra(usadas, estado.limite)}`} style={{ width: `${percentagem}%` }} />
           </div>
-          <p className="text-sm text-texto-suave">{TEXTOS_MEU_PLANO.reinicia}</p>
+          <p className="text-sm text-texto-suave">{doMes ? TEXTOS_MEU_PLANO.reiniciaMes : TEXTOS_MEU_PLANO.reinicia}</p>
         </div>
         <div className="space-y-1 border-t border-borda pt-4 text-sm">
           <p className="text-texto">
@@ -108,7 +115,9 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
               ? preencher(TEXTOS_MEU_PLANO.ativoAte, { data: dataPorExtenso(estado.ativo_ate) })
               : TEXTOS_MEU_PLANO.semDataFim}
           </p>
-          <p className="text-texto-suave">{TEXTOS_MEU_PLANO.todasFuncionalidades}</p>
+          <p className="text-texto-suave">
+            {temFuncoesPagas(estado.plano) ? TEXTOS_MEU_PLANO.todasFuncionalidades : TEXTOS_MEU_PLANO.semFuncoesPagas}
+          </p>
         </div>
       </section>
 
@@ -136,9 +145,13 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
                     <p className="text-lg font-semibold text-texto">{NOMES_PLANOS[id]}</p>
                     <p className="text-sm text-texto-suave">{TEXTOS_CARTOES[id].frase}</p>
                   </div>
-                  <p className="text-sm font-semibold text-texto">
-                    {preencher(TEXTOS_PRECOS.pedidosPorDia, { limite: limites[id] })}
-                  </p>
+                  <p className="text-sm font-semibold text-texto">{textoDosPedidos(limites[id])}</p>
+                  {/* O que o plano traz além dos pedidos (PDF e talões, para quem vem do Free). */}
+                  <ul className="space-y-1 text-sm text-texto-suave">
+                    {TEXTOS_CARTOES[id].pontos.map((ponto) => (
+                      <li key={ponto}>{ponto}</li>
+                    ))}
+                  </ul>
                   <div className="mt-auto pt-1">
                     <BotaoPedirAcesso pedido={{ plano: id, renovar: false, emailConta }} rotulo={TEXTOS_CARTOES[id].botao} />
                   </div>

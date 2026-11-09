@@ -2,17 +2,34 @@
 
 import { useRef, useState } from "react";
 
-import { eLimiteDiario, enviarFicheiro, ErroApi, SessaoExpirada, type ResultadoImportacao } from "@/lib/api";
+import {
+  eLimiteDiario,
+  enviarFicheiro,
+  ErroApi,
+  eSoPlanosPagos,
+  SessaoExpirada,
+  type ResultadoImportacao,
+} from "@/lib/api";
+import { TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
 
 type Props = {
   onImportado: (resultado: ResultadoImportacao) => void;
   onErro: (mensagem: string, erros: string[]) => void;
   onSessaoExpirada: (e: unknown) => void;
   onLimiteDiario: () => void; // 429: a página mostra o AvisoLimite
+  onSoPlanosPagos: (mensagem: string) => void; // 402 (PDF no Free): a página mostra o AvisoPlanoPago
+  soCsv: boolean; // Free: a janela de escolha só mostra CSV (a API responde 402 ao PDF na mesma)
 };
 
 // Botão que abre a janela "Escolher ficheiro" e envia o CSV ou o PDF para POST /transacoes/importar.
-export default function BotaoImportar({ onImportado, onErro, onSessaoExpirada, onLimiteDiario }: Props) {
+export default function BotaoImportar({
+  onImportado,
+  onErro,
+  onSessaoExpirada,
+  onLimiteDiario,
+  onSoPlanosPagos,
+  soCsv,
+}: Props) {
   // useRef: uma ligação direta ao <input type="file"> escondido, para o "clicar" a partir do botão.
   const entradaFicheiro = useRef<HTMLInputElement>(null);
   const [aImportar, setAImportar] = useState(false);
@@ -29,6 +46,10 @@ export default function BotaoImportar({ onImportado, onErro, onSessaoExpirada, o
       }
       if (eLimiteDiario(e)) {
         onLimiteDiario();
+        return;
+      }
+      if (eSoPlanosPagos(e)) {
+        onSoPlanosPagos(typeof e.detalhe === "string" ? e.detalhe : TEXTOS_PLANO_PAGO.pdf);
         return;
       }
       // O "detail" do FastAPI chega em duas formas: um texto simples, ou o objeto
@@ -53,7 +74,7 @@ export default function BotaoImportar({ onImportado, onErro, onSessaoExpirada, o
       <input
         ref={entradaFicheiro}
         type="file"
-        accept=".csv,text/csv,.pdf,application/pdf"
+        accept={soCsv ? ".csv,text/csv" : ".csv,text/csv,.pdf,application/pdf"}
         className="hidden"
         onChange={(e) => {
           const ficheiro = e.target.files?.[0];
