@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 
 import limites
 import main
@@ -34,23 +35,46 @@ def test_plano_desconhecido_nao_deixa_usar_a_ia(plano):
 
 
 class UsoIaFalso:
-    """Imita a tabela uso_ia: guarda a hora (UTC) de cada pedido e conta os que são >= ao filtro gte."""
+    """Imita a tabela uso_ia: guarda a hora (UTC) de cada pedido e conta os que são >= ao filtro gte.
 
-    def __init__(self, pedidos: list[datetime]):
+    com_funcao=True imita o Supabase com a migração 015 (função registar_pedido_ia);
+    com_funcao=False imita o Supabase antes dela: o rpc falha como o PostgREST quando a função não existe.
+    """
+
+    def __init__(self, pedidos: list[datetime], com_funcao: bool = True):
         self.pedidos = list(pedidos)
+        self.com_funcao = com_funcao
         self.inseridas = 0
+        self.inseridas_na_tabela = 0  # pelo caminho antigo (insert direto)
+        self.chamadas_rpc: list[tuple[str, dict]] = []
+        self.contagens_a_parte = 0  # SELECT COUNT feitos pelo caminho antigo
         self.desde: datetime | None = None
         self.count = 0
+        self.data = None
 
     def table(self, nome):
         return self
 
     def gte(self, campo, valor):
+        self.contagens_a_parte += 1
         self.desde = datetime.fromisoformat(valor)
         return self
 
     def insert(self, dados):
         self.inseridas += 1
+        self.inseridas_na_tabela += 1
+        return self
+
+    def rpc(self, nome, parametros):
+        self.chamadas_rpc.append((nome, parametros))
+        if not self.com_funcao:
+            raise APIError({"code": "PGRST202", "message": f"Could not find the function public.{nome}"})
+        # O mesmo que a função SQL: conta desde p_desde e só regista se estiver abaixo do limite.
+        self.desde = datetime.fromisoformat(parametros["p_desde"])
+        pedidos = sum(1 for pedido in self.pedidos if pedido >= self.desde)
+        self.data = pedidos < parametros["p_limite"]
+        if self.data:
+            self.inseridas += 1
         return self
 
     def __getattr__(self, nome):
@@ -62,22 +86,30 @@ class UsoIaFalso:
         return self
 
 
-def preparar(monkeypatch, plano, pedidos, agora):
-    """Fixa o plano, os pedidos já feitos e a hora atual (UTC)."""
-    uso = UsoIaFalso(pedidos)
-    monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: plano)
-    monkeypatch.setattr(limites, "supabase", uso)
-    monkeypatch.setattr(limites, "agora_utc", lambda: agora)
-    return uso
+@pytest.fixture(params=[True, False], ids=["com_funcao_015", "sem_funcao_015"])
+def preparar(request, monkeypatch):
+    """Fixa o plano, os pedidos já feitos e a hora atual (UTC).
+
+    Cada teste que a usa corre duas vezes: com a função da migração 015 e sem ela (caminho antigo).
+    """
+
+    def _preparar(plano, pedidos, agora):
+        uso = UsoIaFalso(pedidos, com_funcao=request.param)
+        monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: plano)
+        monkeypatch.setattr(limites, "supabase", uso)
+        monkeypatch.setattr(limites, "agora_utc", lambda: agora)
+        return uso
+
+    return _preparar
 
 
 AGORA = datetime(2026, 11, 20, 15, 0, tzinfo=UTC)  # inverno: Lisboa = UTC
 
 
-def test_o_free_conta_os_pedidos_do_mes_inteiro_e_bloqueia_o_31(monkeypatch):
+def test_o_free_conta_os_pedidos_do_mes_inteiro_e_bloqueia_o_31(preparar):
     # 30 pedidos espalhados por novembro, nenhum hoje: o limite do Free é do mês, não do dia.
     pedidos = [datetime(2026, 11, 1 + i % 19, 10, 0, tzinfo=UTC) for i in range(30)]
-    uso = preparar(monkeypatch, "free", pedidos, AGORA)
+    uso = preparar("free", pedidos, AGORA)
 
     with pytest.raises(HTTPException) as erro:
         limites.registar_pergunta("utilizador-teste")
@@ -88,23 +120,23 @@ def test_o_free_conta_os_pedidos_do_mes_inteiro_e_bloqueia_o_31(monkeypatch):
     assert uso.inseridas == 0
 
 
-def test_o_free_ainda_faz_o_30_pedido(monkeypatch):
-    uso = preparar(monkeypatch, "free", [datetime(2026, 11, 2, 10, 0, tzinfo=UTC)] * 29, AGORA)
+def test_o_free_ainda_faz_o_30_pedido(preparar):
+    uso = preparar("free", [datetime(2026, 11, 2, 10, 0, tzinfo=UTC)] * 29, AGORA)
 
     limites.registar_pergunta("utilizador-teste")
     assert uso.inseridas == 1
 
 
-def test_os_pedidos_do_mes_passado_nao_contam_no_free(monkeypatch):
-    uso = preparar(monkeypatch, "free", [datetime(2026, 10, 31, 10, 0, tzinfo=UTC)] * 30, AGORA)
+def test_os_pedidos_do_mes_passado_nao_contam_no_free(preparar):
+    uso = preparar("free", [datetime(2026, 10, 31, 10, 0, tzinfo=UTC)] * 30, AGORA)
 
     limites.registar_pergunta("utilizador-teste")
     assert uso.inseridas == 1
 
 
 @pytest.mark.parametrize(("plano", "limite"), [("essencial", 20), ("completo", 50)])
-def test_os_pagos_bloqueiam_quando_acabam_os_pedidos_de_hoje(monkeypatch, plano, limite):
-    preparar(monkeypatch, plano, [datetime(2026, 11, 20, 9, 0, tzinfo=UTC)] * limite, AGORA)
+def test_os_pagos_bloqueiam_quando_acabam_os_pedidos_de_hoje(preparar, plano, limite):
+    preparar(plano, [datetime(2026, 11, 20, 9, 0, tzinfo=UTC)] * limite, AGORA)
 
     with pytest.raises(HTTPException) as erro:
         limites.registar_pergunta("utilizador-teste")
@@ -116,40 +148,143 @@ def test_os_pagos_bloqueiam_quando_acabam_os_pedidos_de_hoje(monkeypatch, plano,
 
 
 @pytest.mark.parametrize(("plano", "limite"), [("essencial", 20), ("completo", 50)])
-def test_os_pedidos_de_ontem_nao_contam_nos_pagos(monkeypatch, plano, limite):
-    uso = preparar(monkeypatch, plano, [datetime(2026, 11, 19, 23, 0, tzinfo=UTC)] * limite, AGORA)
+def test_os_pedidos_de_ontem_nao_contam_nos_pagos(preparar, plano, limite):
+    uso = preparar(plano, [datetime(2026, 11, 19, 23, 0, tzinfo=UTC)] * limite, AGORA)
 
     limites.registar_pergunta("utilizador-teste")
     assert uso.inseridas == 1
 
 
-def test_o_dia_vira_a_meia_noite_de_lisboa_no_verao(monkeypatch):
+def test_o_dia_vira_a_meia_noite_de_lisboa_no_verao(preparar):
     # 23:30 UTC de 15 de julho já é 00:30 de 16 em Lisboa (UTC+1): os pedidos das 22:30 UTC
     # (23:30 de 15 em Lisboa) são de ontem e já não contam.
     agora = datetime(2026, 7, 15, 23, 30, tzinfo=UTC)
-    uso = preparar(monkeypatch, "essencial", [datetime(2026, 7, 15, 22, 30, tzinfo=UTC)] * 20, agora)
+    uso = preparar("essencial", [datetime(2026, 7, 15, 22, 30, tzinfo=UTC)] * 20, agora)
 
     limites.registar_pergunta("utilizador-teste")
     assert uso.inseridas == 1
     assert uso.desde == datetime(2026, 7, 15, 23, 0, tzinfo=UTC)
 
 
-def test_no_verao_um_pedido_depois_da_meia_noite_de_lisboa_conta_para_hoje(monkeypatch):
+def test_no_verao_um_pedido_depois_da_meia_noite_de_lisboa_conta_para_hoje(preparar):
     agora = datetime(2026, 7, 15, 23, 30, tzinfo=UTC)
-    preparar(monkeypatch, "essencial", [datetime(2026, 7, 15, 23, 5, tzinfo=UTC)] * 20, agora)
+    preparar("essencial", [datetime(2026, 7, 15, 23, 5, tzinfo=UTC)] * 20, agora)
 
     with pytest.raises(HTTPException):
         limites.registar_pergunta("utilizador-teste")
 
 
-def test_o_mes_vira_no_dia_1_de_lisboa(monkeypatch):
+def test_o_mes_vira_no_dia_1_de_lisboa(preparar):
     # 23:30 UTC de 31 de julho já é 1 de agosto em Lisboa: os 30 pedidos de julho deixam de contar.
     agora = datetime(2026, 7, 31, 23, 30, tzinfo=UTC)
-    uso = preparar(monkeypatch, "free", [datetime(2026, 7, 31, 22, 0, tzinfo=UTC)] * 30, agora)
+    uso = preparar("free", [datetime(2026, 7, 31, 22, 0, tzinfo=UTC)] * 30, agora)
 
     limites.registar_pergunta("utilizador-teste")
     assert uso.inseridas == 1
     assert uso.desde == datetime(2026, 7, 31, 23, 0, tzinfo=UTC)
+
+
+# --- Função registar_pedido_ia (migração 015) e caminho antigo ---
+
+
+def preparar_uso(monkeypatch, uso, plano="essencial"):
+    monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: plano)
+    monkeypatch.setattr(limites, "supabase", uso)
+    monkeypatch.setattr(limites, "agora_utc", lambda: AGORA)
+    return uso
+
+
+def test_com_a_funcao_conta_e_regista_numa_so_chamada_a_base_de_dados(monkeypatch):
+    uso = preparar_uso(monkeypatch, UsoIaFalso([], com_funcao=True))
+
+    limites.registar_pergunta("utilizador-teste")
+
+    # Um só pedido ao Supabase, com o utilizador, o início do dia de Lisboa e o limite do plano.
+    assert uso.chamadas_rpc == [
+        (
+            "registar_pedido_ia",
+            {"p_user_id": "utilizador-teste", "p_desde": "2026-11-20T00:00:00+00:00", "p_limite": 20},
+        )
+    ]
+    assert uso.inseridas == 1
+    assert uso.inseridas_na_tabela == 0
+
+
+def test_com_a_funcao_no_limite_responde_429_sem_usar_o_caminho_antigo(monkeypatch):
+    uso = preparar_uso(monkeypatch, UsoIaFalso([AGORA] * 20, com_funcao=True))
+
+    with pytest.raises(HTTPException) as erro:
+        limites.registar_pergunta("utilizador-teste")
+
+    assert erro.value.status_code == 429
+    assert uso.inseridas == 0
+    assert uso.contagens_a_parte == 0  # não houve contagem à parte (o caminho antigo)
+
+
+def test_sem_a_funcao_usa_o_caminho_antigo(monkeypatch):
+    # Antes de o CEO correr a 015, o PostgREST responde PGRST202 e a API conta e insere como antes.
+    uso = preparar_uso(monkeypatch, UsoIaFalso([], com_funcao=False))
+
+    limites.registar_pergunta("utilizador-teste")
+
+    assert len(uso.chamadas_rpc) == 1
+    assert uso.inseridas_na_tabela == 1
+
+
+@pytest.mark.parametrize("codigo", ["PGRST202", "42883"])
+def test_os_dois_codigos_de_funcao_em_falta_dao_none(monkeypatch, codigo):
+    class SemFuncao:
+        def rpc(self, nome, parametros):
+            raise APIError({"code": codigo, "message": "a função não existe"})
+
+    monkeypatch.setattr(limites, "supabase", SemFuncao())
+
+    assert limites.registar_pedido_atomico("utilizador-teste", AGORA, 20) is None
+
+
+def test_outros_erros_da_funcao_nao_caem_no_caminho_antigo(monkeypatch):
+    # Ex.: sem permissão (42501). Isto é um erro a sério: não se pode contornar o limite com o caminho antigo.
+    class SemPermissao:
+        def rpc(self, nome, parametros):
+            raise APIError({"code": "42501", "message": "permission denied for function registar_pedido_ia"})
+
+        def table(self, nome):
+            raise AssertionError("não devia usar o caminho antigo")
+
+    monkeypatch.setattr(limites, "supabase", SemPermissao())
+    monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: "essencial")
+
+    with pytest.raises(APIError):
+        limites.registar_pergunta("utilizador-teste")
+
+
+@pytest.mark.parametrize("dados", [None, [], [True], "true"])
+def test_uma_resposta_estranha_da_funcao_conta_como_limite(monkeypatch, dados):
+    # Na dúvida, fecha: só um true verdadeiro deixa gastar créditos da IA.
+    class RespostaEstranha:
+        data = None
+
+        def rpc(self, nome, parametros):
+            return self
+
+        def execute(self):
+            self.data = dados
+            return self
+
+    monkeypatch.setattr(limites, "supabase", RespostaEstranha())
+
+    assert limites.registar_pedido_atomico("utilizador-teste", AGORA, 20) is False
+
+
+def test_plano_desconhecido_com_a_funcao_tambem_da_429(monkeypatch):
+    uso = preparar_uso(monkeypatch, UsoIaFalso([], com_funcao=True), plano=None)
+
+    with pytest.raises(HTTPException) as erro:
+        limites.registar_pergunta("utilizador-teste")
+
+    assert erro.value.status_code == 429
+    assert uso.chamadas_rpc[0][1]["p_limite"] == 0
+    assert uso.inseridas == 0
 
 
 CASOS_INICIO = [

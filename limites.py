@@ -8,6 +8,7 @@ from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
+from postgrest.exceptions import APIError
 
 from database import supabase
 from models import EstadoPlano, PlanoDisponivel
@@ -170,16 +171,53 @@ def mensagem_do_limite(limite: int, periodo: str) -> str:
     )
 
 
+# Códigos de erro do PostgREST quando a função registar_pedido_ia não existe
+# (a migração sql/015_so_a_api_escreve.sql ainda não foi corrida no Supabase).
+FUNCAO_NAO_EXISTE = {"PGRST202", "42883"}
+
+
+def registar_pedido_atomico(user_id: str, desde: datetime, limite: int) -> bool | None:
+    """Conta e regista o pedido de uma só vez, na base de dados (função registar_pedido_ia, sql/015).
+
+    Devolve True se registou, False se o utilizador já estava no limite,
+    e None se a função ainda não existe no Supabase (aí usa-se o caminho antigo).
+    """
+    try:
+        resposta = supabase.rpc(
+            "registar_pedido_ia", {"p_user_id": user_id, "p_desde": desde.isoformat(), "p_limite": limite}
+        ).execute()
+    except APIError as erro:
+        if erro.code in FUNCAO_NAO_EXISTE:
+            return None
+        raise
+    # A função devolve um boolean: o PostgREST responde só "true" ou "false". Qualquer outra coisa conta como não.
+    return resposta.data is True
+
+
+def registar_pedido_em_dois_passos(user_id: str, periodo: str, limite: int) -> bool:
+    """O caminho antigo: conta e depois insere. Pedidos ao mesmo tempo podem passar o limite.
+
+    Só serve enquanto a migração 015 não for corrida; depois pode apagar-se.
+    """
+    if pedidos_no_periodo(user_id, periodo) >= limite:
+        return False
+    supabase.table("uso_ia").insert({"user_id": user_id}).execute()
+    return True
+
+
 def registar_pergunta(user_id: str) -> None:
     """Conta o pedido à IA, ou responde 429 se o utilizador já chegou ao limite do plano no período."""
     plano = plano_do_utilizador(user_id)
     limite, periodo = limite_do_plano(plano), periodo_do_plano(plano)
 
-    if pedidos_no_periodo(user_id, periodo) >= limite:
-        raise HTTPException(status_code=429, detail=mensagem_do_limite(limite, periodo))
+    registado = registar_pedido_atomico(user_id, inicio_do_periodo(periodo, agora_utc()), limite)
+    if registado is None:
+        # Aparece nos logs do Render: se continuar a aparecer depois de correr a 015, algo está mal.
+        print("AVISO: função registar_pedido_ia não encontrada (sql/015); a usar o contador em dois passos.")
+        registado = registar_pedido_em_dois_passos(user_id, periodo, limite)
 
-    # Ainda pode perguntar: este pedido passa a contar para o total do período.
-    supabase.table("uso_ia").insert({"user_id": user_id}).execute()
+    if not registado:
+        raise HTTPException(status_code=429, detail=mensagem_do_limite(limite, periodo))
 
 
 def pode_usar_ia(user_id: str) -> bool:
