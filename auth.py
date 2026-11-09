@@ -1,4 +1,5 @@
 from datetime import date
+from urllib.parse import urlencode
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -26,6 +27,28 @@ def fazer_registo(email: str, password: str) -> None:
     e o gatilho do sql/013_registo_publico.sql dá-lhe logo o plano Free."""
     cliente = create_client(SUPABASE_URL, SUPABASE_KEY)
     cliente.auth.sign_up({"email": email, "password": password})
+
+
+# Página do frontend que recebe o token depois do login com o Google.
+CAMINHO_VOLTA_GOOGLE = "/login/google"
+
+
+def destino_google_valido(destino: str, origens: list[str]) -> bool:
+    """Se o destino é exatamente a página /login/google de uma das origens do frontend.
+
+    Só se aceita a igualdade exata: assim ninguém usa o nosso login para mandar
+    o token do utilizador para outro site (redirecionamento aberto).
+    """
+    return any(destino == origem.strip().rstrip("/") + CAMINHO_VOLTA_GOOGLE for origem in origens if origem.strip())
+
+
+def url_login_google(destino: str) -> str:
+    """O endereço do Supabase que abre o login com o Google e, no fim, volta ao destino.
+
+    O Supabase devolve o token no fragmento do URL (#access_token=...), que só o browser vê.
+    """
+    parametros = urlencode({"provider": "google", "redirect_to": destino})
+    return f"{SUPABASE_URL.rstrip('/')}/auth/v1/authorize?{parametros}"
 
 
 def assinatura_ativa(plano: str | None, ativo_ate: date | None, hoje: date) -> bool:

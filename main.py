@@ -5,7 +5,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import AuthApiError
 
-from auth import fazer_login, fazer_registo, obter_utilizador_atual
+from auth import destino_google_valido, fazer_login, fazer_registo, obter_utilizador_atual, url_login_google
 from compras import gravar_compra, listar_compras
 from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
@@ -76,11 +76,20 @@ from simulador import simular_poupanca
 
 app = FastAPI()
 
+# Os endereços do frontend (FRONTEND_URL); no deploy junta-se o da Vercel, separado por vírgula.
+# Servem para o CORS e para validar o regresso do login com o Google.
+ORIGENS_FRONTEND = [
+    origem.strip().rstrip("/")
+    for origem in os.getenv("FRONTEND_URL", "http://localhost:3000").split(",")
+    # Só origens completas: uma entrada vazia ou "/" não pode virar uma origem aceite.
+    if origem.strip().startswith(("http://", "https://"))
+]
+
 # CORS: diz ao browser que o frontend (noutro endereço) pode chamar esta API.
-# Só os endereços do FRONTEND_URL são aceites; no deploy junta-se o da Vercel, separado por vírgula.
+# Só os endereços do FRONTEND_URL são aceites.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("FRONTEND_URL", "http://localhost:3000").split(","),
+    allow_origins=ORIGENS_FRONTEND,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -104,6 +113,16 @@ def login(credenciais: Credenciais):
             )
         raise HTTPException(status_code=401, detail="Email ou palavra-passe errados")
     return {"access_token": token, "token_type": "bearer"}
+
+
+# Login com o Google (pública): devolve o endereço do Supabase para onde o browser deve ir.
+# O destino tem de ser a página /login/google de um dos endereços do FRONTEND_URL,
+# senão qualquer site podia usar este link para receber o token de quem faz login.
+@app.get("/login/google")
+def login_google(destino: str | None = None):
+    if not destino or not destino_google_valido(destino, ORIGENS_FRONTEND):
+        raise HTTPException(status_code=400, detail="Destino do login inválido")
+    return {"url": url_login_google(destino)}
 
 
 # Registo público: qualquer pessoa cria conta e entra no plano Free (gatilho no Supabase).

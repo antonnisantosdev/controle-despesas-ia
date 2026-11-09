@@ -6,6 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import Logo from "@/components/Logo";
 import AvisoServidor from "@/components/AvisoServidor";
+import BotaoGoogle from "@/components/BotaoGoogle";
 import { API_URL, fetchComTentativas, guardarToken } from "@/lib/api";
 
 export default function PaginaLogin() {
@@ -55,43 +56,47 @@ export default function PaginaLogin() {
 
   return (
     <main className="flex flex-1 items-center justify-center bg-fundo p-4">
-      <form onSubmit={entrar} className="w-full max-w-sm space-y-4 rounded-xl border border-borda bg-cartao p-6">
+      <div className="w-full max-w-sm space-y-4 rounded-xl border border-borda bg-cartao p-6">
         <h1 className="flex justify-center pb-2">
           <Logo altura={48} />
         </h1>
 
-        <label className="block">
-          <span className="text-sm text-texto-suave">Email</span>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto"
-          />
-        </label>
+        <BotaoGoogle />
 
-        <label className="block">
-          <span className="text-sm text-texto-suave">Palavra-passe</span>
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto"
-          />
-        </label>
+        <form onSubmit={entrar} className="space-y-4">
+          <label className="block">
+            <span className="text-sm text-texto-suave">Email</span>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto"
+            />
+          </label>
 
-        {/* Só aparece quando há um erro para mostrar. */}
-        {erro && <p className="text-sm text-red-600 dark:text-red-400">{erro}</p>}
+          <label className="block">
+            <span className="text-sm text-texto-suave">Palavra-passe</span>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto"
+            />
+          </label>
 
-        <button
-          type="submit"
-          disabled={aEntrar}
-          className="w-full rounded-md bg-destaque py-2 font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
-        >
-          {aEntrar ? "A entrar..." : "Entrar"}
-        </button>
+          {/* Só aparece quando há um erro para mostrar. */}
+          {erro && <p className="text-sm text-red-600 dark:text-red-400">{erro}</p>}
+
+          <button
+            type="submit"
+            disabled={aEntrar}
+            className="w-full rounded-md bg-destaque py-2 font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
+          >
+            {aEntrar ? "A entrar..." : "Entrar"}
+          </button>
+        </form>
 
         <p className="text-center text-sm text-texto-suave">
           Ainda não tens conta?{" "}
@@ -107,7 +112,7 @@ export default function PaginaLogin() {
             Ver planos
           </Link>
         </p>
-      </form>
+      </div>
       <AvisoServidor />
     </main>
   );
