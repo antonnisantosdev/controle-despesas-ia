@@ -105,13 +105,13 @@ export const TEXTOS_CARTOES = {
   essencial: {
     nome: "Essencial",
     frase: "Para quem usa a app todas as semanas.",
-    pontos: ["Leitura de talões por fotografia", "Pagamento por MB Way"],
+    pontos: ["Leitura de talões por fotografia", "Resumo anual em CSV", "Pagamento por MB Way"],
     botao: "Pedir acesso",
   },
   completo: {
     nome: "Completo",
     frase: "Para quem usa a IA várias vezes por dia.",
-    pontos: ["Leitura de talões por fotografia", "Pagamento por MB Way"],
+    pontos: ["Leitura de talões por fotografia", "Resumo anual em CSV", "Resumo do ano escrito pela IA", "Pagamento por MB Way"],
     botao: "Pedir acesso",
   },
 };
