@@ -54,7 +54,18 @@ function historicoParaEnviar(mensagens: Mensagem[], maximo: number): MensagemHis
   ]);
 }
 
-const EXEMPLOS = ["Quanto gastei em restaurantes em outubro?", "Em que gastei mais este mês?"];
+const EXEMPLOS = [
+  "Em que gastei mais este mês?",
+  "Quanto transferi para a Rita este mês?",
+  "Quanto gastei em combustível nos últimos 3 meses?",
+];
+
+// "a", "b" ou "c": vírgulas entre os exemplos e "ou" só antes do último.
+function juntarExemplos(exemplos: string[]): string {
+  const comAspas = exemplos.map((e) => `"${e}"`);
+  if (comAspas.length < 2) return comAspas.join("");
+  return `${comAspas.slice(0, -1).join(", ")} ou ${comAspas[comAspas.length - 1]}`;
+}
 
 export default function Chat() {
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -123,7 +134,7 @@ export default function Chat() {
 
       <div className="mb-4 max-h-80 space-y-3 overflow-y-auto">
         {mensagens.length === 0 && (
-          <p className="text-sm text-texto-suave">Experimenta: {EXEMPLOS.map((e) => `"${e}"`).join(" ou ")}</p>
+          <p className="text-sm text-texto-suave">Experimenta: {juntarExemplos(EXEMPLOS)}</p>
         )}
         {mensagens.map((m, i) => (
           <div key={i} className={m.autor === "tu" ? "flex justify-end" : "flex justify-start"}>

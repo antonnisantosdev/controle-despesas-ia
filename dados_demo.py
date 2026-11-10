@@ -46,6 +46,14 @@ OCASIONAIS = [
     (5, 21, "Oficina Auto Rapida", -85.00, "transporte", "transferencia"),
 ]
 
+# Transferências com o nome de uma pessoa, só no mês atual: (dia, descrição, valor, categoria, método).
+# Servem para o chat mostrar a procura por pessoa ("quanto mandei à Rita?"). Entram depois de todas as
+# outras, para não mudar a impressão digital (hash) das que já existiam.
+TRANSFERENCIAS_DO_MES_ATUAL = [
+    (3, "MB WAY para Rita", -25.00, "transferências", "mbway"),
+    (7, "MB WAY de Rita", 12.50, "transferências", "mbway"),
+]
+
 # Talões (Minhas compras): (meses atrás, dia, loja, categoria, método, itens como (descrição, quantidade, preço da linha)).
 # O total do talão é a soma das linhas, como no POST /compras.
 TALOES = [
@@ -114,9 +122,14 @@ def prefixo_hash(hoje: date) -> str:
     return f"demo-{semana_iso(hoje)}-"
 
 
+# Subir quando os dados inventados mudam: a marca muda e a demo volta a ser reposta logo, sem esperar pela
+# semana seguinte. v2 (2026-11-10): transferências da Rita.
+VERSAO_DADOS = 2
+
+
 def hash_da_marca(hoje: date) -> str:
-    """A impressão digital da movimentação que marca a reposição da semana: "demo-2026-W46-marca"."""
-    return prefixo_hash(hoje) + "marca"
+    """A impressão digital da movimentação que marca a reposição da semana: "demo-2026-W46-v2-marca"."""
+    return prefixo_hash(hoje) + f"v{VERSAO_DADOS}-marca"
 
 
 def _linha(dia: date, descricao: str, valor: float, categoria: str, metodo: str, hash_importacao: str) -> dict:
@@ -157,6 +170,8 @@ def transacoes_demo(hoje: date) -> list[dict]:
         for atras, dia, descricao, valor, categoria, metodo in OCASIONAIS:
             if atras == meses_atras:
                 linhas.append((inicio.replace(day=dia), descricao, valor, categoria, metodo))
+    for dia, descricao, valor, categoria, metodo in TRANSFERENCIAS_DO_MES_ATUAL:
+        linhas.append((mes_de(hoje, 0).replace(day=dia), descricao, valor, categoria, metodo))
 
     transacoes = [
         _linha(dia, descricao, valor, categoria, metodo, f"{prefixo}{indice:03d}")

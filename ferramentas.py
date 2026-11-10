@@ -8,16 +8,31 @@ O plano também vem do servidor: é ele que diz até que mês as ferramentas pod
 
 import json
 import re
+from typing import get_args
 
-from consultas import gastos_de_varios_meses, gastos_do_mes
+from consultas import (
+    MAX_AMOSTRA_MOVIMENTOS,
+    gastos_de_varios_meses,
+    gastos_do_mes,
+    movimentos_entre,
+    resumir_movimentos,
+)
 from ia import PedidoInvalido
 from limites import config_ia_do_plano, hoje_em_lisboa, primeiro_mes_visivel
+from models import Categoria
 from objetivos import listar_objetivos
 from orcamento import planeamento_do_mes
 
 # Meses máximos que gastos_de_varios_meses devolve numa chamada: um ano. Mais do que isso
 # enchia o prompt (e o custo) sem ajudar a responder; a IA pode pedir outro intervalo.
 MAX_MESES_POR_CHAMADA = 12
+
+# Limites dos termos de procurar_movimentos: poucos termos curtos chegam (sinónimos de um tema).
+MAX_TERMOS = 5
+MIN_CARACTERES_TERMO = 2
+MAX_CARACTERES_TERMO = 40
+CATEGORIAS = list(get_args(Categoria))
+TIPOS_DE_MOVIMENTO = ["saidas", "entradas", "todos"]
 
 NOMES_DOS_PLANOS = {"free": "Free", "essencial": "Essencial", "completo": "Completo"}
 
@@ -76,6 +91,39 @@ FERRAMENTAS = [
         ),
         "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
     },
+    {
+        "name": "procurar_movimentos",
+        "description": (
+            "Procura movimentos pela descrição (termos) e/ou pela categoria entre mes_inicio e mes_fim "
+            f"(os dois incluídos, no máximo {MAX_MESES_POR_CHAMADA} meses). Basta um dos termos aparecer na "
+            "descrição (sem contar acentos nem maiúsculas); com categoria e termos, têm de coincidir os dois. "
+            "Devolve total_saidas e total_entradas em euros, n_movimentos, uma amostra dos "
+            f"{MAX_AMOSTRA_MOVIMENTOS} de maior valor e quantos ficaram de fora (restantes). "
+            "Usa para perguntas sobre um tema, uma loja ou uma pessoa "
+            "(por exemplo carros, Netflix, transferências para a Rita)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "mes_inicio": _PROPRIEDADE_MES,
+                "mes_fim": _PROPRIEDADE_MES,
+                "termos": {
+                    "type": "array",
+                    "items": {"type": "string", "minLength": MIN_CARACTERES_TERMO, "maxLength": MAX_CARACTERES_TERMO},
+                    "maxItems": MAX_TERMOS,
+                    "description": "Palavras a procurar na descrição, por exemplo [\"gasolina\", \"portagens\"].",
+                },
+                "categoria": {"type": "string", "enum": CATEGORIAS},
+                "tipo": {
+                    "type": "string",
+                    "enum": TIPOS_DE_MOVIMENTO,
+                    "description": "saidas (gastos), entradas (dinheiro recebido) ou todos. Por omissão, todos.",
+                },
+            },
+            "required": ["mes_inicio", "mes_fim"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 _FORMATO_MES = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
@@ -111,11 +159,15 @@ def _gastos_por_categoria(user_id: str, mes: str) -> list[dict]:
     return [gasto.model_dump() for gasto in gastos_do_mes(user_id, mes)]
 
 
-def _gastos_de_varios_meses(user_id: str, plano: str | None, primeiro: str | None, inicio: str, fim: str) -> dict:
+def _meses_no_historico(plano: str | None, primeiro: str | None, inicio: str, fim: str) -> tuple[list[str], dict]:
+    """Os meses do intervalo que o plano vê e o início da resposta (com aviso, se o intervalo foi cortado).
+
+    Se o plano não vê nenhum dos meses, a lista vem vazia e a resposta é a de fora do histórico.
+    """
     if inicio > fim:
         raise PedidoInvalido("mes_inicio tem de ser igual ou anterior a mes_fim.")
     if primeiro and fim < primeiro:
-        return _fora_do_historico(plano, primeiro)
+        return [], _fora_do_historico(plano, primeiro)
     resultado: dict = {}
     # Um intervalo que começa antes do que o plano vê é cortado, com um aviso para a IA explicar.
     if primeiro and inicio < primeiro:
@@ -124,9 +176,52 @@ def _gastos_de_varios_meses(user_id: str, plano: str | None, primeiro: str | Non
     meses = meses_entre(inicio, fim)
     if len(meses) > MAX_MESES_POR_CHAMADA:
         raise PedidoInvalido(f"no máximo {MAX_MESES_POR_CHAMADA} meses por chamada; pede um intervalo mais curto.")
+    return meses, resultado
+
+
+def _gastos_de_varios_meses(user_id: str, plano: str | None, primeiro: str | None, inicio: str, fim: str) -> dict:
+    meses, resultado = _meses_no_historico(plano, primeiro, inicio, fim)
+    if not meses:
+        return resultado
     gastos = gastos_de_varios_meses(user_id, meses)
     resultado["meses"] = {mes: [gasto.model_dump() for gasto in lista] for mes, lista in gastos.items()}
     return resultado
+
+
+def _validar_termos(termos: object) -> list[str]:
+    """Os termos de procura (0 a 5, cada um com 2 a 40 caracteres). Senão, um erro para a IA corrigir."""
+    if termos is None:
+        return []
+    if not isinstance(termos, list) or len(termos) > MAX_TERMOS:
+        raise PedidoInvalido(f"termos tem de ser uma lista com no máximo {MAX_TERMOS} palavras.")
+    limpos = []
+    for termo in termos:
+        if not isinstance(termo, str) or not MIN_CARACTERES_TERMO <= len(termo.strip()) <= MAX_CARACTERES_TERMO:
+            raise PedidoInvalido(
+                f"cada termo tem de ter entre {MIN_CARACTERES_TERMO} e {MAX_CARACTERES_TERMO} caracteres."
+            )
+        limpos.append(termo.strip())
+    return limpos
+
+
+def _procurar_movimentos(user_id: str, plano: str | None, primeiro: str | None, argumentos: dict) -> dict:
+    inicio = _validar_mes(argumentos.get("mes_inicio"))
+    fim = _validar_mes(argumentos.get("mes_fim"))
+    termos = _validar_termos(argumentos.get("termos"))
+    categoria = argumentos.get("categoria")
+    if categoria is not None and categoria not in CATEGORIAS:
+        raise PedidoInvalido(f"categoria inválida: {categoria!r}. Usa uma destas: {', '.join(CATEGORIAS)}.")
+    tipo = argumentos.get("tipo") or "todos"
+    if tipo not in TIPOS_DE_MOVIMENTO:
+        raise PedidoInvalido(f"tipo inválido: {tipo!r}. Usa saidas, entradas ou todos.")
+    if not termos and categoria is None:
+        raise PedidoInvalido("indica pelo menos termos ou categoria.")
+
+    meses, resultado = _meses_no_historico(plano, primeiro, inicio, fim)
+    if not meses:
+        return resultado
+    linhas = movimentos_entre(user_id, meses[0], meses[-1], categoria, tipo)
+    return resultado | resumir_movimentos(linhas, termos, categoria, tipo)
 
 
 def executar_ferramenta(nome: str, argumentos: dict, user_id: str, plano: str | None) -> str:
@@ -151,6 +246,8 @@ def executar_ferramenta(nome: str, argumentos: dict, user_id: str, plano: str | 
             resultado = [linha.model_dump() for linha in planeamento_do_mes(user_id, mes)]
     elif nome == "objetivos_de_poupanca":
         resultado = [objetivo.model_dump(mode="json") for objetivo in listar_objetivos(user_id)]
+    elif nome == "procurar_movimentos":
+        resultado = _procurar_movimentos(user_id, plano, primeiro, argumentos)
     else:
         raise PedidoInvalido(f"Ferramenta desconhecida: {nome}")
     return json.dumps(resultado, ensure_ascii=False)

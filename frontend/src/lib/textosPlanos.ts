@@ -30,7 +30,7 @@ export const TEXTOS_PRECOS = {
   funcionalidades: [
     "Categorias feitas pela IA nos extratos importados", // sem repetir o "Importar extratos em CSV" do cartão Free
     "Dashboard com gastos por categoria e evolução mensal",
-    "Chat que responde com os teus números reais",
+    "Chat que responde com os teus números reais e procura movimentos por loja ou pessoa",
     "Resumo do mês com alertas",
     "Planeamento: orçamento por categoria, com sugestão da IA",
     "Minha reserva: objetivos de poupança e simulador de juros compostos",
@@ -64,7 +64,12 @@ export const TEXTOS_PRECOS = {
     {
       pergunta: "E os meus dados?",
       resposta:
-        "Cada conta só vê os seus próprios dados. Para categorizar, ler extratos em PDF e talões e responder no chat, os dados necessários são enviados ao serviço de IA que usamos. A Control Prices não é um banco nem dá conselhos de investimento: o simulador é só uma simulação.",
+        "Cada conta só vê os seus próprios dados. Para categorizar, ler extratos em PDF e talões e responder no chat, enviamos ao serviço de IA que usamos os dados necessários, incluindo as descrições dos movimentos (por exemplo, o nome de uma loja ou de quem recebeu uma transferência). A Control Prices não é um banco nem dá conselhos de investimento: o simulador é só uma simulação.",
+    },
+    {
+      pergunta: "O que posso perguntar ao chat?",
+      resposta:
+        'Perguntas sobre os teus gastos, em linguagem simples: quanto gastaste num mês ou numa categoria, a evolução de mês para mês, o orçamento e os objetivos de poupança. Para procurar uma loja ou uma pessoa, usa a palavra que aparece no extrato (por exemplo, "Quanto transferi para a Rita este mês?"). O chat diz-te o total, quantos movimentos encontrou e quais foram os maiores. Só vê os teus dados, dentro dos meses do teu plano, e não faz pagamentos nem dá conselhos de investimento.',
     },
     // Os números destas duas respostas vêm de ConfigIA em limites.py (memoria_mensagens e meses_historico):
     // se lá mudarem, mudar também aqui.
@@ -76,7 +81,7 @@ export const TEXTOS_PRECOS = {
     {
       pergunta: "Até que mês o chat consegue ver?",
       resposta:
-        "No Free, o chat vê o mês atual e os 2 anteriores. No Essencial, o mês atual e os 11 anteriores. No Completo, todo o histórico que tens na app. Este limite é só para o chat: as tuas movimentações ficam todas guardadas, seja qual for o plano.",
+        "No Free, o chat vê o mês atual e os 2 anteriores. No Essencial, o mês atual e os 11 anteriores. No Completo, todo o histórico que tens na app. Em cada pergunta, o chat procura no máximo 12 meses de cada vez. Este limite é só para o chat: as tuas movimentações ficam todas guardadas, seja qual for o plano.",
     },
   ],
 };

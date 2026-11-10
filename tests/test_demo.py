@@ -691,7 +691,7 @@ def test_reposicao_cria_os_dados_da_demo(base, api):
     transacoes = base.tabelas["transacoes"]
     assert all(linha["hash_importacao"].startswith("demo-2026-W46-") for linha in transacoes)
     # A marca é a última transação gravada.
-    assert transacoes[-1]["hash_importacao"] == "demo-2026-W46-marca"
+    assert transacoes[-1]["hash_importacao"] == "demo-2026-W46-v2-marca"
     assert len(base.tabelas["objetivos"]) == 2
     assert len(base.tabelas["compras"]) >= 1 and base.tabelas["compra_itens"]
     assert base.tabelas["orcamentos"]
@@ -719,6 +719,16 @@ def test_dados_inventados_tem_6_meses_e_pagamentos_que_se_repetem():
         assert compra["total"] == round(sum(item["preco"] for item in compra["itens"]), 2)
     # Os objetivos têm o prazo no futuro.
     assert all(objetivo["data_alvo"] > hoje.isoformat() for objetivo in dados_demo.objetivos_demo(hoje))
+
+
+def test_dados_inventados_tem_transferencias_com_nome_no_mes_atual():
+    # Para o chat mostrar a procura por pessoa ("quanto mandei à Rita?") com a ferramenta procurar_movimentos.
+    hoje = date(2026, 11, 10)
+    rita = [linha for linha in dados_demo.transacoes_demo(hoje) if "Rita" in linha["descricao"]]
+
+    assert {linha["data"][:7] for linha in rita} == {"2026-11"}
+    assert {linha["categoria"] for linha in rita} == {"transferências"}
+    assert any(linha["valor"] < 0 for linha in rita) and any(linha["valor"] > 0 for linha in rita)
 
 
 def test_dados_inventados_atravessam_a_mudanca_de_ano():
@@ -792,7 +802,7 @@ def test_falha_entrega_o_token_sem_marca_e_espera_10_minutos(base, api, monkeypa
     assert resposta.status_code == 200
     assert demo.ler_token_demo(resposta.json()["access_token"], config_valida()) == DEMO_USER_ID
     hashes = [linha["hash_importacao"] for linha in base.tabelas["transacoes"]]
-    assert "demo-2026-W46-marca" not in hashes
+    assert "demo-2026-W46-v2-marca" not in hashes
 
     # Logo a seguir não volta a tentar (nem consulta a base de dados).
     base.falhar_em = None
@@ -804,7 +814,7 @@ def test_falha_entrega_o_token_sem_marca_e_espera_10_minutos(base, api, monkeypa
     # Passados 10 minutos, tenta outra vez e fica com a marca.
     relogio[0] += 600
     api.post("/demo")
-    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W46-marca"
+    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W46-v2-marca"
 
 
 def test_segunda_entrada_da_semana_nao_repoe(base, api, monkeypatch):
@@ -828,7 +838,7 @@ def test_na_semana_seguinte_repoe_outra_vez(base, api, monkeypatch):
 
     api.post("/demo")
 
-    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W47-marca"
+    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W47-v2-marca"
     assert len(base.pedidos_admin) == 2
     # Os dados novos chegam até ao dia da reposição (há uma movimentação no dia 16), nunca depois.
     datas = {linha["data"] for linha in base.tabelas["transacoes"]}
@@ -839,7 +849,7 @@ def test_semana_iso_usa_o_ano_da_semana():
     assert dados_demo.semana_iso(date(2026, 11, 10)) == "2026-W46"
     # 1 de janeiro de 2027 ainda é da semana 53 de 2026.
     assert dados_demo.semana_iso(date(2027, 1, 1)) == "2026-W53"
-    assert dados_demo.hash_da_marca(date(2027, 1, 1)) == "demo-2026-W53-marca"
+    assert dados_demo.hash_da_marca(date(2027, 1, 1)) == "demo-2026-W53-v2-marca"
 
 
 def test_dados_inventados_nao_tem_numeros_de_telefone():
