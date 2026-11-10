@@ -42,7 +42,8 @@ def gravar_compra(user_id: str, nova: NovaCompra) -> Compra:
         supabase.table("transacoes").delete().eq("id", transacao_id).execute()
         raise
 
-    return Compra(**compra, itens=nova.itens)
+    # model_dump: o Pydantic 2 não aceita um ItemCompra onde a Compra espera um ItemTalao (dava 500 depois de gravar).
+    return Compra(**compra, itens=[item.model_dump() for item in nova.itens])
 
 
 def listar_compras(user_id: str) -> list[Compra]:
