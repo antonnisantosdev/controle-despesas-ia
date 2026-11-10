@@ -462,3 +462,9 @@ def test_plano_pago_terminado_com_historico_manda_0_mensagens(cliente, limite, c
     assert resposta.status_code == 200
     assert falso.chamadas[0]["messages"] == [{"role": "user", "content": "E em outubro?"}]
     assert falso.chamadas[0]["max_tokens"] == FREE.max_tokens
+
+
+def test_ultimos_n_meses_incluem_o_mes_atual():
+    # Regra decidida pelo CEO (2026-11-10): "últimos 3 meses" = mês atual + 2 anteriores, como o histórico do Free.
+    assert '"Últimos N meses" inclui sempre o mês atual' in ia.INSTRUCOES_CHAT
+    assert "Não acrescentes meses que não foram pedidos." in ia.INSTRUCOES_CHAT
