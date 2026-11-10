@@ -26,7 +26,6 @@ from demo import (
     config_demo,
     criar_token_demo,
     garantir_dados_da_semana,
-    ip_do_pedido,
     registar_entrada_demo,
     registar_forma_do_ip,
 )
@@ -41,6 +40,13 @@ from importar_csv import (
     contar_paginas_pdf,
     ler_extrato,
     transacoes_do_pdf,
+)
+from limite_ip import (
+    LIMITE_GOOGLE_INICIO,
+    LIMITE_GOOGLE_TROCA,
+    LIMITE_LOGIN,
+    LIMITE_REGISTO,
+    ip_do_pedido,
 )
 from limites import (
     MAX_PAGINAS_PDF,
@@ -126,7 +132,9 @@ def inicio():
     return {"message": "A API de finanças está funcionando!"}
 
 
-@app.post("/login")
+# As rotas públicas de entrada e registo contam os pedidos por IP (e por /48 no IPv6) antes de falarem
+# com o Supabase: acima do limite, 429 com o "detail" a explicar (ver limite_ip.py).
+@app.post("/login", dependencies=[Depends(LIMITE_LOGIN)])
 def login(credenciais: Credenciais):
     try:
         token = fazer_login(credenciais.email, credenciais.password)
@@ -145,7 +153,7 @@ def login(credenciais: Credenciais):
 # O destino tem de ser a página /login/google de um dos endereços do FRONTEND_URL,
 # senão qualquer site podia usar este link para receber o código de quem faz login.
 # code_challenge: o SHA-256 do segredo PKCE que ficou no browser (ver auth.py); sem ele não há login.
-@app.get("/login/google")
+@app.get("/login/google", dependencies=[Depends(LIMITE_GOOGLE_INICIO)])
 def login_google(destino: str | None = None, code_challenge: str | None = None):
     if not destino or not destino_google_valido(destino, ORIGENS_FRONTEND):
         raise HTTPException(status_code=400, detail="Destino do login inválido")
@@ -170,7 +178,7 @@ async def erro_de_validacao(request: Request, erro: RequestValidationError):
     return await request_validation_exception_handler(request, erro)
 
 
-@app.post(CAMINHO_TROCA_GOOGLE)
+@app.post(CAMINHO_TROCA_GOOGLE, dependencies=[Depends(LIMITE_GOOGLE_TROCA)])
 def login_google_troca(troca: TrocaGoogle):
     try:
         token = trocar_codigo_google(troca.code, troca.code_verifier)
@@ -206,13 +214,18 @@ def entrar_na_demo(request: Request):
 
 # Registo público: qualquer pessoa cria conta e entra no plano Free (gatilho no Supabase).
 # A conta só fica ativa depois de a pessoa carregar no link do email de confirmação.
-@app.post("/registo", status_code=201)
+@app.post("/registo", status_code=201, dependencies=[Depends(LIMITE_REGISTO)])
 def registo(conta: NovaConta):
     try:
         fazer_registo(conta.email, conta.password)
     except AuthApiError as erro:
-        print(erro)
+        # Só o código do erro: a mensagem do Supabase pode trazer o email.
+        print(f"AVISO: registo recusado pelo Supabase ({erro.code or erro.status}).")
         raise HTTPException(status_code=400, detail="Não foi possível criar a conta. Confirma o email e a palavra-passe.")
+    except Exception as erro:
+        # Supabase em baixo ou erro de rede: 503 genérico, nunca um 500 com detalhes (só o tipo no log).
+        print(f"AVISO: registo falhou ({type(erro).__name__}).")
+        raise HTTPException(status_code=503, detail="Não foi possível criar a conta agora. Tenta mais tarde.")
     # A mesma resposta exista ou não uma conta com este email: assim ninguém usa o registo
     # para descobrir quem tem conta na app.
     return {"mensagem": "Enviámos um email de confirmação. Abre o link para ativar a conta."}

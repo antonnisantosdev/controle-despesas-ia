@@ -10,12 +10,9 @@
 A configuração vem do .env: DEMO_TOKEN_SEGREDO, DEMO_USER_ID e DEMO_EMAIL. Sem ela, a demo fica desligada.
 """
 
-import ipaddress
 import os
 import re
 import threading
-import time
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -33,6 +30,15 @@ from dados_demo import (
     transacoes_demo,
 )
 from database import supabase
+from limite_ip import (
+    DIA,
+    HORA,
+    LimitePorIP,
+    _entradas_encaminhadas,
+    _relogio,
+    ip_do_pedido,
+    prefixo_48_do_ipv6,
+)
 from limites import hoje_em_lisboa
 
 # --- Configuração ---
@@ -183,29 +189,7 @@ def exigir_permissao_demo(request: Request) -> None:
         limite.registar(ip_do_pedido(request))
 
 
-# --- Limites por IP (na memória do servidor) ---
-
-
-def _relogio() -> float:
-    """Segundos de um relógio que só anda para a frente. Função à parte para os testes poderem fixá-lo."""
-    return time.monotonic()
-
-
-def ip_do_pedido(request: Request) -> str:
-    """O IP de quem fez o pedido.
-
-    No Render, o proxy acrescenta o IP que viu no fim do X-Forwarded-For: só essa entrada (a mais à direita)
-    é de confiança. As da esquerda vêm do browser e podem ser inventadas para fugir ao limite.
-    """
-    entradas = _entradas_encaminhadas(request)
-    if entradas:
-        return entradas[-1]
-    return request.client.host if request.client else "desconhecido"
-
-
-def _entradas_encaminhadas(request: Request) -> list[str]:
-    encaminhado = request.headers.get("x-forwarded-for", "")
-    return [entrada.strip() for entrada in encaminhado.split(",") if entrada.strip()]
+# --- Limites por IP (na memória do servidor; as peças genéricas estão em limite_ip.py) ---
 
 
 # Se já se registou nos logs a forma do X-Forwarded-For (uma vez por arranque do servidor).
@@ -229,103 +213,14 @@ def registar_forma_do_ip(request: Request) -> None:
     )
 
 
-def chave_do_ip(ip: str) -> str:
-    """A chave com que o IP conta para os limites.
-
-    IPv6: conta o prefixo /64 inteiro (cada casa ou telemóvel recebe um /64 e pode mudar de endereço
-    dentro dele à vontade). IPv4 (também dentro de IPv6, "::ffff:1.2.3.4"): o próprio endereço.
-    Um texto que não seja um IP conta tal e qual.
-    """
-    try:
-        endereco = ipaddress.ip_address(ip)
-    except ValueError:
-        return ip
-    if isinstance(endereco, ipaddress.IPv6Address):
-        if endereco.ipv4_mapped is not None:
-            return str(endereco.ipv4_mapped)
-        return str(ipaddress.IPv6Network(f"{endereco}/64", strict=False))
-    return str(endereco)
-
-
-def prefixo_48_do_ipv6(ip: str) -> str | None:
-    """O prefixo /48 de um IPv6 ("2001:db8:1::/48"), ou None se não for IPv6 (um IPv4 não conta neste limite).
-
-    Quem tem um /48 inteiro (um escritório, alguns fornecedores) pode usar 65 536 prefixos /64 diferentes:
-    sem este segundo limite, fugia ao limite por /64.
-    """
-    try:
-        endereco = ipaddress.ip_address(ip)
-    except ValueError:
-        return None
-    if not isinstance(endereco, ipaddress.IPv6Address) or endereco.ipv4_mapped is not None:
-        return None
-    return str(ipaddress.IPv6Network(f"{endereco}/48", strict=False))
-
-
-class LimitePorIP:
-    """Até `maximo` pedidos por IP em cada janela de `janela_segundos` (a janela começa no primeiro pedido).
-
-    Vive na memória: perde-se quando o Render reinicia e não se partilha entre servidores (só há um).
-    Com o teto de IPs cheio (mesmo depois de limpar as janelas que acabaram), os IPs novos levam 429
-    com uma mensagem genérica: na dúvida fecha-se, em vez de deixar a memória crescer sem fim.
-    Os IPv6 contam por prefixo /64 (chave_do_ip). chave: outra forma de agrupar os IPs (ex.: por /48);
-    se devolver None, o pedido não conta neste limite.
-    """
-
-    def __init__(
-        self,
-        maximo: int,
-        janela_segundos: float,
-        mensagem: str,
-        teto_ips: int = 10_000,
-        chave: Callable[[str], str | None] = chave_do_ip,
-    ):
-        self.chave = chave
-        self.maximo = maximo
-        self.janela_segundos = janela_segundos
-        self.mensagem = mensagem
-        self.teto_ips = teto_ips
-        self._pedidos: dict[str, tuple[float, int]] = {}  # ip -> (início da janela, pedidos)
-        self._cadeado = threading.Lock()
-
-    def _limpar_expiradas(self, agora: float) -> None:
-        expiradas = [ip for ip, (inicio, _) in self._pedidos.items() if agora - inicio >= self.janela_segundos]
-        for ip in expiradas:
-            del self._pedidos[ip]
-
-    def registar(self, ip: str) -> None:
-        """Conta o pedido deste IP, ou responde 429 se já chegou ao máximo da janela."""
-        chave = self.chave(ip)
-        if chave is None:
-            return
-        ip = chave
-        with self._cadeado:
-            agora = _relogio()
-            inicio, pedidos = self._pedidos.get(ip, (agora, 0))
-            if agora - inicio >= self.janela_segundos:
-                inicio, pedidos = agora, 0
-            if ip not in self._pedidos and len(self._pedidos) >= self.teto_ips:
-                self._limpar_expiradas(agora)
-                if len(self._pedidos) >= self.teto_ips:
-                    raise HTTPException(status_code=429, detail=MENSAGEM_DEMO_CHEIA)
-            if pedidos >= self.maximo:
-                raise HTTPException(status_code=429, detail=self.mensagem)
-            self._pedidos[ip] = (inicio, pedidos + 1)
-
-    def limpar(self) -> None:
-        """Esquece todos os IPs (para os testes)."""
-        with self._cadeado:
-            self._pedidos.clear()
-
-
-HORA = 60 * 60
-DIA = 24 * HORA
-
 # Quando o teto de IPs enche: não diz nada sobre quem pediu nem sobre o limite.
 MENSAGEM_DEMO_CHEIA = "A demo está com muitos pedidos neste momento. Tenta outra vez daqui a pouco."
 
 LIMITE_ENTRADAS_DEMO = LimitePorIP(
-    10, HORA, "A demo foi aberta muitas vezes a partir desta rede na última hora. Tenta outra vez mais tarde."
+    10,
+    HORA,
+    "A demo foi aberta muitas vezes a partir desta rede na última hora. Tenta outra vez mais tarde.",
+    mensagem_teto=MENSAGEM_DEMO_CHEIA,
 )
 # Segundo limite das entradas, só para IPv6: por prefixo /48 (vários /64 da mesma rede).
 LIMITE_ENTRADAS_DEMO_48 = LimitePorIP(
@@ -333,16 +228,22 @@ LIMITE_ENTRADAS_DEMO_48 = LimitePorIP(
     HORA,
     "A demo foi aberta muitas vezes a partir desta rede na última hora. Tenta outra vez mais tarde.",
     chave=prefixo_48_do_ipv6,
+    mensagem_teto=MENSAGEM_DEMO_CHEIA,
 )
 LIMITE_CHAT_DEMO = LimitePorIP(
     5,
     DIA,
     "As perguntas ao chat da demo acabaram por hoje. Amanhã há mais, "
     "ou cria uma conta grátis para usar o chat com os teus dados.",
+    mensagem_teto=MENSAGEM_DEMO_CHEIA,
 )
 LIMITE_RESUMO_DEMO = LimitePorIP(
-    10, HORA, "O resumo da demo foi pedido muitas vezes a partir desta rede na última hora. Tenta outra vez mais tarde."
+    10,
+    HORA,
+    "O resumo da demo foi pedido muitas vezes a partir desta rede na última hora. Tenta outra vez mais tarde.",
+    mensagem_teto=MENSAGEM_DEMO_CHEIA,
 )
+
 
 def registar_entrada_demo(ip: str) -> None:
     """Conta uma entrada na demo (POST /demo): primeiro o limite por /48 (só IPv6), depois o por IP (/64 no IPv6)."""

@@ -51,6 +51,12 @@ export default function BotaoGoogle() {
       const parametros = new URLSearchParams({ destino, code_challenge: challenge });
       const resposta = await fetchComTentativas(`${API_URL}/login/google?${parametros}`);
       const corpo = await resposta.json().catch(() => null);
+      // 429: muitas tentativas a partir desta rede. A API explica no "detail" quando se pode tentar outra vez.
+      if (resposta.status === 429 && typeof corpo?.detail === "string") {
+        setErro(corpo.detail);
+        setAAbrir(false);
+        return;
+      }
       if (!resposta.ok || typeof corpo?.url !== "string") throw new Error("Sem endereço do login");
       // Guarda o segredo neste browser. Só depois sai para o Google; o aAbrir fica true até a página mudar.
       guardarVerifier(verifier);

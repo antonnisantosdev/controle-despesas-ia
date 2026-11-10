@@ -22,6 +22,14 @@ function lerRegresso(query: string, hash: string): { eRegresso: boolean; codigo:
   return { eRegresso: temErro || codigo !== null, codigo: temErro ? null : codigo };
 }
 
+// A troca falhou. mensagem: o "detail" da API quando vale a pena mostrá-lo (429, muitas tentativas);
+// nos outros erros fica null e a página mostra a mensagem genérica.
+class TrocaFalhou extends Error {
+  constructor(readonly mensagem: string | null) {
+    super("Troca do código recusada");
+  }
+}
+
 // Troca o código pelo token na API (POST /login/google/troca), com o segredo PKCE guardado neste browser.
 // O refresh_token fica de fora, como no login com email: quando o token expirar, faz-se login outra vez.
 async function trocarCodigo(pedido: PedidoTroca): Promise<string> {
@@ -31,7 +39,8 @@ async function trocarCodigo(pedido: PedidoTroca): Promise<string> {
     body: JSON.stringify(pedido),
   });
   const corpo = await resposta.json().catch(() => null);
-  if (!resposta.ok || typeof corpo?.access_token !== "string") throw new Error("Troca do código recusada");
+  if (resposta.status === 429 && typeof corpo?.detail === "string") throw new TrocaFalhou(corpo.detail);
+  if (!resposta.ok || typeof corpo?.access_token !== "string") throw new TrocaFalhou(null);
   return corpo.access_token;
 }
 
@@ -48,6 +57,8 @@ export default function RegressoGoogle() {
     return { eRegresso: regresso.eRegresso, pedido };
   });
   const [falhou, setFalhou] = useState(false);
+  // O texto do erro quando a API explica o problema (429); null mostra TEXTOS_GOOGLE.erroEntrar.
+  const [mensagemErro, setMensagemErro] = useState<string | null>(null);
   // O código só serve uma vez: em desenvolvimento o React corre o efeito duas vezes, e a segunda troca falharia.
   const jaTrocou = useRef(false);
 
@@ -66,7 +77,10 @@ export default function RegressoGoogle() {
         // no dashboard e o pedirApi manda para /assinatura-expirada, como no login normal.
         router.replace("/dashboard");
       })
-      .catch(() => setFalhou(true));
+      .catch((erro: unknown) => {
+        setMensagemErro(erro instanceof TrocaFalhou ? erro.mensagem : null);
+        setFalhou(true);
+      });
   }, [eRegresso, pedido, router]);
 
   if (pedido && !falhou) {
@@ -80,7 +94,7 @@ export default function RegressoGoogle() {
   return (
     <>
       <p role="alert" className="text-sm text-texto">
-        {TEXTOS_GOOGLE.erroEntrar}
+        {mensagemErro ?? TEXTOS_GOOGLE.erroEntrar}
       </p>
       <Link
         href="/login"

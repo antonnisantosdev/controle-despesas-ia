@@ -25,6 +25,7 @@ from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 import ia  # noqa: E402
+import limite_ip  # noqa: E402
 import limites  # noqa: E402
 import main  # noqa: E402
 import recorrentes  # noqa: E402
@@ -107,6 +108,15 @@ class Limite:
         """Como limites.registar_pdf: primeiro o limite de PDF, depois o pedido "importar_pdf"."""
         self.exigir_pdf(user_id)
         self.registar(user_id, "importar_pdf")
+
+
+@pytest.fixture(autouse=True)
+def limites_por_ip_limpos():
+    """Cada teste começa com os contadores por IP do login e do registo a zero (todos os pedidos
+    dos testes vêm do mesmo IP, e os contadores ficam na memória entre testes)."""
+    limite_ip.limpar_limites_das_rotas_publicas()
+    yield
+    limite_ip.limpar_limites_das_rotas_publicas()
 
 
 @pytest.fixture

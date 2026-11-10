@@ -28,6 +28,7 @@ import consultas
 import dados_demo
 import demo
 import ia
+import limite_ip
 import limites
 import main
 import objetivos
@@ -576,7 +577,7 @@ def test_conta_demo_fica_bloqueada_mesmo_com_a_demo_desligada(base, api, monkeyp
 
 def test_post_demo_10_por_hora_por_ip(base, api, monkeypatch):
     relogio = [1000.0]
-    monkeypatch.setattr(demo, "_relogio", lambda: relogio[0])
+    monkeypatch.setattr(limite_ip, "_relogio", lambda: relogio[0])
 
     for i in range(10):
         # A parte da esquerda do X-Forwarded-For é inventada pelo browser: não conta.
@@ -632,8 +633,8 @@ def test_clientes_normais_nao_tem_limite_por_ip_no_chat(base, api):
 
 def test_teto_de_ips_limpa_as_janelas_expiradas_e_fecha_se_cheio(monkeypatch):
     relogio = [0.0]
-    monkeypatch.setattr(demo, "_relogio", lambda: relogio[0])
-    limite = demo.LimitePorIP(5, 60, "cheio", teto_ips=3)
+    monkeypatch.setattr(limite_ip, "_relogio", lambda: relogio[0])
+    limite = limite_ip.LimitePorIP(5, 60, "cheio", teto_ips=3)
 
     for ip in ("a", "b", "c"):
         limite.registar(ip)
@@ -882,7 +883,7 @@ def test_mensagens_da_api_iguais_as_do_frontend():
     ],
 )
 def test_chave_do_ip(ip, chave):
-    assert demo.chave_do_ip(ip) == chave
+    assert limite_ip.chave_do_ip(ip) == chave
 
 
 def test_ipv6_conta_pelo_prefixo_64(base, api):
@@ -906,7 +907,7 @@ def test_ipv6_conta_pelo_prefixo_64(base, api):
     ],
 )
 def test_prefixo_48_so_no_ipv6(ip, prefixo):
-    assert demo.prefixo_48_do_ipv6(ip) == prefixo
+    assert limite_ip.prefixo_48_do_ipv6(ip) == prefixo
 
 
 def test_ipv6_tambem_conta_pelo_prefixo_48(base, api):
@@ -925,8 +926,10 @@ def test_ipv6_tambem_conta_pelo_prefixo_48(base, api):
 
 def test_limite_por_48_tem_teto_e_limpeza(monkeypatch):
     relogio = [0.0]
-    monkeypatch.setattr(demo, "_relogio", lambda: relogio[0])
-    limite = demo.LimitePorIP(30, 60, "rede", teto_ips=2, chave=demo.prefixo_48_do_ipv6)
+    monkeypatch.setattr(limite_ip, "_relogio", lambda: relogio[0])
+    limite = limite_ip.LimitePorIP(
+        30, 60, "rede", teto_ips=2, chave=limite_ip.prefixo_48_do_ipv6, mensagem_teto=demo.MENSAGEM_DEMO_CHEIA
+    )
 
     limite.registar("2001:db8:1::1")
     limite.registar("2001:db8:2::1")
@@ -941,8 +944,8 @@ def test_limite_por_48_tem_teto_e_limpeza(monkeypatch):
 
 
 def test_teto_cheio_responde_com_mensagem_generica(monkeypatch):
-    monkeypatch.setattr(demo, "_relogio", lambda: 0.0)
-    limite = demo.LimitePorIP(5, 60, "mensagem do limite", teto_ips=1)
+    monkeypatch.setattr(limite_ip, "_relogio", lambda: 0.0)
+    limite = limite_ip.LimitePorIP(5, 60, "mensagem do limite", teto_ips=1, mensagem_teto=demo.MENSAGEM_DEMO_CHEIA)
     limite.registar("203.0.113.1")
 
     with pytest.raises(HTTPException) as erro:
