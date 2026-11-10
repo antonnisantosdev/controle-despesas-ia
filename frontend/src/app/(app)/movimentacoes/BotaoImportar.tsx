@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 
 import {
+  eBloqueadoNaDemo,
   eLimiteDiario,
   eLimitePdf,
   enviarFicheiro,
@@ -11,6 +12,7 @@ import {
   SessaoExpirada,
   type ResultadoImportacao,
 } from "@/lib/api";
+import { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import { TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
 
 type Props = {
@@ -21,6 +23,7 @@ type Props = {
   onLimitePdf: () => void; // 429 do limite de extratos PDF do mês: a página mostra o AvisoLimitePdf
   onSoPlanosPagos: (mensagem: string) => void; // 402 (PDF no Free): a página mostra o AvisoPlanoPago
   soCsv: boolean; // Free: a janela de escolha só mostra CSV (a API responde 402 ao PDF na mesma)
+  desligado?: boolean; // demo (só leitura): o botão fica desligado
 };
 
 // Botão que abre a janela "Escolher ficheiro" e envia o CSV ou o PDF para POST /transacoes/importar.
@@ -32,6 +35,7 @@ export default function BotaoImportar({
   onLimitePdf,
   onSoPlanosPagos,
   soCsv,
+  desligado = false,
 }: Props) {
   // useRef: uma ligação direta ao <input type="file"> escondido, para o "clicar" a partir do botão.
   const entradaFicheiro = useRef<HTMLInputElement>(null);
@@ -47,6 +51,7 @@ export default function BotaoImportar({
         onSessaoExpirada(e);
         return;
       }
+      if (eBloqueadoNaDemo(e)) return; // 423 da demo: a faixa já explica
       // Antes do eLimiteDiario: os dois são 429, mas o do PDF tem outro aviso (e o CSV continua a funcionar).
       if (eLimitePdf(e)) {
         onLimitePdf();
@@ -91,9 +96,10 @@ export default function BotaoImportar({
       />
       <button
         type="button"
-        disabled={aImportar}
+        disabled={aImportar || desligado}
+        aria-describedby={desligado ? ID_NOTA_DEMO : undefined}
         onClick={() => entradaFicheiro.current?.click()}
-        className="rounded-lg border border-borda bg-cartao px-4 py-2 text-sm font-medium text-texto hover:bg-fundo disabled:opacity-50"
+        className="rounded-lg border border-borda bg-cartao px-4 py-2 text-sm font-medium text-texto hover:bg-fundo disabled:cursor-not-allowed disabled:opacity-50"
       >
         {aImportar ? "A importar e a categorizar..." : "Importar extrato"}
       </button>

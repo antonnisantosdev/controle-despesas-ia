@@ -6,6 +6,7 @@ import AvisoLimite from "@/components/AvisoLimite";
 import AvisoQuota from "@/components/AvisoQuota";
 import {
   eLimiteDiario,
+  ErroApi,
   pedirApi,
   pedirEstadoPlano,
   SessaoExpirada,
@@ -13,6 +14,8 @@ import {
   type MensagemHistorico,
   type RespostaChat,
 } from "@/lib/api";
+import { TEXTOS_DEMO } from "@/lib/textosDemo";
+import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 type Mensagem = { autor: "tu" | "ia"; texto: string };
 
@@ -53,9 +56,12 @@ export default function Chat() {
   const [aPensar, setAPensar] = useState(false);
   const [erro, setErro] = useState("");
   const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite de pedidos à IA
+  const [detalheLimite, setDetalheLimite] = useState<string | undefined>(); // o texto do 429 que a API mandou
   // Os pedidos à IA já usados, para o aviso dos 80%. Volta a ser pedido depois de cada pergunta.
   const [estado, setEstado] = useState<EstadoPlano | null>(null);
   const [perguntasFeitas, setPerguntasFeitas] = useState(0);
+  // Na demo: a nota das 5 perguntas por dia em vez do aviso dos pedidos do plano (que são partilhados).
+  const demo = useSessaoDemo();
 
   useEffect(() => {
     pedirEstadoPlano()
@@ -83,7 +89,8 @@ export default function Chat() {
       if (e instanceof SessaoExpirada) {
         setErro("A tua sessão expirou. Faz login de novo.");
       } else if (eLimiteDiario(e)) {
-        // Limite diário: o AvisoLimite explica e leva ao "O meu plano".
+        // Limite diário: o AvisoLimite explica e leva ao "O meu plano". Na demo mostra o texto da API.
+        setDetalheLimite(e instanceof ErroApi && typeof e.detalhe === "string" ? e.detalhe : undefined);
         setSemPedidos(true);
       } else {
         console.error(e);
@@ -99,8 +106,10 @@ export default function Chat() {
     <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
       <h2 className="mb-4 font-medium text-texto">Pergunta às tuas finanças</h2>
 
+      {demo && <p className="mb-4 text-sm text-texto-suave">{TEXTOS_DEMO.notaChat}</p>}
+
       {/* No limite já aparece o AvisoLimite; os dois juntos seriam repetidos. */}
-      {!semPedidos && (
+      {!semPedidos && !demo && (
         <div className="mb-4 empty:hidden">
           <AvisoQuota estado={estado} />
         </div>
@@ -129,7 +138,7 @@ export default function Chat() {
       {erro && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{erro}</p>}
       {semPedidos && (
         <div className="mb-3">
-          <AvisoLimite />
+          <AvisoLimite mensagem={detalheLimite} />
         </div>
       )}
 

@@ -21,6 +21,15 @@ from compras import gravar_compra, listar_compras
 from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
 from database import ler_todas, supabase
+from demo import (
+    MENSAGEM_DEMO_DESLIGADA,
+    config_demo,
+    criar_token_demo,
+    garantir_dados_da_semana,
+    ip_do_pedido,
+    registar_entrada_demo,
+    registar_forma_do_ip,
+)
 from ferramentas import FERRAMENTAS, executar_ferramenta
 from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_mes, sugerir_orcamento
 from importar_csv import (
@@ -178,6 +187,21 @@ def login_google_troca(troca: TrocaGoogle):
         print(f"AVISO: troca do código do Google falhou ({type(erro).__name__}).")
         raise HTTPException(status_code=503, detail=MENSAGEM_ERRO_GOOGLE)
     return {"access_token": token, "token_type": "bearer"}
+
+
+# Demo para recrutadores (pública): entrega um token da conta de demo, só de leitura (ver demo.py).
+# No primeiro pedido de cada semana, os dados inventados voltam ao estado inicial; se isso falhar, entra na mesma.
+
+
+@app.post("/demo")
+def entrar_na_demo(request: Request):
+    config = config_demo()
+    if not config.ligada:
+        raise HTTPException(status_code=503, detail=MENSAGEM_DEMO_DESLIGADA)
+    registar_forma_do_ip(request)
+    registar_entrada_demo(ip_do_pedido(request))
+    garantir_dados_da_semana(config)
+    return {"access_token": criar_token_demo(config), "token_type": "bearer"}
 
 
 # Registo público: qualquer pessoa cria conta e entra no plano Free (gatilho no Supabase).

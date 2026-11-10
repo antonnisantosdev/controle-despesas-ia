@@ -5,8 +5,10 @@ import { useEffect, useState } from "react";
 
 import AlertasOrcamento from "@/components/AlertasOrcamento";
 import AvisoLimite from "@/components/AvisoLimite";
+import NotaDemo, { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import PagamentosRecorrentes from "@/components/PagamentosRecorrentes";
 import {
+  eBloqueadoNaDemo,
   apagarToken,
   eLimiteDiario,
   ErroApi,
@@ -19,6 +21,7 @@ import {
 } from "@/lib/api";
 import { CATEGORIAS } from "@/lib/opcoes";
 import { mesAtual } from "@/lib/planos";
+import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import { euros, nomeMes } from "../dashboard/formatos";
 import LinhaPlaneamento from "./LinhaPlaneamento";
@@ -39,6 +42,8 @@ export default function PaginaPlaneamento() {
   const [sugestoes, setSugestoes] = useState<SugestaoCategoria[] | null>(null);
   const [aPedirSugestao, setAPedirSugestao] = useState(false);
   const aCarregar = resultado?.mes !== mes;
+  // Na demo (só leitura): sem guardar orçamentos nem pedir sugestões à IA; a API recusa-os na mesma (423).
+  const demo = useSessaoDemo();
   const linhas = aCarregar ? [] : (resultado?.linhas ?? []);
 
   function tratarErro(e: unknown) {
@@ -85,6 +90,7 @@ export default function PaginaPlaneamento() {
       setVersao((v) => v + 1);
     } catch (e) {
       if (e instanceof SessaoExpirada) tratarErro(e);
+      else if (eBloqueadoNaDemo(e)) return; // 423 da demo: a faixa já explica
       else setErro("Não foi possível guardar o orçamento. Tenta outra vez.");
     }
   }
@@ -99,6 +105,7 @@ export default function PaginaPlaneamento() {
       setSugestoes(resposta.sugestoes);
     } catch (e) {
       if (e instanceof SessaoExpirada) tratarErro(e);
+      else if (eBloqueadoNaDemo(e)) return; // 423 da demo: a faixa já explica
       else if (eLimiteDiario(e)) setSemPedidos(true);
       // 503 (IA em baixo) já traz uma explicação da API.
       else if (e instanceof ErroApi && typeof e.detalhe === "string") setErro(e.detalhe);
@@ -138,21 +145,25 @@ export default function PaginaPlaneamento() {
             <button
               type="button"
               onClick={pedirSugestao}
-              disabled={aPedirSugestao || !mes}
-              className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
+              disabled={aPedirSugestao || !mes || demo}
+              aria-describedby={demo ? ID_NOTA_DEMO : undefined}
+              className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {aPedirSugestao ? "A IA está a analisar..." : "✨ Sugerir orçamento"}
             </button>
           </div>
         </header>
 
+        <NotaDemo />
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
         {semPedidos && <AvisoLimite />}
 
         {/* Só no mês atual: categorias com 90% ou mais do orçamento gasto. Acompanha cada orçamento guardado. */}
         {mes && <AlertasOrcamento mes={mes} versao={versao} />}
 
-        {sugestoes && <SugestoesIA sugestoes={sugestoes} onAceitar={guardar} onFechar={() => setSugestoes(null)} />}
+        {sugestoes && (
+          <SugestoesIA sugestoes={sugestoes} onAceitar={guardar} onFechar={() => setSugestoes(null)} desligado={demo} />
+        )}
 
         {comOrcamento.length > 0 && (
           <div className="rounded-xl border border-borda bg-cartao p-4 text-sm text-texto-suave">
@@ -167,11 +178,11 @@ export default function PaginaPlaneamento() {
             <p className="p-6 text-sm text-texto-suave">Sem gastos nem orçamentos neste mês.</p>
           )}
           {linhas.map((linha) => (
-            <LinhaPlaneamento key={linha.categoria} linha={linha} onGuardar={guardar} />
+            <LinhaPlaneamento key={linha.categoria} linha={linha} onGuardar={guardar} desligado={demo} />
           ))}
         </section>
 
-        {semLinha.length > 0 && (
+        {semLinha.length > 0 && !demo && (
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={novaCategoria}

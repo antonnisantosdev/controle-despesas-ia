@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
-import { mensagemDaApi, pedirApi, SessaoExpirada, type Transacao } from "@/lib/api";
+import { eBloqueadoNaDemo, mensagemDaApi, pedirApi, SessaoExpirada, type Transacao } from "@/lib/api";
 import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
 
 // Data de hoje no formato do <input type="date"> (AAAA-MM-DD), na hora local.
@@ -48,6 +48,7 @@ export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
       });
       onCriada(criada);
     } catch (e) {
+      if (eBloqueadoNaDemo(e)) return; // 423 da demo: a faixa já explica
       setErro(
         e instanceof SessaoExpirada
           ? "A tua sessão expirou. Faz login de novo."

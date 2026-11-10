@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
-import { pedirApi, SessaoExpirada, type Objetivo } from "@/lib/api";
+import { eBloqueadoNaDemo, pedirApi, SessaoExpirada, type Objetivo } from "@/lib/api";
 
 const ESTILO_CAMPO = "mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-sm text-texto";
 
@@ -34,6 +34,7 @@ export default function FormNovoObjetivo({ onCriado, onFechar, onSessaoExpirada 
       onCriado(await pedirApi<Objetivo>("/objetivos", { nome: nome.trim(), valor_alvo: numero, data_alvo: data }));
     } catch (e) {
       if (e instanceof SessaoExpirada) onSessaoExpirada(e);
+      else if (eBloqueadoNaDemo(e)) return; // 423 da demo: a faixa já explica
       else setErro("Não foi possível guardar. Confirma os dados e tenta outra vez.");
     } finally {
       setAGuardar(false);

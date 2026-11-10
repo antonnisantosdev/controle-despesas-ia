@@ -1,4 +1,7 @@
+"use client";
+
 import { CONTACTOS, linkEmail, linkWhatsapp, type Pedido } from "@/lib/planos";
+import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 type Props = {
   pedido: Pedido;
@@ -17,9 +20,13 @@ const ESTILO_DESATIVADO = `${ESTILO_BASE} cursor-not-allowed border border-dashe
 
 // Abre o WhatsApp (ou o email) com a mensagem do pedido já escrita. Os contactos vêm do .env.local:
 // com os dois, o WhatsApp é o botão e o email fica como alternativa; sem nenhum, o botão fica desativado.
+// Numa sessão de demo não aparece: a conta é partilhada e não muda de plano.
 export default function BotaoPedirAcesso({ pedido, rotulo, principal = true }: Props) {
+  const demo = useSessaoDemo();
   const estilo = principal ? ESTILO_PRINCIPAL : ESTILO_SECUNDARIO;
   const { whatsapp, email } = CONTACTOS;
+
+  if (demo) return null;
 
   if (!whatsapp && !email) {
     return (

@@ -6,7 +6,9 @@ import { useEffect, useState } from "react";
 
 import { pedirEstadoPlano, type EstadoPlano } from "@/lib/api";
 import { avisoCurtoDeQuota, nomeDoPlano, preencher } from "@/lib/planos";
+import { TEXTOS_DEMO } from "@/lib/textosDemo";
 import { TEXTOS_MEU_PLANO } from "@/lib/textosPlanos";
+import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 // A cor da barra conforme os pedidos à IA já feitos no período: avisa antes de o limite chegar.
 export function corDaBarra(usadas: number, limite: number): string {
@@ -20,17 +22,35 @@ export function corDaBarra(usadas: number, limite: number): string {
 }
 
 // O plano e os pedidos à IA usados hoje (ou este mês, no Free), no fundo do menu lateral. Leva ao "O meu plano" (/plano).
+// Na demo, só "Conta de demonstração" e as 5 perguntas por dia: o contador do plano é partilhado
+// por todos os visitantes e não diz nada a quem está a ver.
 export default function CartaoPlano() {
   const pagina = usePathname();
+  const demo = useSessaoDemo();
   const [estado, setEstado] = useState<EstadoPlano | null>(null);
 
   // O menu não se desmonta ao mudar de página, por isso volta a pedir o estado a cada página nova:
   // assim o número acompanha os pedidos feitos no chat, nas importações, etc.
   useEffect(() => {
+    if (demo) return;
     pedirEstadoPlano()
       .then(setEstado)
       .catch(() => setEstado(null)); // Se falhar, o cartão simplesmente não aparece (a página trata da sessão).
-  }, [pagina]);
+  }, [pagina, demo]);
+
+  if (demo) {
+    const ativoDemo = pagina === "/plano";
+    return (
+      <Link
+        href="/plano"
+        aria-current={ativoDemo ? "page" : undefined}
+        className={`block rounded-lg border bg-cartao p-3 transition-colors hover:border-destaque focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque ${ativoDemo ? "border-destaque" : "border-borda"}`}
+      >
+        <p className="text-xs font-semibold uppercase tracking-wide text-destaque-hover">{TEXTOS_DEMO.planoDemoNome}</p>
+        <p className="mt-1 text-sm text-texto">{TEXTOS_DEMO.planoDemoChat}</p>
+      </Link>
+    );
+  }
 
   if (!estado) return null;
 

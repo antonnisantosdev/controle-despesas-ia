@@ -2,8 +2,10 @@
 
 import { useState, type FormEvent } from "react";
 
+import { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import AvisoLimite from "@/components/AvisoLimite";
-import { eLimiteDiario, ErroApi, pedirApi, SessaoExpirada, type Objetivo, type PlanoPoupanca } from "@/lib/api";
+import { eBloqueadoNaDemo, eLimiteDiario, ErroApi, pedirApi, SessaoExpirada, type Objetivo, type PlanoPoupanca } from "@/lib/api";
+import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import { euros } from "../dashboard/formatos";
 
@@ -34,11 +36,15 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
   const [aConfirmar, setAConfirmar] = useState(false); // a pergunta "Apagar?" está visível
   const [erro, setErro] = useState("");
   const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite de pedidos à IA
+  // Na demo (só leitura): juntar, apagar e o plano da IA ficam desligados; a API recusa-os na mesma (423).
+  const demo = useSessaoDemo();
+  const descricaoDemo = demo ? ID_NOTA_DEMO : undefined; // aponta para a explicação (NotaDemo)
 
   const percentagem = percentagemPoupada(objetivo.valor_poupado, objetivo.valor_alvo);
 
   function tratarErro(e: unknown, mensagem: string) {
     if (e instanceof SessaoExpirada) onSessaoExpirada(e);
+    else if (eBloqueadoNaDemo(e)) return; // 423 da demo: a faixa já explica
     else if (eLimiteDiario(e)) setSemPedidos(true);
     // 503 (IA em baixo) traz uma explicação da API.
     else if (e instanceof ErroApi && typeof e.detalhe === "string") setErro(e.detalhe);
@@ -90,7 +96,8 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
     }
   }
 
-  const estiloBotao = "rounded-md border border-borda px-3 py-1.5 text-sm text-texto hover:bg-fundo disabled:opacity-50";
+  const estiloBotao =
+    "rounded-md border border-borda px-3 py-1.5 text-sm text-texto hover:bg-fundo disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
     <article className="space-y-3 rounded-xl border border-borda bg-cartao p-4 sm:p-5">
@@ -118,10 +125,10 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
       <p className="text-xs text-texto-suave">{percentagem}% do objetivo</p>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setAJuntar(!aJuntar)} className={estiloBotao}>
+        <button type="button" onClick={() => setAJuntar(!aJuntar)} disabled={demo} aria-describedby={descricaoDemo} className={estiloBotao}>
           + Juntei dinheiro
         </button>
-        <button type="button" onClick={pedirPlano} disabled={aPlanear} className={estiloBotao}>
+        <button type="button" onClick={pedirPlano} disabled={aPlanear || demo} aria-describedby={descricaoDemo} className={estiloBotao}>
           {aPlanear ? "A IA está a pensar..." : "✨ Plano de poupança"}
         </button>
         {aConfirmar ? (
@@ -135,13 +142,19 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
             </button>
           </span>
         ) : (
-          <button type="button" onClick={() => setAConfirmar(true)} className="ml-auto text-sm text-texto-suave hover:text-texto">
+          <button
+            type="button"
+            onClick={() => setAConfirmar(true)}
+            disabled={demo}
+            aria-describedby={descricaoDemo}
+            className="ml-auto text-sm text-texto-suave hover:text-texto disabled:cursor-not-allowed disabled:opacity-50"
+          >
             Apagar
           </button>
         )}
       </div>
 
-      {aJuntar && (
+      {aJuntar && !demo && (
         <form onSubmit={juntar} className="flex flex-wrap items-center gap-2">
           <input
             required

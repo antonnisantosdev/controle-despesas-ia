@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import { pedirApi, type ResumoMes } from "@/lib/api";
+import { ErroApi, eSessaoDemo, pedirApi, type ResumoMes } from "@/lib/api";
+import { TEXTOS_DEMO } from "@/lib/textosDemo";
 
 // O resultado guarda o mês a que pertence: se o mês escolhido mudou, o que está guardado
 // já não serve e a página mostra "a carregar" até chegar o novo.
@@ -22,8 +23,12 @@ export default function ResumoCartao({ mes }: { mes: string }) {
       .then((dados) => {
         if (!cancelado) setResultado({ mes, resumo: dados });
       })
-      .catch(() => {
-        if (!cancelado) setResultado({ mes, erro: "O resumo não está disponível. Tenta mais tarde." });
+      .catch((e) => {
+        // Na demo, o resumo tem um limite por hora (429): diz-se porquê, em vez do erro genérico.
+        const limiteDemo = e instanceof ErroApi && e.status === 429 && eSessaoDemo();
+        const textoDaApi = limiteDemo && typeof e.detalhe === "string" ? e.detalhe : null;
+        const erro = limiteDemo ? (textoDaApi ?? TEXTOS_DEMO.limiteResumo) : "O resumo não está disponível. Tenta mais tarde.";
+        if (!cancelado) setResultado({ mes, erro });
       });
     return () => {
       cancelado = true;

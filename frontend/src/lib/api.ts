@@ -1,19 +1,49 @@
+import { TEXTOS_DEMO } from "./textosDemo";
+
 // Endereço da API em FastAPI, lido do .env.local.
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 const CHAVE_TOKEN = "token";
+// Marca de que o token guardado é da demo para recrutadores (POST /demo). Só serve para o ecrã
+// (faixa, botões desligados, renovar o token): quem decide o que a demo pode fazer é a API.
+const CHAVE_DEMO = "sessao-demo";
+
+// A marca "a sessão da demo terminou" (só neste separador): o login mostra o aviso TEXTOS_DEMO.sessaoTerminou.
+const CHAVE_DEMO_TERMINOU = "demo-terminou";
+
+// Os componentes ouvem este evento para saberem que a sessão mudou (ex.: entrou ou saiu da demo).
+export const EVENTO_SESSAO = "sessao-mudou";
 
 // O token do login fica guardado no browser (localStorage) e é enviado em cada pedido à API.
-export function guardarToken(token: string) {
+// demo: true só para o token do POST /demo; um login normal apaga a marca da demo.
+export function guardarToken(token: string, demo = false) {
   localStorage.setItem(CHAVE_TOKEN, token);
+  sessionStorage.removeItem(CHAVE_DEMO_TERMINOU); // entrou de novo: o aviso "a sessão da demo terminou" sai
+  if (demo) {
+    localStorage.setItem(CHAVE_DEMO, "1");
+  } else {
+    localStorage.removeItem(CHAVE_DEMO);
+  }
+  window.dispatchEvent(new Event(EVENTO_SESSAO));
 }
 
 export function lerToken(): string | null {
   return localStorage.getItem(CHAVE_TOKEN);
 }
 
+// Sair (ou sessão expirada): apaga o token, a marca da demo e o aviso "a sessão da demo terminou".
+// Exceção: quando a renovação da demo falha, o enviarComToken já apagou o token e só depois põe o aviso.
+// A página chama a seguir apagarToken (sem token guardado) e o aviso fica para o login o mostrar.
 export function apagarToken() {
+  if (localStorage.getItem(CHAVE_TOKEN) !== null) sessionStorage.removeItem(CHAVE_DEMO_TERMINOU);
   localStorage.removeItem(CHAVE_TOKEN);
+  localStorage.removeItem(CHAVE_DEMO);
+  window.dispatchEvent(new Event(EVENTO_SESSAO));
+}
+
+// Se a sessão guardada é da demo. false no servidor (no Next, as páginas também se desenham sem browser).
+export function eSessaoDemo(): boolean {
+  return typeof window !== "undefined" && localStorage.getItem(CHAVE_DEMO) === "1";
 }
 
 // Formatos das respostas do dashboard (os mesmos modelos Pydantic do backend, em TypeScript).
@@ -171,10 +201,21 @@ export class ErroApi extends Error {
 
 // A mensagem que a API mandou num 422 (ex. "Chegaste ao máximo de 20 000 movimentações…"),
 // ou o texto genérico quando não há uma mensagem de texto para mostrar.
+// Na demo, o 423 (alteração recusada) tem sempre o texto da demo.
 export function mensagemDaApi(e: unknown, generica: string): string {
+  if (eBloqueadoNaDemo(e)) return TEXTOS_DEMO.bloqueado;
   if (e instanceof ErroApi && e.status === 422 && typeof e.detalhe === "string") return e.detalhe;
   return generica;
 }
+
+// Se o erro é o 423 da demo: a conta de demo tentou mudar alguma coisa (a API só a deixa ver e usar o chat).
+// Nunca segue o caminho do 403 (que manda para /assinatura-expirada).
+export function eBloqueadoNaDemo(erro: unknown): erro is ErroApi {
+  return erro instanceof ErroApi && erro.status === 423;
+}
+
+// Os componentes ouvem este evento para mostrar a mensagem do 423 (FaixaDemo.tsx).
+export const EVENTO_BLOQUEADO_DEMO = "api-bloqueado-demo";
 
 function lerTokenOuFalhar(): string {
   const token = lerToken();
@@ -188,6 +229,11 @@ function lerTokenOuFalhar(): string {
 async function lerResposta<T>(resposta: Response): Promise<T> {
   if (resposta.status === 401) {
     throw new SessaoExpirada();
+  }
+  // 423 = a conta de demo tentou mudar alguma coisa. Avisa a faixa da demo e segue como um erro normal.
+  if (resposta.status === 423) {
+    window.dispatchEvent(new CustomEvent(EVENTO_BLOQUEADO_DEMO));
+    throw new ErroApi(423, TEXTOS_DEMO.bloqueado);
   }
   // 403 = sem assinatura ativa. Vale para a app inteira, por isso trata-se aqui e não em cada página.
   if (resposta.status === 403) {
@@ -301,29 +347,93 @@ export async function fetchComTentativas(url: string, opcoes: RequestInit = {}):
   return fetchComEsperas(url, opcoes);
 }
 
+// --- Demo para recrutadores ---
+
+// POST /demo (público): devolve o token da conta de demo, ou lança ErroApi (429, 503...).
+export async function pedirTokenDemo(): Promise<string> {
+  const resposta = await fetchComTentativas(`${API_URL}/demo`, { method: "POST" });
+  if (!resposta.ok) {
+    const corpo = await resposta.json().catch(() => null);
+    throw new ErroApi(resposta.status, corpo?.detail);
+  }
+  const dados = await resposta.json();
+  return dados.access_token;
+}
+
+// A renovação em curso: vários pedidos com 401 ao mesmo tempo (o dashboard faz uns 6) partilham
+// um só POST /demo, para não gastarem as entradas por hora do IP.
+// O token da demo dura 60 minutos e não se renova: quando dá 401, pede-se um novo ao POST /demo.
+// falhou: o token que deu 401. Se, entretanto, o token guardado mudou (ex.: login noutro separador),
+// o novo da demo não se guarda (não se pisa essa sessão) e devolve null.
+let renovacaoDemo: Promise<string | null> | null = null;
+
+function renovarTokenDemo(falhou: string): Promise<string | null> {
+  if (!renovacaoDemo) {
+    renovacaoDemo = pedirTokenDemo()
+      .then((token) => {
+        if (lerToken() !== falhou) return null;
+        guardarToken(token, true);
+        return token;
+      })
+      .finally(() => {
+        renovacaoDemo = null;
+      });
+  }
+  return renovacaoDemo;
+}
+
+export function demoTerminou(): boolean {
+  return typeof window !== "undefined" && sessionStorage.getItem(CHAVE_DEMO_TERMINOU) === "1";
+}
+
+// Envia o pedido com o token guardado. Numa sessão de demo, um 401 (token expirado) pede um token novo
+// uma única vez e repete o pedido. O 401 quer dizer que a API não fez nada, por isso repetir é seguro.
+async function enviarComToken(enviar: (token: string) => Promise<Response>): Promise<Response> {
+  const usado = lerTokenOuFalhar();
+  const resposta = await enviar(usado);
+  if (resposta.status !== 401 || !eSessaoDemo()) return resposta;
+  let novo: string | null;
+  try {
+    novo = await renovarTokenDemo(usado);
+  } catch {
+    // Não deu para renovar: segue o 401 (SessaoExpirada) e o login explica que a sessão da demo terminou.
+    // Primeiro apaga-se o token, depois põe-se o aviso (ver apagarToken).
+    if (lerToken() === usado) apagarToken();
+    sessionStorage.setItem(CHAVE_DEMO_TERMINOU, "1");
+    window.dispatchEvent(new Event(EVENTO_SESSAO));
+    return resposta;
+  }
+  // Entretanto entrou outra sessão neste browser (ex.: login noutro separador): não se repete o pedido
+  // com o token dela. Segue o 401 original.
+  if (novo === null) return resposta;
+  return enviar(novo);
+}
+
 // Faz um pedido à API com o token do login e devolve o JSON da resposta.
 // Sem corpo é um GET; com corpo é um POST com esse objeto em JSON (ou outro método, se for indicado).
 export async function pedirApi<T>(caminho: string, corpo?: object, metodo?: "POST" | "PATCH" | "PUT" | "DELETE"): Promise<T> {
-  const token = lerTokenOuFalhar();
-  const resposta = await fetchComTentativas(`${API_URL}${caminho}`, {
-    method: metodo ?? (corpo ? "POST" : "GET"),
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: corpo ? JSON.stringify(corpo) : undefined,
-  });
+  const resposta = await enviarComToken((token) =>
+    fetchComTentativas(`${API_URL}${caminho}`, {
+      method: metodo ?? (corpo ? "POST" : "GET"),
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: corpo ? JSON.stringify(corpo) : undefined,
+    }),
+  );
   return lerResposta<T>(resposta);
 }
 
 // Envia um ficheiro (multipart/form-data, como um <form enctype="multipart/form-data"> em PHP).
 // Não se põe "Content-Type": o browser escreve-o sozinho, com a "fronteira" entre as partes.
 export async function enviarFicheiro<T>(caminho: string, campo: string, ficheiro: File): Promise<T> {
-  const token = lerTokenOuFalhar();
   const formulario = new FormData();
   formulario.append(campo, ficheiro);
-  const resposta = await fetchComTentativas(`${API_URL}${caminho}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: formulario,
-  });
+  const resposta = await enviarComToken((token) =>
+    fetchComTentativas(`${API_URL}${caminho}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formulario,
+    }),
+  );
   return lerResposta<T>(resposta);
 }
 

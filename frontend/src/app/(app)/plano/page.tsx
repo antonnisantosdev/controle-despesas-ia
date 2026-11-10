@@ -18,7 +18,9 @@ import {
   preencher,
   temFuncoesPagas,
 } from "@/lib/planos";
+import { TEXTOS_DEMO } from "@/lib/textosDemo";
 import { useLimitesPlanos } from "@/lib/useLimitesPlanos";
+import { useSessaoDemo } from "@/lib/useSessaoDemo";
 import { TEXTOS_CARTOES, TEXTOS_EXPIRADA, TEXTOS_MEU_PLANO } from "@/lib/textosPlanos";
 
 // "O meu plano": o plano atual, os pedidos à IA do período, até quando dura e como mudar ou renovar.
@@ -27,6 +29,8 @@ export default function PaginaPlano() {
   const [estado, setEstado] = useState<EstadoPlano | null>(null);
   const [emailConta, setEmailConta] = useState<string | null>(null);
   const [erro, setErro] = useState("");
+  // Na demo a conta é partilhada: mostra-se só que é uma conta de demonstração (sem contador, data nem pedidos de acesso).
+  const demo = useSessaoDemo();
 
   useEffect(() => {
     pedirEstadoPlano()
@@ -52,20 +56,30 @@ export default function PaginaPlano() {
         </header>
 
         {erro && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
-        {!estado && !erro && (
+        {!estado && !erro && !demo && (
           <p role="status" className="rounded-xl border border-borda bg-cartao p-4 text-sm text-texto-suave sm:p-6">
             A carregar...
           </p>
         )}
 
-        {estado && <DetalhesPlano estado={estado} emailConta={emailConta} />}
+        {/* Na demo: só "Conta de demonstração" e as 5 perguntas por dia (sem o contador partilhado nem a data). */}
+        {demo && (
+          <section className="space-y-2 rounded-xl border border-borda bg-cartao p-4 sm:p-6">
+            <p className="text-3xl font-bold tracking-tight text-texto">{TEXTOS_DEMO.planoDemoNome}</p>
+            <p className="text-base font-semibold text-texto">{TEXTOS_DEMO.planoDemoChat}</p>
+            <p className="text-sm text-texto-suave">{TEXTOS_DEMO.semMudarPlano}</p>
+          </section>
+        )}
+        {estado && !demo && <DetalhesPlano estado={estado} emailConta={emailConta} />}
 
-        <Link
-          href="/precos"
-          className="inline-flex min-h-11 items-center rounded-md text-sm font-semibold text-destaque-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque"
-        >
-          {TEXTOS_EXPIRADA.botaoPlanos}
-        </Link>
+        {!demo && (
+          <Link
+            href="/precos"
+            className="inline-flex min-h-11 items-center rounded-md text-sm font-semibold text-destaque-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque"
+          >
+            {TEXTOS_EXPIRADA.botaoPlanos}
+          </Link>
+        )}
       </div>
     </main>
   );

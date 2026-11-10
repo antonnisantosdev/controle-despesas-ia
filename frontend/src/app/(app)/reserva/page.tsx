@@ -3,13 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import NotaDemo, { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import { apagarToken, pedirApi, SessaoExpirada, type Objetivo } from "@/lib/api";
+import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import CartaoObjetivo from "./CartaoObjetivo";
 import FormNovoObjetivo from "./FormNovoObjetivo";
 import SimuladorPoupanca from "./SimuladorPoupanca";
 
 export default function PaginaReserva() {
+  // Na demo (só leitura) não se criam objetivos; a API recusa-os na mesma (423).
+  const demo = useSessaoDemo();
   const router = useRouter();
   const [objetivos, setObjetivos] = useState<Objetivo[] | null>(null); // null = ainda a carregar
   const [aCriar, setACriar] = useState(false);
@@ -59,7 +63,9 @@ export default function PaginaReserva() {
           <button
             type="button"
             onClick={() => setACriar(true)}
-            className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover"
+            disabled={demo}
+            aria-describedby={demo ? ID_NOTA_DEMO : undefined}
+            className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             + Novo objetivo
           </button>
@@ -67,7 +73,9 @@ export default function PaginaReserva() {
 
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
 
-        {aCriar && <FormNovoObjetivo onCriado={criado} onFechar={() => setACriar(false)} onSessaoExpirada={tratarSessao} />}
+        <NotaDemo />
+
+        {aCriar && !demo && <FormNovoObjetivo onCriado={criado} onFechar={() => setACriar(false)} onSessaoExpirada={tratarSessao} />}
 
         {objetivos === null && !erro && <p className="text-sm text-texto-suave">A carregar...</p>}
         {objetivos?.length === 0 && !aCriar && (

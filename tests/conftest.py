@@ -15,6 +15,10 @@ from types import SimpleNamespace
 os.environ["SUPABASE_URL"] = "https://exemplo.supabase.co"
 os.environ["SUPABASE_KEY"] = "chave-falsa"
 os.environ["ANTHROPIC_API_KEY"] = "chave-falsa"
+# A demo fica desligada por omissão (mesmo que o .env local a tenha): o test_demo.py liga-a quando precisa.
+os.environ["DEMO_TOKEN_SEGREDO"] = ""
+os.environ["DEMO_USER_ID"] = ""
+os.environ["DEMO_EMAIL"] = ""
 
 import pytest  # noqa: E402
 from fastapi import HTTPException  # noqa: E402

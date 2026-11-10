@@ -1,10 +1,12 @@
 from urllib.parse import urlencode
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from supabase import AuthApiError, AuthError, ClientOptions, create_client
 
 from database import SUPABASE_KEY, SUPABASE_URL, supabase
+from demo import config_demo, exigir_permissao_demo, ler_token_demo
+
 # Lê o cabeçalho "Authorization: Bearer <token>" de cada pedido.
 # Também faz aparecer o botão "Authorize" no /docs.
 esquema_bearer = HTTPBearer()
@@ -100,13 +102,36 @@ def verificar_assinatura(user_id: str) -> None:
         raise HTTPException(status_code=403, detail="Sem assinatura ativa")
 
 
-def obter_utilizador_atual(credenciais: HTTPAuthorizationCredentials = Depends(esquema_bearer)) -> str:
-    """Devolve o id (UUID) do dono do token: 401 se o token for inválido, 403 sem assinatura."""
+def obter_utilizador_atual(
+    request: Request, credenciais: HTTPAuthorizationCredentials = Depends(esquema_bearer)
+) -> str:
+    """Devolve o id (UUID) do dono do token: 401 se o token for inválido, 403 sem assinatura.
+
+    Com a demo ligada, tenta primeiro o token da demo (demo.py); se não for um, segue para o Supabase.
+    A conta de demo (pelo id, venha o token de onde vier) só usa as rotas de PERMISSOES_DEMO: as outras dão 423.
+    """
     token = credenciais.credentials
+    config = config_demo()
+
+    if config.ligada:
+        sub = ler_token_demo(token, config)
+        if sub is not None:
+            # Assinado com o nosso segredo mas para outra conta: nunca devia acontecer, por isso recusa-se.
+            if sub != config.user_id:
+                raise HTTPException(status_code=401, detail="Token inválido")
+            # Devolve-se o id da configuração, nunca o que vem no token.
+            exigir_permissao_demo(request)
+            verificar_assinatura(config.user_id)
+            return config.user_id
+
     try:
         resposta = supabase.auth.get_user(token)
     except AuthApiError:
         raise HTTPException(status_code=401, detail="Token inválido")
+    user_id = resposta.user.id
     # Todas as rotas usam esta função, por isso a verificação da assinatura protege a API inteira.
-    verificar_assinatura(resposta.user.id)
-    return resposta.user.id
+    verificar_assinatura(user_id)
+    # Quem entrar na conta de demo com o email e a palavra-passe fica com as mesmas regras da demo.
+    if config.user_id is not None and str(user_id).lower() == config.user_id:
+        exigir_permissao_demo(request)
+    return user_id

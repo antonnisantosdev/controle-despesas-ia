@@ -6,7 +6,9 @@ import { useEffect, useState } from "react";
 import AvisoLimite from "@/components/AvisoLimite";
 import AvisoLimitePdf from "@/components/AvisoLimitePdf";
 import AvisoPlanoPago from "@/components/AvisoPlanoPago";
+import NotaDemo, { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import {
+  eBloqueadoNaDemo,
   apagarToken,
   pedirApi,
   pedirEstadoPlano,
@@ -18,6 +20,7 @@ import {
 import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
 import { mesAtual, preencher, temFuncoesPagas } from "@/lib/planos";
 import { TEXTOS_CATEGORIZAR, TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
+import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import { euros, nomeMes } from "../dashboard/formatos";
 import BotaoCategorizar from "./BotaoCategorizar";
@@ -60,6 +63,8 @@ export default function PaginaMovimentacoes() {
   // POST /transacoes/categorizar trata as de todos os meses (por lotes). 0 enquanto não se sabe (o botão fica escondido).
   const [semCategoria, setSemCategoria] = useState(0);
   const aCarregar = lista?.mes !== mes;
+  // Na demo (só leitura) os botões que mudam dados ficam desligados; a API recusa-os na mesma (423).
+  const demo = useSessaoDemo();
 
   function tratarErro(e: unknown) {
     if (e instanceof SessaoExpirada) {
@@ -174,6 +179,7 @@ export default function PaginaMovimentacoes() {
       if (antiga === null) setSemCategoria((n) => Math.max(0, n - 1));
     } catch (e) {
       trocarNaLista(transacao.id, antiga);
+      if (eBloqueadoNaDemo(e)) return; // 423 da demo: a faixa já explica
       if (e instanceof SessaoExpirada) {
         tratarErro(e);
       } else {
@@ -231,22 +237,27 @@ export default function PaginaMovimentacoes() {
                 setSoPlanosPagos(mensagem);
               }}
               soCsv={soCsv}
+              desligado={demo}
             />
             <button
               type="button"
               onClick={() => setFormAberto(true)}
-              className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover"
+              disabled={demo}
+              aria-describedby={demo ? ID_NOTA_DEMO : undefined}
+              className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               + Nova movimentação
             </button>
           </div>
         </header>
 
-        {soCsv && <p className="text-sm text-texto-suave">{TEXTOS_PLANO_PAGO.soCsv}</p>}
+        <NotaDemo />
+        {soCsv && !demo && <p className="text-sm text-texto-suave">{TEXTOS_PLANO_PAGO.soCsv}</p>}
 
         {semCategoria > 0 && (
           <BotaoCategorizar
             quantas={semCategoria}
+            desligado={demo}
             onCategorizadas={aposCategorizar}
             onErro={(mensagem) => {
               setSemPedidos(false);
@@ -293,7 +304,7 @@ export default function PaginaMovimentacoes() {
         {semPdf && <AvisoLimitePdf />}
         {soPlanosPagos && <AvisoPlanoPago mensagem={soPlanosPagos} />}
 
-        {formAberto && <FormNovaMovimentacao onCriada={aposCriar} onFechar={() => setFormAberto(false)} />}
+        {formAberto && !demo && <FormNovaMovimentacao onCriada={aposCriar} onFechar={() => setFormAberto(false)} />}
 
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
 
@@ -326,8 +337,10 @@ export default function PaginaMovimentacoes() {
                         <select
                           value={t.categoria ?? ""}
                           onChange={(e) => mudarCategoria(t, e.target.value)}
+                          disabled={demo}
+                          aria-describedby={demo ? ID_NOTA_DEMO : undefined}
                           aria-label={`Categoria de ${t.descricao}`}
-                          className="cursor-pointer rounded-full border border-transparent bg-fundo px-2.5 py-1 text-xs capitalize text-texto-suave hover:border-borda"
+                          className="cursor-pointer rounded-full disabled:cursor-default disabled:hover:border-transparent border border-transparent bg-fundo px-2.5 py-1 text-xs capitalize text-texto-suave hover:border-borda"
                         >
                           {t.categoria === null && (
                             <option value="" disabled>

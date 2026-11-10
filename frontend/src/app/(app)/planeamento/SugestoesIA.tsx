@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import type { SugestaoCategoria } from "@/lib/api";
 
 import { euros } from "../dashboard/formatos";
@@ -10,10 +11,12 @@ type Props = {
   sugestoes: SugestaoCategoria[];
   onAceitar: (categoria: string, limite: number) => Promise<void>;
   onFechar: () => void;
+  desligado?: boolean; // demo (só leitura): não se aceitam sugestões
 };
 
 // Lista das propostas da IA. Nada é guardado sem o utilizador clicar em "Aceitar" (a IA sugere, a pessoa decide).
-export default function SugestoesIA({ sugestoes, onAceitar, onFechar }: Props) {
+export default function SugestoesIA({ sugestoes, onAceitar, onFechar, desligado = false }: Props) {
+  const descricaoDemo = desligado ? ID_NOTA_DEMO : undefined; // aponta para a explicação (NotaDemo)
   const [aceites, setAceites] = useState<string[]>([]);
 
   async function aceitar(s: SugestaoCategoria) {
@@ -35,7 +38,9 @@ export default function SugestoesIA({ sugestoes, onAceitar, onFechar }: Props) {
           <button
             type="button"
             onClick={aceitarTodas}
-            className="rounded-md bg-destaque px-3 py-1.5 text-xs font-medium text-white hover:bg-destaque-hover"
+            disabled={desligado}
+            aria-describedby={descricaoDemo}
+            className="rounded-md bg-destaque px-3 py-1.5 text-xs font-medium text-white hover:bg-destaque-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             Aceitar todas
           </button>
@@ -64,7 +69,9 @@ export default function SugestoesIA({ sugestoes, onAceitar, onFechar }: Props) {
               <button
                 type="button"
                 onClick={() => aceitar(s)}
-                className="rounded-md border border-borda px-3 py-1 text-xs text-texto hover:bg-fundo"
+                disabled={desligado}
+                aria-describedby={descricaoDemo}
+                className="rounded-md border border-borda px-3 py-1 text-xs text-texto hover:bg-fundo disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Aceitar
               </button>

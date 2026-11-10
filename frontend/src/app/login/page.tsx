@@ -7,6 +7,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Logo from "@/components/Logo";
 import AvisoServidor from "@/components/AvisoServidor";
 import BotaoGoogle from "@/components/BotaoGoogle";
+import BotaoDemo from "@/components/BotaoDemo";
 import { API_URL, fetchComTentativas, guardarToken } from "@/lib/api";
 
 export default function PaginaLogin() {
@@ -97,6 +98,11 @@ export default function PaginaLogin() {
             {aEntrar ? "A entrar..." : "Entrar"}
           </button>
         </form>
+
+        {/* Demo para recrutadores: entra numa conta partilhada com dados inventados, só de leitura. */}
+        <div className="border-t border-borda pt-4">
+          <BotaoDemo />
+        </div>
 
         <p className="text-center text-sm text-texto-suave">
           Ainda não tens conta?{" "}

@@ -2,11 +2,18 @@
 
 import { useState, type FormEvent } from "react";
 
+import { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import type { LinhaOrcamento } from "@/lib/api";
 
 import { euros } from "../dashboard/formatos";
 
-type Props = { linha: LinhaOrcamento; onGuardar: (categoria: string, limite: number) => void; compacta?: boolean };
+// desligado: demo (só leitura), o campo e o botão Guardar ficam desligados.
+type Props = {
+  linha: LinhaOrcamento;
+  onGuardar: (categoria: string, limite: number) => void;
+  compacta?: boolean;
+  desligado?: boolean;
+};
 
 // Cor da barra conforme a percentagem gasta. O texto ao lado diz sempre os números,
 // por isso a cor nunca é a única pista.
@@ -16,13 +23,13 @@ function corDaBarra(percentagem: number) {
   return "bg-destaque";
 }
 
-export default function LinhaPlaneamento({ linha, onGuardar, compacta = false }: Props) {
+export default function LinhaPlaneamento({ linha, onGuardar, compacta = false, desligado = false }: Props) {
   const [valor, setValor] = useState(linha.limite?.toString().replace(".", ",") ?? "");
 
   function submeter(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     const numero = Number(valor.replace(",", "."));
-    if (numero > 0) onGuardar(linha.categoria, numero);
+    if (numero > 0 && !desligado) onGuardar(linha.categoria, numero);
   }
 
   const formulario = (
@@ -31,11 +38,17 @@ export default function LinhaPlaneamento({ linha, onGuardar, compacta = false }:
         inputMode="decimal"
         value={valor}
         onChange={(e) => setValor(e.target.value)}
+        disabled={desligado}
         placeholder="Limite €"
         aria-label={`Orçamento mensal de ${linha.categoria}`}
         className="w-24 rounded-md border border-borda bg-cartao px-2 py-1 text-right text-sm text-texto"
       />
-      <button type="submit" className="rounded-md bg-destaque px-3 py-1 text-xs font-medium text-white hover:bg-destaque-hover">
+      <button
+        type="submit"
+        disabled={desligado}
+        aria-describedby={desligado ? ID_NOTA_DEMO : undefined}
+        className="rounded-md bg-destaque px-3 py-1 text-xs font-medium text-white hover:bg-destaque-hover disabled:cursor-not-allowed disabled:opacity-50"
+      >
         Guardar
       </button>
     </form>

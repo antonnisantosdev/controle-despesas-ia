@@ -5,7 +5,9 @@ import { useEffect, useRef, useState } from "react";
 
 import AvisoLimite from "@/components/AvisoLimite";
 import AvisoPlanoPago from "@/components/AvisoPlanoPago";
+import NotaDemo, { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import {
+  eBloqueadoNaDemo,
   apagarToken,
   eLimiteDiario,
   enviarFicheiro,
@@ -20,6 +22,7 @@ import {
 import { reduzirImagem } from "@/lib/imagem";
 import { temFuncoesPagas } from "@/lib/planos";
 import { TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
+import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import { euros } from "../dashboard/formatos";
 import RevisaoTalao from "./RevisaoTalao";
@@ -35,6 +38,8 @@ export default function PaginaCompras() {
   const [compras, setCompras] = useState<Compra[] | null>(null); // null = ainda a carregar
   const [talao, setTalao] = useState<Talao | null>(null); // o que a IA leu, à espera de revisão
   const [aLer, setALer] = useState(false);
+  // Na demo (só leitura) não se leem talões novos; a API recusa-os na mesma (423).
+  const demo = useSessaoDemo();
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
   const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite de pedidos à IA
@@ -80,6 +85,7 @@ export default function PaginaCompras() {
       setTalao(await enviarFicheiro<Talao>("/compras/ler", "foto", pequena));
     } catch (e) {
       if (e instanceof SessaoExpirada) tratarSessao(e);
+      else if (eBloqueadoNaDemo(e)) return; // 423 da demo: a faixa já explica
       else if (eLimiteDiario(e)) setSemPedidos(true);
       else if (eSoPlanosPagos(e)) setSoPlanosPagos(typeof e.detalhe === "string" ? e.detalhe : TEXTOS_PLANO_PAGO.talao);
       // 413/415/422 (foto inválida) e 503 (IA em baixo) trazem uma explicação da API.
@@ -121,15 +127,17 @@ export default function PaginaCompras() {
           {planoVerificado && !soPlanosPagos && (
             <button
               type="button"
-              disabled={aLer}
+              disabled={aLer || demo}
+              aria-describedby={demo ? ID_NOTA_DEMO : undefined}
               onClick={() => entradaFoto.current?.click()}
-              className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
+              className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {aLer ? "A IA está a ler o talão..." : "📷 Fotografar talão"}
             </button>
           )}
         </header>
 
+        <NotaDemo />
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
         {semPedidos && <AvisoLimite />}
         {soPlanosPagos && <AvisoPlanoPago mensagem={soPlanosPagos} />}
