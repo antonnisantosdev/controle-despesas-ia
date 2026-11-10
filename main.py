@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 
@@ -107,6 +108,23 @@ from resumo import assinatura_dos_dados, guardar_resumo, recolher_dados, resumo_
 from simulador import simular_poupanca
 
 app = FastAPI()
+
+
+class SemIpNoRegisto(logging.Filter):
+    """RGPD: tira o IP do visitante das linhas do access log do uvicorn (ficavam nos logs do Render).
+
+    O uvicorn escreve '%s - "%s %s HTTP/%s" %d' com (cliente, método, caminho, versão, estado);
+    o cliente ("1.2.3.4:0") passa a "-" e o resto da linha fica igual.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple) and len(record.args) == 5:
+            record.args = ("-", *record.args[1:])
+        return True
+
+
+# Fica no logger (e não num handler): o uvicorn troca os handlers ao configurar os logs, mas mantém os filtros.
+logging.getLogger("uvicorn.access").addFilter(SemIpNoRegisto())
 
 # Os endereços do frontend (FRONTEND_URL); no deploy junta-se o da Vercel, separado por vírgula.
 # Servem para o CORS e para validar o regresso do login com o Google.
