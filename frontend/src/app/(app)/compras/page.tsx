@@ -21,7 +21,7 @@ import {
 } from "@/lib/api";
 import { reduzirImagem } from "@/lib/imagem";
 import { temFuncoesPagas } from "@/lib/planos";
-import { TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
+import { TEXTOS_ENVIO_IA, TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
 import { TEXTOS_PRECOS_LOJAS } from "@/lib/textosPrecosLojas";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
@@ -168,6 +168,10 @@ export default function PaginaCompras() {
         </header>
 
         <NotaDemo />
+        {/* Junto ao botão de fotografar: a foto vai à Anthropic para ser lida. */}
+        {separador === "taloes" && planoVerificado && !soPlanosPagos && !demo && (
+          <p className="text-sm text-texto-suave">{TEXTOS_ENVIO_IA.talao}</p>
+        )}
 
         <div role="tablist" aria-label={TEXTOS_PRECOS_LOJAS.rotuloSeparadores} className="flex gap-1 border-b border-borda">
           {SEPARADORES.map(({ id, nome }, indice) => {

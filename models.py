@@ -113,6 +113,12 @@ class CategoriaAtualizar(BaseModel):
     categoria: Categoria
 
 
+# Para apagar a conta, o corpo tem de trazer {"confirmacao": "APAGAR"} (evita apagar por engano).
+# Opcional aqui: a falta ou um valor errado respondem 400 na rota, não 422.
+class ConfirmacaoApagarConta(BaseModel):
+    confirmacao: str | None = Field(default=None, max_length=20)
+
+
 class Credenciais(BaseModel):
     email: str
     password: str

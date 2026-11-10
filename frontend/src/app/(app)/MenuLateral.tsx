@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import Logo from "@/components/Logo";
+import RodapeLegal from "@/components/RodapeLegal";
 import { apagarToken } from "@/lib/api";
 import { TEXTOS_RELATORIO } from "@/lib/textosRelatorio";
 
@@ -99,6 +100,7 @@ export default function MenuLateral() {
           <Icone caminho="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11" />
           Sair da conta
         </button>
+        <RodapeLegal className="justify-start" />
       </div>
     </aside>
   );

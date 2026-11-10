@@ -2,13 +2,21 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 
 import Logo from "@/components/Logo";
 import AvisoServidor from "@/components/AvisoServidor";
 import BotaoGoogle from "@/components/BotaoGoogle";
 import BotaoDemo from "@/components/BotaoDemo";
-import { API_URL, fetchComTentativas, guardarToken } from "@/lib/api";
+import RodapeLegal from "@/components/RodapeLegal";
+import { API_URL, contaApagada, EVENTO_SESSAO, fetchComTentativas, guardarToken } from "@/lib/api";
+import { TEXTOS_APAGAR_CONTA } from "@/lib/textosPlanos";
+
+// Avisa o React quando a marca "a conta foi apagada" muda (ver terminarSessaoContaApagada em api.ts).
+function subscrever(avisar: () => void) {
+  window.addEventListener(EVENTO_SESSAO, avisar);
+  return () => window.removeEventListener(EVENTO_SESSAO, avisar);
+}
 
 export default function PaginaLogin() {
   const router = useRouter();
@@ -18,6 +26,8 @@ export default function PaginaLogin() {
   const [password, setPassword] = useState("");
   const [erro, setErro] = useState("");
   const [aEntrar, setAEntrar] = useState(false);
+  // Veio de apagar a conta (O meu plano): mostra a confirmação. No servidor é sempre false.
+  const apagada = useSyncExternalStore(subscrever, contaApagada, () => false);
 
   // Acorda a API logo que a página abre: enquanto se escreve o email e a palavra-passe,
   // o Render já está a arrancar o servidor. A resposta não interessa, e um erro também não.
@@ -62,7 +72,13 @@ export default function PaginaLogin() {
           <Logo altura={48} />
         </h1>
 
-        <BotaoGoogle />
+        {apagada && (
+          <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+            {TEXTOS_APAGAR_CONTA.apagada}
+          </p>
+        )}
+
+        <BotaoGoogle comTermos />
 
         <form onSubmit={entrar} className="space-y-4">
           <label className="block">
@@ -118,6 +134,7 @@ export default function PaginaLogin() {
             Ver planos
           </Link>
         </p>
+        <RodapeLegal className="-mt-2" />
       </div>
       <AvisoServidor />
     </main>

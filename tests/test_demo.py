@@ -465,6 +465,8 @@ ROTAS_PUBLICAS = {
 ROTAS_BLOQUEADAS_NA_DEMO = {
     ("POST", "/transacoes"),
     ("PATCH", "/transacoes/{transacao_id}"),
+    ("DELETE", "/transacoes/{transacao_id}"),
+    ("DELETE", "/conta"),
     ("POST", "/transacoes/categorizar"),
     ("POST", "/transacoes/importar"),
     ("PUT", "/orcamentos/{categoria}"),

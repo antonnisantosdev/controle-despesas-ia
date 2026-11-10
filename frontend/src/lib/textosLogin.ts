@@ -12,3 +12,13 @@ export const TEXTOS_GOOGLE = {
   erroEntrar: "Não foi possível entrar com o Google. Tenta outra vez.", // TEXTO NOVO
   voltarLogin: "Voltar ao login", // TEXTO NOVO
 };
+
+// Registo e login com o Google: aceitar os termos ao criar conta (sem caixa obrigatória). Texto aprovado pelo CEO.
+// As páginas /termos e /privacidade ainda estão a ser escritas.
+export const TEXTOS_TERMOS = {
+  antes: "Ao criar conta, aceitas os ",
+  termos: "Termos de Utilização",
+  meio: " e a ",
+  privacidade: "Política de Privacidade",
+  fim: ".",
+};

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import AvisoServidor from "@/components/AvisoServidor";
 import BotaoPedirAcesso from "@/components/BotaoPedirAcesso";
 import Logo from "@/components/Logo";
+import RodapeLegal from "@/components/RodapeLegal";
 import { emailDaSessao, sessaoPublica, type EstadoPlano } from "@/lib/api";
 import {
   CONTACTOS,
@@ -160,6 +161,7 @@ export default function PaginaPrecos() {
           </div>
         </section>
       </div>
+      <RodapeLegal className="pb-6" />
       <AvisoServidor />
     </main>
   );

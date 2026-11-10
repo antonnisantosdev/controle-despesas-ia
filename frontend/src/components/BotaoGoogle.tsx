@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import AvisoTermos from "@/components/AvisoTermos";
 import { API_URL, fetchComTentativas } from "@/lib/api";
 import { calcularChallenge, gerarVerifier, guardarVerifier } from "@/lib/pkceGoogle";
 import { TEXTOS_GOOGLE } from "@/lib/textosLogin";
@@ -26,7 +27,8 @@ function LogoGoogle() {
 // "Continuar com Google" e, por baixo, o separador "ou" antes do formulário de email.
 // A API devolve o endereço do Supabase (GET /login/google); o browser vai para lá e,
 // depois de escolher a conta Google, volta à página /login/google com um código (?code=).
-export default function BotaoGoogle() {
+// comTermos: mostra por baixo a frase dos termos (no login, onde o primeiro login com o Google cria a conta).
+export default function BotaoGoogle({ comTermos = false }: { comTermos?: boolean }) {
   const [aAbrir, setAAbrir] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -73,6 +75,7 @@ export default function BotaoGoogle() {
         <LogoGoogle />
         {aAbrir ? TEXTOS_GOOGLE.aAbrir : TEXTOS_GOOGLE.botao}
       </button>
+      {comTermos && <AvisoTermos />}
       {erro && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {erro}

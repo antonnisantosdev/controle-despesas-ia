@@ -23,6 +23,8 @@ import { useLimitesPlanos } from "@/lib/useLimitesPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 import { TEXTOS_CARTOES, TEXTOS_EXPIRADA, TEXTOS_MEU_PLANO } from "@/lib/textosPlanos";
 
+import ApagarConta from "./ApagarConta";
+
 // "O meu plano": o plano atual, os pedidos à IA do período, até quando dura e como mudar ou renovar.
 export default function PaginaPlano() {
   const router = useRouter();
@@ -80,6 +82,9 @@ export default function PaginaPlano() {
             {TEXTOS_EXPIRADA.botaoPlanos}
           </Link>
         )}
+
+        {/* Na demo aparece desligada, com a nota da demo. */}
+        <ApagarConta />
       </div>
     </main>
   );

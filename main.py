@@ -1,8 +1,9 @@
 import logging
 import os
 import re
+from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, UploadFile
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
@@ -11,6 +12,7 @@ from supabase import AuthApiError, AuthError
 
 from auth import (
     FORMATO_CODE_CHALLENGE,
+    apagar_utilizador,
     destino_google_valido,
     fazer_login,
     fazer_registo,
@@ -23,6 +25,7 @@ from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
 from database import ler_todas, supabase
 from demo import (
+    MENSAGEM_BLOQUEIO_DEMO,
     MENSAGEM_DEMO_DESLIGADA,
     config_demo,
     criar_token_demo,
@@ -79,6 +82,7 @@ from models import (
     Categoria,
     CategoriaAtualizar,
     Compra,
+    ConfirmacaoApagarConta,
     Credenciais,
     NovaConta,
     GastoCategoria,
@@ -112,10 +116,13 @@ from models import (
 )
 from recorrentes import esquecer_recorrentes, recorrentes_do_utilizador
 from relatorio import ano_valido, dados_para_ia, relatorio_do_ano, relatorio_em_csv
-from resumo import assinatura_dos_dados, guardar_resumo, recolher_dados, resumo_guardado
+from resumo import assinatura_dos_dados, esquecer_resumos, guardar_resumo, recolher_dados, resumo_guardado
 from simulador import simular_poupanca
 
 app = FastAPI()
+
+# Id de uma transação no caminho: dentro de um BIGINT, para um número enorme dar 422 e não 500 no PostgREST.
+IdTransacao = Annotated[int, Path(ge=1, le=2**63 - 1)]
 
 
 class SemIpNoRegisto(logging.Filter):
@@ -263,6 +270,35 @@ def quem_sou_eu(user_id: str = Depends(obter_utilizador_atual)):
     return {"user_id": user_id}
 
 
+# O que o utilizador tem de escrever para apagar a conta (o frontend pede o mesmo).
+CONFIRMACAO_APAGAR_CONTA = "APAGAR"
+MENSAGEM_SEM_CONFIRMACAO = 'Para apagar a conta, escreve "APAGAR" na confirmação.'
+MENSAGEM_APAGAR_CONTA_FALHOU = "Não foi possível apagar a conta agora. Tenta mais tarde."
+
+
+# Apaga a conta de quem está autenticado (só a própria: o id vem do token, nunca do pedido).
+# A conta de demo nunca chega aqui: o obter_utilizador_atual responde 423 (fora de PERMISSOES_DEMO).
+@app.delete("/conta", status_code=204)
+def apagar_conta(
+    pedido: ConfirmacaoApagarConta | None = None, user_id: str = Depends(obter_utilizador_atual)
+) -> None:
+    if pedido is None or pedido.confirmacao != CONFIRMACAO_APAGAR_CONTA:
+        raise HTTPException(status_code=400, detail=MENSAGEM_SEM_CONFIRMACAO)
+    # Segunda barreira: mesmo que a lista da demo mude por engano, a conta de demo não se apaga.
+    id_demo = config_demo().user_id
+    if id_demo is not None and str(user_id).lower() == id_demo:
+        raise HTTPException(status_code=423, detail=MENSAGEM_BLOQUEIO_DEMO)
+    try:
+        apagar_utilizador(user_id)
+    except Exception as erro:
+        # Só o tipo no log: a mensagem do Supabase pode trazer dados da conta.
+        print(f"AVISO: apagar conta falhou ({type(erro).__name__}).")
+        raise HTTPException(status_code=502, detail=MENSAGEM_APAGAR_CONTA_FALHOU)
+    # O que ficava na memória do servidor sobre esta conta.
+    esquecer_recorrentes(user_id)
+    esquecer_resumos(user_id)
+
+
 # A API usa a chave secreta (ignora o RLS), por isso cada rota filtra pelo user_id do token.
 # Lista as transações, das mais recentes para as mais antigas. Com ?mes=2026-10, só as desse mês.
 @app.get("/transacoes")
@@ -302,7 +338,7 @@ def contar_sem_categoria(user_id: str = Depends(obter_utilizador_atual)) -> dict
 
 
 @app.get("/transacoes/{transacao_id}")
-def obter_transacao(transacao_id: int, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
+def obter_transacao(transacao_id: IdTransacao, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
     def nova_consulta():
         return supabase.table("transacoes").select("*").eq("id", transacao_id).eq("user_id", user_id)
 
@@ -338,7 +374,7 @@ def criar_transacao(nova: NovaMovimentacao, user_id: str = Depends(obter_utiliza
 # O utilizador corrige a categoria escolhida pela IA (ou preenche uma que ficou vazia).
 @app.patch("/transacoes/{transacao_id}")
 def corrigir_categoria(
-    transacao_id: int, alteracao: CategoriaAtualizar, user_id: str = Depends(obter_utilizador_atual)
+    transacao_id: IdTransacao, alteracao: CategoriaAtualizar, user_id: str = Depends(obter_utilizador_atual)
 ) -> Transacao:
     resposta = (
         supabase.table("transacoes")
@@ -351,6 +387,17 @@ def corrigir_categoria(
         raise HTTPException(status_code=404, detail="Transação não encontrada")
     esquecer_recorrentes(user_id)  # a categoria aparece nos pagamentos que se repetem
     return resposta.data[0]
+
+
+# Apaga uma movimentação do utilizador. Se tiver um talão ligado, a base de dados apaga também
+# a compra e os produtos (ON DELETE CASCADE, sql/009_compras.sql).
+# De outro utilizador ou inexistente: o mesmo 404, para não revelar que existe.
+@app.delete("/transacoes/{transacao_id}", status_code=204)
+def apagar_transacao(transacao_id: IdTransacao, user_id: str = Depends(obter_utilizador_atual)) -> None:
+    resposta = supabase.table("transacoes").delete().eq("id", transacao_id).eq("user_id", user_id).execute()
+    if not resposta.data:
+        raise HTTPException(status_code=404, detail="Transação não encontrada")
+    esquecer_recorrentes(user_id)
 
 
 # Pendentes máximas por clique em "Categorizar": cabem numa chamada à IA sem um prompt enorme.

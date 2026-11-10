@@ -111,3 +111,11 @@ def guardar_resumo(user_id: str, mes: str, assinatura: str, resumo: ResumoMes) -
     except Exception as erro:
         print(f"AVISO: não foi possível guardar o resumo (sql/016 por correr?): {erro}")
     RESUMOS_EM_MEMORIA[_chave_memoria(user_id, mes, assinatura)] = resumo
+
+
+def esquecer_resumos(user_id: str) -> None:
+    """Tira da memória os resumos do utilizador (quando apaga a conta). Os da tabela vão com a conta (ON DELETE CASCADE)."""
+    prefixo = f"{user_id}:"
+    # list(): uma cópia das chaves, para outro pedido poder escrever no dicionário ao mesmo tempo sem RuntimeError.
+    for chave in [chave for chave in list(RESUMOS_EM_MEMORIA) if chave.startswith(prefixo)]:
+        RESUMOS_EM_MEMORIA.pop(chave, None)

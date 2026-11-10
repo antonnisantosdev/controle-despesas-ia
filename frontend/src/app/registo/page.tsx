@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 
 import AvisoServidor from "@/components/AvisoServidor";
+import AvisoTermos from "@/components/AvisoTermos";
 import BotaoGoogle from "@/components/BotaoGoogle";
 import Logo from "@/components/Logo";
+import RodapeLegal from "@/components/RodapeLegal";
 import { API_URL, fetchComTentativas } from "@/lib/api";
 import { LIMITES_RESERVA, textoDosPedidos } from "@/lib/planos";
 
@@ -84,6 +86,8 @@ export default function PaginaRegisto() {
             <p className="text-center text-sm text-texto-suave">
               Cria a tua conta grátis. O plano Free inclui {textoDosPedidos(LIMITES_RESERVA.free)} e importação de extratos em CSV.
             </p>
+            {/* Antes das duas formas de criar conta (Google e email), para valer para as duas. */}
+            <AvisoTermos />
 
             {/* Com o Google, a conta é criada no primeiro login (e entra no Free pelo mesmo gatilho). */}
             <BotaoGoogle />
@@ -150,6 +154,7 @@ export default function PaginaRegisto() {
             </p>
           </form>
         )}
+        <RodapeLegal />
       </div>
       <AvisoServidor />
     </main>

@@ -11,6 +11,9 @@ const CHAVE_DEMO = "sessao-demo";
 // A marca "a sessão da demo terminou" (só neste separador): o login mostra o aviso TEXTOS_DEMO.sessaoTerminou.
 const CHAVE_DEMO_TERMINOU = "demo-terminou";
 
+// A marca "a conta foi apagada" (só neste separador): o login mostra TEXTOS_APAGAR_CONTA.apagada.
+const CHAVE_CONTA_APAGADA = "conta-apagada";
+
 // Os componentes ouvem este evento para saberem que a sessão mudou (ex.: entrou ou saiu da demo).
 export const EVENTO_SESSAO = "sessao-mudou";
 
@@ -19,6 +22,7 @@ export const EVENTO_SESSAO = "sessao-mudou";
 export function guardarToken(token: string, demo = false) {
   localStorage.setItem(CHAVE_TOKEN, token);
   sessionStorage.removeItem(CHAVE_DEMO_TERMINOU); // entrou de novo: o aviso "a sessão da demo terminou" sai
+  sessionStorage.removeItem(CHAVE_CONTA_APAGADA); // e o aviso "a conta foi apagada" também
   if (demo) {
     localStorage.setItem(CHAVE_DEMO, "1");
   } else {
@@ -39,6 +43,17 @@ export function apagarToken() {
   localStorage.removeItem(CHAVE_TOKEN);
   localStorage.removeItem(CHAVE_DEMO);
   window.dispatchEvent(new Event(EVENTO_SESSAO));
+}
+
+// Depois de DELETE /conta: apaga a sessão e deixa a marca para o login mostrar que a conta foi apagada.
+export function terminarSessaoContaApagada() {
+  apagarToken();
+  sessionStorage.setItem(CHAVE_CONTA_APAGADA, "1");
+  window.dispatchEvent(new Event(EVENTO_SESSAO));
+}
+
+export function contaApagada(): boolean {
+  return typeof window !== "undefined" && sessionStorage.getItem(CHAVE_CONTA_APAGADA) === "1";
 }
 
 // Se a sessão guardada é da demo. false no servidor (no Next, as páginas também se desenham sem browser).

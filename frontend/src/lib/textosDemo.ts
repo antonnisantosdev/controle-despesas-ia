@@ -33,7 +33,7 @@ export const TEXTOS_DEMO = {
   notaChat: "Na demo podes fazer até 5 perguntas por dia. As respostas usam os dados inventados desta conta.",
 
   // Junto aos botões de alterar dados, que ficam desligados na demo.
-  soLeitura: "Na demo, importar, gravar, ler talões, juntar produtos e as sugestões da IA estão desligados. Os dados são inventados.",
+  soLeitura: "Na demo, importar, gravar, apagar, ler talões, juntar produtos e as sugestões da IA estão desligados. Os dados são inventados.",
   botaoDesligado: "Indisponível na demo",
   // No cartão do plano (menu) e na página O meu plano, em vez do contador partilhado e da data.
   planoDemoNome: "Conta de demonstração",

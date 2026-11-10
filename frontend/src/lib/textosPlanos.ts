@@ -228,3 +228,42 @@ export const TEXTOS_SEM_DADOS = {
   texto: "Importa um extrato do teu banco ou cria a primeira movimentação. Os gráficos e o resumo do mês aparecem logo a seguir.", // TEXTO NOVO
   botao: "Ir para Movimentações", // TEXTO NOVO
 };
+
+// Aviso antes de enviar ficheiros à IA (Movimentações e Minhas compras). Ligado à Política de Privacidade.
+// pdf e talao: texto aprovado pelo CEO. csv: TEXTO NOVO (no CSV o ficheiro não vai à IA, só a descrição
+// e o valor de cada movimento, para a categorização; ver _categorizar_claude em ia.py).
+export const TEXTOS_ENVIO_IA = {
+  pdf: "O ficheiro é enviado à Anthropic (EUA) para ser lido pela IA e não fica guardado.",
+  talao: "A fotografia é enviada à Anthropic (EUA) para ser lido pela IA e não fica guardado.",
+  csv: "No CSV, só a descrição e o valor de cada movimentação são enviados à Anthropic (EUA), para a IA escolher a categoria.",
+};
+
+// Movimentações: apagar uma movimentação (DELETE /transacoes/{id}). TEXTO NOVO (todos)
+export const TEXTOS_APAGAR_MOVIMENTO = {
+  botao: "Apagar",
+  rotuloBotao: "Apagar {descricao}, {data}, {valor}",
+  titulo: "Apagar esta movimentação?",
+  texto: "{descricao}, {valor}, de {data}. Isto não se pode desfazer.",
+  // Só para as movimentações criadas a partir de um talão (Minhas compras).
+  avisoTalao: "Esta movimentação veio de um talão: a compra e os produtos em Minhas compras também são apagados, e deixam de contar nos preços por loja.",
+  confirmar: "Apagar",
+  aApagar: "A apagar...",
+  cancelar: "Cancelar",
+  sucesso: "Movimentação apagada.",
+  erro: "Não foi possível apagar a movimentação. Tenta outra vez.",
+  naoEncontrada: "Esta movimentação já não existe. A lista foi atualizada.",
+};
+
+// O meu plano: zona para apagar a conta (DELETE /conta). TEXTO NOVO (todos)
+// palavra tem de ser igual a CONFIRMACAO_APAGAR_CONTA em main.py.
+export const TEXTOS_APAGAR_CONTA = {
+  titulo: "Apagar conta",
+  aviso: "Apaga a tua conta e todos os teus dados: movimentações, orçamentos, talões, objetivos e resumos. Isto é irreversível e não há forma de recuperar os dados.",
+  palavra: "APAGAR",
+  rotuloCampo: "Para confirmar, escreve APAGAR",
+  botao: "Apagar a minha conta",
+  aApagar: "A apagar a conta...",
+  erro: "Não foi possível apagar a conta. Tenta outra vez daqui a pouco.",
+  // Na página inicial, depois de apagar.
+  apagada: "A tua conta foi apagada, com todos os teus dados.",
+};

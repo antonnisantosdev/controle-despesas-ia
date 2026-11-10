@@ -91,6 +91,12 @@ def trocar_codigo_google(codigo: str, code_verifier: str) -> str:
     return resposta.session.access_token
 
 
+def apagar_utilizador(user_id: str) -> None:
+    """Apaga a conta no Supabase Auth (precisa da chave secreta). As tabelas com ON DELETE CASCADE
+    apagam os dados dele; a chamadas_ia fica com o user_id a NULL (sql/014), só para as contas de custos."""
+    supabase.auth.admin.delete_user(user_id)
+
+
 def verificar_assinatura(user_id: str) -> None:
     """Responde 403 se o utilizador não tiver linha na tabela assinaturas.
 

@@ -19,12 +19,13 @@ import {
 } from "@/lib/api";
 import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
 import { mesAtual, preencher, temFuncoesPagas } from "@/lib/planos";
-import { TEXTOS_CATEGORIZAR, TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
+import { TEXTOS_APAGAR_MOVIMENTO, TEXTOS_CATEGORIZAR, TEXTOS_ENVIO_IA, TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import { euros, nomeMes } from "../dashboard/formatos";
 import BotaoCategorizar from "./BotaoCategorizar";
 import BotaoImportar from "./BotaoImportar";
+import DialogoApagar from "./DialogoApagar";
 import FormNovaMovimentacao from "./FormNovaMovimentacao";
 
 // "2026-10-05" -> "05/10"
@@ -62,6 +63,8 @@ export default function PaginaMovimentacoes() {
   // Transações sem categoria em TODOS os meses: a lista só tem o mês escolhido, mas o
   // POST /transacoes/categorizar trata as de todos os meses (por lotes). 0 enquanto não se sabe (o botão fica escondido).
   const [semCategoria, setSemCategoria] = useState(0);
+  // A movimentação que o utilizador quer apagar (o diálogo de confirmação está aberto), ou null.
+  const [aApagar, setAApagar] = useState<Transacao | null>(null);
   const aCarregar = lista?.mes !== mes;
   // Na demo (só leitura) os botões que mudam dados ficam desligados; a API recusa-os na mesma (423).
   const demo = useSessaoDemo();
@@ -153,6 +156,12 @@ export default function PaginaMovimentacoes() {
     setSemPedidos(false);
     setSoPlanosPagos(null);
     setAviso({ tipo: "sucesso", mensagem: preencher(TEXTOS_CATEGORIZAR.sucesso, { n: atualizadas.length }), erros: [] });
+    setVersao((v) => v + 1);
+  }
+
+  // Depois de apagar (ou de a API dizer que já não existia): mostra a mensagem e volta a pedir a lista e a contagem.
+  function aposApagar(mensagem: string) {
+    setAviso({ tipo: "sucesso", mensagem, erros: [] });
     setVersao((v) => v + 1);
   }
 
@@ -253,6 +262,13 @@ export default function PaginaMovimentacoes() {
 
         <NotaDemo />
         {soCsv && !demo && <p className="text-sm text-texto-suave">{TEXTOS_PLANO_PAGO.soCsv}</p>}
+        {/* O que vai para a Anthropic ao importar: o PDF inteiro (só nos pagos); no CSV, só a descrição e o valor. */}
+        {!demo && (
+          <ul className="space-y-1 text-sm text-texto-suave">
+            {!soCsv && <li>{TEXTOS_ENVIO_IA.pdf}</li>}
+            <li>{TEXTOS_ENVIO_IA.csv}</li>
+          </ul>
+        )}
 
         {semCategoria > 0 && (
           <BotaoCategorizar
@@ -306,6 +322,16 @@ export default function PaginaMovimentacoes() {
 
         {formAberto && !demo && <FormNovaMovimentacao onCriada={aposCriar} onFechar={() => setFormAberto(false)} />}
 
+        {aApagar && (
+          <DialogoApagar
+            key={aApagar.id}
+            transacao={aApagar}
+            onApagada={aposApagar}
+            onFechar={() => setAApagar(null)}
+            onSessaoExpirada={tratarErro}
+          />
+        )}
+
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
 
         <section className="overflow-hidden rounded-xl border border-borda bg-cartao">
@@ -316,7 +342,8 @@ export default function PaginaMovimentacoes() {
 
           {transacoes.length > 0 && (
             // overflow-x-auto: no telemóvel a tabela desliza para o lado em vez de sair do ecrã.
-            <div className="overflow-x-auto">
+            // relative: o "Ações" só para leitores de ecrã (sr-only, absolute) fica preso aqui e não alarga a página.
+            <div className="relative overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-borda text-left text-xs text-texto-suave">
@@ -325,6 +352,9 @@ export default function PaginaMovimentacoes() {
                     <th className="px-4 py-3 font-medium">Categoria</th>
                     <th className="px-4 py-3 font-medium">Método</th>
                     <th className="px-4 py-3 text-right font-medium">Valor</th>
+                    <th className="px-2 py-3">
+                      <span className="sr-only">Ações</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -365,6 +395,22 @@ export default function PaginaMovimentacoes() {
                       >
                         {t.valor > 0 ? "+" : ""}
                         {euros(t.valor)}
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setAApagar(t)}
+                          disabled={demo}
+                          aria-label={preencher(TEXTOS_APAGAR_MOVIMENTO.rotuloBotao, {
+                            descricao: t.descricao,
+                            data: diaMes(t.data),
+                            valor: euros(t.valor),
+                          })}
+                          aria-describedby={demo ? ID_NOTA_DEMO : undefined}
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2 text-xs font-medium text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent dark:text-red-300 dark:hover:bg-red-950/40"
+                        >
+                          {TEXTOS_APAGAR_MOVIMENTO.botao}
+                        </button>
                       </td>
                     </tr>
                   ))}
