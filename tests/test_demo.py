@@ -34,6 +34,7 @@ import limites
 import main
 import objetivos
 import orcamento
+import produtos
 import recorrentes
 import resumo
 from auth import obter_utilizador_atual
@@ -225,7 +226,7 @@ class SupabaseFalso:
 def base(monkeypatch):
     """O Supabase a fingir em todos os módulos que falam com a base de dados, e a demo ligada."""
     falsa = SupabaseFalso()
-    for modulo in (auth, compras, consultas, demo, ia, limites, main, objetivos, orcamento, recorrentes, resumo):
+    for modulo in (auth, compras, consultas, demo, ia, limites, main, objetivos, orcamento, produtos, recorrentes, resumo):
         monkeypatch.setattr(modulo, "supabase", falsa)
     monkeypatch.setenv("DEMO_TOKEN_SEGREDO", SEGREDO)
     monkeypatch.setenv("DEMO_USER_ID", DEMO_USER_ID)
@@ -470,6 +471,8 @@ ROTAS_BLOQUEADAS_NA_DEMO = {
     ("POST", "/orcamentos/sugestao"),
     ("POST", "/compras/ler"),
     ("POST", "/compras"),
+    ("POST", "/compras/produtos/juntar"),
+    ("DELETE", "/compras/produtos/juntar/{chave_origem}"),
     ("POST", "/objetivos"),
     ("PATCH", "/objetivos/{objetivo_id}"),
     ("DELETE", "/objetivos/{objetivo_id}"),
@@ -502,7 +505,13 @@ def _rotas_da_api() -> set[tuple[str, str, bool]]:
 
 
 def _endereco(caminho: str) -> str:
-    return caminho.replace("{transacao_id}", "1").replace("{objetivo_id}", "1").replace("{categoria}", "casa")
+    return (
+        caminho.replace("{transacao_id}", "1")
+        .replace("{objetivo_id}", "1")
+        .replace("{categoria}", "casa")
+        .replace("{chave}", "leite meio gordo")
+        .replace("{chave_origem}", "leite meio gordo")
+    )
 
 
 def test_cada_rota_tem_uma_decisao_para_a_demo():
@@ -689,7 +698,9 @@ def test_reposicao_grava_tudo_so_com_o_id_da_demo(base, api):
     for tabela, _, dados, _ in _gravacoes(base):
         for linha in dados if isinstance(dados, list) else [dados]:
             if tabela == "compra_itens":
-                assert set(linha) == {"descricao", "quantidade", "preco", "compra_id"}
+                assert set(linha) == {
+                    "descricao", "quantidade", "preco", "compra_id", "nome_generico", "produto_chave", "unidade"
+                }
             else:
                 assert linha["user_id"] == DEMO_USER_ID
     # Confirmou o email da conta antes de apagar.
@@ -712,7 +723,7 @@ def test_reposicao_cria_os_dados_da_demo(base, api):
     transacoes = base.tabelas["transacoes"]
     assert all(linha["hash_importacao"].startswith("demo-2026-W46-") for linha in transacoes)
     # A marca é a última transação gravada.
-    assert transacoes[-1]["hash_importacao"] == "demo-2026-W46-v3-marca"
+    assert transacoes[-1]["hash_importacao"] == "demo-2026-W46-v5-marca"
     assert len(base.tabelas["objetivos"]) == 2
     assert len(base.tabelas["compras"]) >= 1 and base.tabelas["compra_itens"]
     assert base.tabelas["orcamentos"]
@@ -825,7 +836,7 @@ def test_falha_entrega_o_token_sem_marca_e_espera_10_minutos(base, api, monkeypa
     assert resposta.status_code == 200
     assert demo.ler_token_demo(resposta.json()["access_token"], config_valida()) == DEMO_USER_ID
     hashes = [linha["hash_importacao"] for linha in base.tabelas["transacoes"]]
-    assert "demo-2026-W46-v3-marca" not in hashes
+    assert "demo-2026-W46-v5-marca" not in hashes
 
     # Logo a seguir não volta a tentar (nem consulta a base de dados).
     base.falhar_em = None
@@ -837,7 +848,7 @@ def test_falha_entrega_o_token_sem_marca_e_espera_10_minutos(base, api, monkeypa
     # Passados 10 minutos, tenta outra vez e fica com a marca.
     relogio[0] += 600
     api.post("/demo")
-    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W46-v3-marca"
+    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W46-v5-marca"
 
 
 def test_segunda_entrada_da_semana_nao_repoe(base, api, monkeypatch):
@@ -861,7 +872,7 @@ def test_na_semana_seguinte_repoe_outra_vez(base, api, monkeypatch):
 
     api.post("/demo")
 
-    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W47-v3-marca"
+    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W47-v5-marca"
     assert len(base.pedidos_admin) == 2
     # Os dados novos chegam até ao dia da reposição (há uma movimentação no dia 16), nunca depois.
     datas = {linha["data"] for linha in base.tabelas["transacoes"]}
@@ -872,7 +883,7 @@ def test_semana_iso_usa_o_ano_da_semana():
     assert dados_demo.semana_iso(date(2026, 11, 10)) == "2026-W46"
     # 1 de janeiro de 2027 ainda é da semana 53 de 2026.
     assert dados_demo.semana_iso(date(2027, 1, 1)) == "2026-W53"
-    assert dados_demo.hash_da_marca(date(2027, 1, 1)) == "demo-2026-W53-v3-marca"
+    assert dados_demo.hash_da_marca(date(2027, 1, 1)) == "demo-2026-W53-v5-marca"
 
 
 def test_dados_inventados_nao_tem_numeros_de_telefone():

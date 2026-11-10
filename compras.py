@@ -1,7 +1,26 @@
 """Minhas compras: gravar um talão revisto pelo utilizador (a transação, a compra e os produtos) e listá-los."""
 
 from database import supabase
-from models import Compra, NovaCompra
+from models import Compra, ItemCompra, NovaCompra
+from produtos import chave_do_produto
+
+
+def linha_do_item(item: ItemCompra, compra_id: int) -> dict:
+    """A linha de compra_itens de um produto: com a chave normalizada que o junta entre lojas (produtos.py).
+
+    Precisa da sql/018 (colunas produto_chave, unidade e nome_generico).
+    """
+    nome_generico = (item.nome_generico or "").strip() or None
+    return {
+        "compra_id": compra_id,
+        "descricao": item.descricao,
+        "quantidade": item.quantidade,
+        "preco": item.preco,
+        "nome_generico": nome_generico,
+        # Ao peso ou ao litro (kg, l), o número do nome é o que se pesou: não entra na chave.
+        "produto_chave": chave_do_produto(nome_generico or item.descricao, com_tamanho=item.unidade == "un"),
+        "unidade": item.unidade,
+    }
 
 
 def gravar_compra(user_id: str, nova: NovaCompra) -> Compra:
@@ -34,7 +53,7 @@ def gravar_compra(user_id: str, nova: NovaCompra) -> Compra:
             .data[0]
         )
         # 3. Os produtos, todos num só pedido (uma lista de linhas, como na importação do CSV).
-        itens = [item.model_dump() | {"compra_id": compra["id"]} for item in nova.itens]
+        itens = [linha_do_item(item, compra["id"]) for item in nova.itens]
         supabase.table("compra_itens").insert(itens).execute()
     except Exception:
         # O Supabase não junta os 3 inserts numa só operação. Se o 2 ou o 3 falhar, apaga-se a transação,

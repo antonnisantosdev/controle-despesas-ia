@@ -122,7 +122,9 @@ export default function RevisaoTalao({ talao, onGravada, onCancelar, onSessaoExp
                 <td className="py-1 pr-2">
                   <input
                     value={item.descricao}
-                    onChange={(e) => alterarItem(i, { descricao: e.target.value })}
+                    // Descrição corrigida: o nome genérico da IA deixa de valer (null), para o produto
+                    // passar a ser agrupado pela descrição nova. A unidade mantém-se.
+                    onChange={(e) => alterarItem(i, { descricao: e.target.value, nome_generico: null })}
                     aria-label="Produto"
                     className={ESTILO_CELULA}
                   />

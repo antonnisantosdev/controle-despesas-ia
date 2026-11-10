@@ -61,8 +61,11 @@ TRANSFERENCIAS_DO_MES_ATUAL = [
     (7, "MB WAY de Rita", 12.50, "transferências", "mbway"),
 ]
 
-# Talões (Minhas compras): (meses atrás, dia, loja, categoria, método, itens como (descrição, quantidade, preço da linha)).
-# O total do talão é a soma das linhas, como no POST /compras.
+# Talões (Minhas compras): (meses atrás, dia, loja, categoria, método, itens).
+# Cada item: (descrição como no talão, quantidade, preço da linha, nome genérico, unidade).
+# O total do talão é a soma das linhas, como no POST /compras. Os mesmos produtos aparecem em 3 lojas
+# (inventadas), para a página de preços por loja ter comparações. Novos talões entram sempre no fim
+# (o hash da transação de cada talão é a posição na lista).
 TALOES = [
     (
         1,
@@ -71,11 +74,11 @@ TALOES = [
         "alimentação",
         "cartao_debito",
         [
-            ("Leite meio-gordo 1 L", 6, 5.34),
-            ("Pão de forma", 1, 1.49),
-            ("Maçãs 1 kg", 1, 1.99),
-            ("Arroz agulha 1 kg", 2, 2.38),
-            ("Iogurtes naturais", 1, 2.15),
+            ("Leite meio-gordo 1 L", 6, 5.34, "leite meio gordo 1 l", "un"),
+            ("Pão de forma 500 g", 1, 1.49, "pão de forma 500 g", "un"),
+            ("Maçãs 1 kg", 1, 1.99, "maçãs 1 kg", "un"),
+            ("Arroz agulha 1 kg", 2, 2.38, "arroz agulha 1 kg", "un"),
+            ("Iogurtes naturais 4x125 g", 1, 2.15, "iogurtes naturais 4x125 g", "un"),
         ],
     ),
     (
@@ -85,9 +88,64 @@ TALOES = [
         "casa",
         "dinheiro",
         [
-            ("Detergente da roupa", 1, 6.99),
-            ("Esponjas", 1, 1.20),
-            ("Papel de cozinha", 2, 3.10),
+            ("Detergente da roupa", 1, 6.99, "detergente da roupa", "un"),
+            ("Esponjas", 1, 1.20, "esponjas", "un"),
+            ("Papel de cozinha", 2, 3.10, "papel de cozinha", "un"),
+        ],
+    ),
+    (
+        2,
+        9,
+        "Mercearia da Esquina",
+        "alimentação",
+        "dinheiro",
+        [
+            ("LEITE UHT M/G 1L", 2, 1.98, "leite meio gordo 1 l", "un"),
+            ("PAO FORMA 500G", 1, 1.65, "pão de forma 500 g", "un"),
+            ("BANANA KG", 1.15, 1.49, "banana", "kg"),
+            ("OVOS CLASSE M 12UN", 1, 2.89, "ovos 12 un", "un"),
+        ],
+    ),
+    (
+        3,
+        14,
+        "Hipermercado Cesto Cheio",
+        "alimentação",
+        "cartao_debito",
+        [
+            ("LEITE M/GORDO CESTO 1L", 6, 4.98, "leite meio gordo 1 l", "un"),
+            ("LEITE M/GORDO CESTO 1,5L", 2, 2.38, "leite meio gordo 1,5 l", "un"),
+            ("ARROZ AGULHA 1KG", 2, 2.18, "arroz agulha 1 kg", "un"),
+            ("BANANA", 0.98, 1.17, "banana", "kg"),
+            ("IOG NAT 4X125G", 1, 1.99, "iogurtes naturais 4x125 g", "un"),
+            ("OVOS M 12UN", 1, 2.59, "ovos 12 un", "un"),
+            ("AZEITE VIRG EXTRA 0,75L", 1, 6.49, "azeite virgem extra 750 ml", "un"),
+        ],
+    ),
+    (
+        1,
+        27,
+        "Hipermercado Cesto Cheio",
+        "alimentação",
+        "cartao_debito",
+        [
+            ("LEITE M/GORDO CESTO 1L", 6, 5.10, "leite meio gordo 1 l", "un"),
+            ("PAO DE FORMA 500G", 1, 1.39, "pão de forma 500 g", "un"),
+            ("AZEITE VIRG EXTRA 0,75L", 1, 6.79, "azeite virgem extra 750 ml", "un"),
+            ("BANANA", 1.21, 1.45, "banana", "kg"),
+        ],
+    ),
+    (
+        4,
+        6,
+        "Supermercado Bom Preço",
+        "alimentação",
+        "cartao_debito",
+        [
+            ("Leite meio-gordo 1 L", 6, 5.22, "leite meio gordo 1 l", "un"),
+            ("Banana", 1.05, 1.37, "banana", "kg"),
+            ("Azeite virgem extra 750 ml", 1, 6.99, "azeite virgem extra 750 ml", "un"),
+            ("Ovos classe M 12 un", 1, 2.79, "ovos 12 un", "un"),
         ],
     ),
 ]
@@ -131,7 +189,9 @@ def prefixo_hash(hoje: date) -> str:
 
 # Subir quando os dados inventados mudam: a marca muda e a demo volta a ser reposta logo, sem esperar pela
 # semana seguinte. v2 (2026-11-10): transferências da Rita. v3 (2026-11-10): 12 meses de dados (resumo anual).
-VERSAO_DADOS = 3
+# v4 (2026-11-10): talões com os mesmos produtos em 3 lojas (preço por loja); precisa da sql/018.
+# v5 (2026-11-10): o tamanho da embalagem entra no nome genérico (leite 1 l e 1,5 l são produtos diferentes).
+VERSAO_DADOS = 5
 
 
 def hash_da_marca(hoje: date) -> str:
@@ -155,8 +215,8 @@ def _ja_aconteceu(dia: date, hoje: date) -> bool:
     return dia <= hoje
 
 
-def total_do_talao(itens: list[tuple[str, float, float]]) -> float:
-    return round(sum(preco for _, _, preco in itens), 2)
+def total_do_talao(itens: list[tuple]) -> float:
+    return round(sum(item[2] for item in itens), 2)
 
 
 def hash_do_talao(hoje: date, indice: int) -> str:
@@ -202,7 +262,13 @@ def marca_demo(hoje: date) -> dict:
 
 
 def compras_demo(hoje: date) -> list[dict]:
-    """Os talões inventados (sem user_id nem ids): a loja, a data, o total, o hash da transação e os itens."""
+    """Os talões inventados (sem user_id nem ids): a loja, a data, o total, o hash da transação e os itens.
+
+    Os itens vão como o compras.py os grava: com o nome genérico, a chave normalizada e a unidade.
+    """
+    # Importa-se aqui: o produtos.py usa o models.py, que usa o auth.py, que usa o demo.py e este ficheiro.
+    from produtos import chave_do_produto
+
     compras = []
     for indice, (atras, dia, loja, _categoria, _metodo, itens) in enumerate(TALOES):
         compras.append(
@@ -212,8 +278,15 @@ def compras_demo(hoje: date) -> list[dict]:
                 "total": total_do_talao(itens),
                 "hash_transacao": hash_do_talao(hoje, indice),
                 "itens": [
-                    {"descricao": descricao, "quantidade": quantidade, "preco": preco}
-                    for descricao, quantidade, preco in itens
+                    {
+                        "descricao": descricao,
+                        "quantidade": quantidade,
+                        "preco": preco,
+                        "nome_generico": nome_generico,
+                        "produto_chave": chave_do_produto(nome_generico, com_tamanho=unidade == "un"),
+                        "unidade": unidade,
+                    }
+                    for descricao, quantidade, preco, nome_generico, unidade in itens
                 ],
             }
         )

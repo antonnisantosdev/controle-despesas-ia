@@ -85,10 +85,51 @@ export type ResultadoImportacao = {
 };
 export type Alerta = { nivel: "info" | "atencao"; mensagem: string };
 export type ResumoMes = { resumo: string; alertas: Alerta[] };
-export type ItemTalao = { descricao: string; quantidade: number; preco: number };
+// nome_generico: o nome "limpo" que a IA deu ao produto (para os preços por loja); unidade: un, kg ou l.
+// Opcionais: uma API antiga não os envia.
+export type ItemTalao = {
+  descricao: string;
+  quantidade: number;
+  preco: number;
+  nome_generico?: string | null;
+  unidade?: "un" | "kg" | "l";
+};
 // O que a IA leu da fotografia (POST /compras/ler). A data vem null se não for legível.
 export type Talao = { loja: string; data: string | null; itens: ItemTalao[]; total: number; categoria: string };
 export type Compra = { id: number; transacao_id: number; loja: string; data: string; total: number; itens: ItemTalao[] };
+// Preços por loja (separador Preços em Minhas compras). Só nos planos pagos: 402 no Free.
+// Unidade do preço unitário: por unidade, por quilo ou por litro.
+export type UnidadePreco = "un" | "kg" | "l";
+// GET /compras/produtos?q=texto: máx. 50, dos comprados há menos tempo para os mais antigos.
+export type ProdutoResumo = {
+  chave: string;
+  nome: string;
+  unidades: UnidadePreco[];
+  ultima_data: string;
+  n_lojas: number;
+  n_compras: number;
+};
+export type PrecoNaLoja = {
+  loja: string;
+  preco_recente: number;
+  data_recente: string;
+  preco_minimo: number;
+  preco_medio: number;
+  n_compras: number;
+};
+export type PrecoHistorico = { data: string; loja: string; preco_unitario: number };
+// lojas: da mais barata agora para a mais cara. historico: do mais recente para o mais antigo (máx. 100).
+export type PrecosPorUnidade = { unidade: UnidadePreco; lojas: PrecoNaLoja[]; historico: PrecoHistorico[] };
+// GET /compras/produtos/{chave} (com encodeURIComponent). 404 se não existir.
+export type PrecosDoProduto = { chave: string; nome: string; por_unidade: PrecosPorUnidade[] };
+// GET /compras/produtos/juntar: as junções do utilizador, da mais recente para a mais antiga.
+export type JuncaoProdutos = {
+  chave_origem: string;
+  nome_origem: string;
+  chave_destino: string;
+  nome_destino: string;
+  criado_em: string;
+};
 export type Objetivo = { id: number; nome: string; valor_alvo: number; data_alvo: string; valor_poupado: number };
 export type CorteSugerido = { categoria: string; valor_mensal: number; motivo: string };
 export type PlanoPoupanca = { viavel: boolean; explicacao: string; cortes: CorteSugerido[] };

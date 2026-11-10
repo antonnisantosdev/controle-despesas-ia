@@ -159,6 +159,10 @@ PERMISSOES_DEMO: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/orcamentos/alertas"),
         ("GET", "/recorrentes"),
         ("GET", "/compras"),
+        # Preço de um produto por loja: só as leituras (juntar e separar produtos ficam bloqueados).
+        ("GET", "/compras/produtos"),
+        ("GET", "/compras/produtos/{chave}"),
+        ("GET", "/compras/produtos/juntar"),
         ("GET", "/objetivos"),
         ("GET", "/simulador"),
         ("GET", "/plano"),
@@ -356,6 +360,7 @@ def _gravar_dados(user_id: str, hoje: date) -> None:
             "total": compra["total"],
         }
         compra_id = supabase.table("compras").insert(dados_compra).execute().data[0]["id"]
+        # Os itens já trazem nome_generico, produto_chave e unidade: precisa da sql/018 corrida.
         itens = [item | {"compra_id": compra_id} for item in compra["itens"]]
         supabase.table("compra_itens").insert(itens).execute()
 

@@ -22,10 +22,18 @@ import {
 import { reduzirImagem } from "@/lib/imagem";
 import { temFuncoesPagas } from "@/lib/planos";
 import { TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
+import { TEXTOS_PRECOS_LOJAS } from "@/lib/textosPrecosLojas";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import { euros } from "../dashboard/formatos";
+import PrecosPorLoja from "./PrecosPorLoja";
 import RevisaoTalao from "./RevisaoTalao";
+
+type Separador = "taloes" | "precos";
+const SEPARADORES: { id: Separador; nome: string }[] = [
+  { id: "taloes", nome: TEXTOS_PRECOS_LOJAS.separadorTaloes },
+  { id: "precos", nome: TEXTOS_PRECOS_LOJAS.separadorPrecos },
+];
 
 // "2026-10-28" -> "28/10/2026"
 function dataCurta(data: string) {
@@ -47,6 +55,25 @@ export default function PaginaCompras() {
   const [soPlanosPagos, setSoPlanosPagos] = useState<string | null>(null);
   // O botão só aparece depois de o /plano responder (ou falhar): assim o Free não o vê piscar.
   const [planoVerificado, setPlanoVerificado] = useState(false);
+  const [eFree, setEFree] = useState(false);
+  const [separador, setSeparador] = useState<Separador>("taloes");
+  // O separador Preços só pede à API quando é aberto pela primeira vez; depois fica montado (guarda a pesquisa).
+  const [precosAbertos, setPrecosAbertos] = useState(false);
+  const botoesSeparador = useRef<(HTMLButtonElement | null)[]>([]);
+
+  function mudarSeparador(novo: Separador) {
+    setSeparador(novo);
+    if (novo === "precos") setPrecosAbertos(true);
+  }
+
+  // Setas esquerda/direita mudam de separador (padrão dos separadores para teclado e leitores de ecrã).
+  function teclaSeparador(e: React.KeyboardEvent, indice: number) {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const seguinte = (indice + (e.key === "ArrowRight" ? 1 : -1) + SEPARADORES.length) % SEPARADORES.length;
+    mudarSeparador(SEPARADORES[seguinte].id);
+    botoesSeparador.current[seguinte]?.focus();
+  }
 
   function tratarSessao(e: unknown) {
     if (e instanceof SessaoExpirada) {
@@ -67,7 +94,10 @@ export default function PaginaCompras() {
     // a API responde 402 na mesma, e o aviso aparece nessa altura.
     pedirEstadoPlano()
       .then((estado) => {
-        if (!temFuncoesPagas(estado.plano)) setSoPlanosPagos(TEXTOS_PLANO_PAGO.talao);
+        if (!temFuncoesPagas(estado.plano)) {
+          setSoPlanosPagos(TEXTOS_PLANO_PAGO.talao);
+          setEFree(true);
+        }
       })
       .catch(() => {}) // a sessão expirada já é tratada pelo pedido das compras
       .finally(() => setPlanoVerificado(true));
@@ -124,7 +154,7 @@ export default function PaginaCompras() {
               if (ficheiro) lerFoto(ficheiro);
             }}
           />
-          {planoVerificado && !soPlanosPagos && (
+          {separador === "taloes" && planoVerificado && !soPlanosPagos && (
             <button
               type="button"
               disabled={aLer || demo}
@@ -138,52 +168,92 @@ export default function PaginaCompras() {
         </header>
 
         <NotaDemo />
-        {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
-        {semPedidos && <AvisoLimite />}
-        {soPlanosPagos && <AvisoPlanoPago mensagem={soPlanosPagos} />}
-        {aviso && (
-          <p className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-            {aviso}
-          </p>
-        )}
 
-        {talao && (
-          <RevisaoTalao talao={talao} onGravada={gravada} onCancelar={() => setTalao(null)} onSessaoExpirada={tratarSessao} />
-        )}
+        <div role="tablist" aria-label={TEXTOS_PRECOS_LOJAS.rotuloSeparadores} className="flex gap-1 border-b border-borda">
+          {SEPARADORES.map(({ id, nome }, indice) => {
+            const ativo = separador === id;
+            return (
+              <button
+                key={id}
+                ref={(botao) => {
+                  botoesSeparador.current[indice] = botao;
+                }}
+                type="button"
+                role="tab"
+                id={`separador-${id}`}
+                aria-selected={ativo}
+                aria-controls={`painel-${id}`}
+                tabIndex={ativo ? 0 : -1}
+                onClick={() => mudarSeparador(id)}
+                onKeyDown={(e) => teclaSeparador(e, indice)}
+                className={`-mb-px min-h-11 border-b-2 px-4 text-sm font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-destaque ${
+                  ativo ? "border-destaque font-semibold text-texto" : "border-transparent text-texto-suave hover:text-texto"
+                }`}
+              >
+                {nome}
+              </button>
+            );
+          })}
+        </div>
 
-        <section className="divide-y divide-borda rounded-xl border border-borda bg-cartao">
-          {compras === null && !erro && <p className="p-6 text-sm text-texto-suave">A carregar...</p>}
-          {compras?.length === 0 && (
-            <p className="p-6 text-sm text-texto-suave">
-              {soPlanosPagos ? "Ainda não tens compras." : "Ainda não tens compras. Fotografa um talão para começar."}
+        <div
+          role="tabpanel"
+          id="painel-taloes"
+          aria-labelledby="separador-taloes"
+          hidden={separador !== "taloes"}
+          className="space-y-6"
+        >
+          {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
+          {semPedidos && <AvisoLimite />}
+          {soPlanosPagos && <AvisoPlanoPago mensagem={soPlanosPagos} />}
+          {aviso && (
+            <p className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+              {aviso}
             </p>
           )}
-          {compras?.map((compra) => (
-            // <details>: abre e fecha sozinho ao clicar no <summary>, sem precisar de estado em React.
-            <details key={compra.id} className="group p-4">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
-                <div>
-                  <p className="font-medium text-texto">{compra.loja}</p>
-                  <p className="text-xs text-texto-suave">
-                    {dataCurta(compra.data)} · {compra.itens.length} produtos
-                  </p>
-                </div>
-                <span className="font-semibold text-texto">{euros(compra.total)}</span>
-              </summary>
-              <ul className="mt-3 space-y-1 border-t border-borda pt-3 text-sm">
-                {compra.itens.map((item, i) => (
-                  <li key={i} className="flex justify-between gap-4 text-texto-suave">
-                    <span>
-                      {item.descricao}
-                      {item.quantidade !== 1 && <span className="text-xs"> × {item.quantidade.toLocaleString("pt-PT")}</span>}
-                    </span>
-                    <span className="text-texto">{euros(item.preco)}</span>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ))}
-        </section>
+
+          {talao && (
+            <RevisaoTalao talao={talao} onGravada={gravada} onCancelar={() => setTalao(null)} onSessaoExpirada={tratarSessao} />
+          )}
+
+          <section className="divide-y divide-borda rounded-xl border border-borda bg-cartao">
+            {compras === null && !erro && <p className="p-6 text-sm text-texto-suave">A carregar...</p>}
+            {compras?.length === 0 && (
+              <p className="p-6 text-sm text-texto-suave">
+                {soPlanosPagos ? "Ainda não tens compras." : "Ainda não tens compras. Fotografa um talão para começar."}
+              </p>
+            )}
+            {compras?.map((compra) => (
+              // <details>: abre e fecha sozinho ao clicar no <summary>, sem precisar de estado em React.
+              <details key={compra.id} className="group p-4">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-texto">{compra.loja}</p>
+                    <p className="text-xs text-texto-suave">
+                      {dataCurta(compra.data)} · {compra.itens.length} produtos
+                    </p>
+                  </div>
+                  <span className="font-semibold text-texto">{euros(compra.total)}</span>
+                </summary>
+                <ul className="mt-3 space-y-1 border-t border-borda pt-3 text-sm">
+                  {compra.itens.map((item, i) => (
+                    <li key={i} className="flex justify-between gap-4 text-texto-suave">
+                      <span>
+                        {item.descricao}
+                        {item.quantidade !== 1 && <span className="text-xs"> × {item.quantidade.toLocaleString("pt-PT")}</span>}
+                      </span>
+                      <span className="text-texto">{euros(item.preco)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ))}
+          </section>
+        </div>
+
+        <div role="tabpanel" id="painel-precos" aria-labelledby="separador-precos" hidden={separador !== "precos"}>
+          {precosAbertos && <PrecosPorLoja eFree={eFree} onSessaoExpirada={tratarSessao} />}
+        </div>
       </div>
     </main>
   );

@@ -111,6 +111,8 @@ FUNCOES_PAGAS = {
         "No Free, podes importar o extrato em CSV."
     ),
     "ler_talao": "A leitura de talões está disponível nos planos Essencial e Completo.",
+    # O mesmo texto do frontend.
+    "precos_por_loja": "Comparar preços entre as lojas onde compraste está disponível nos planos Essencial e Completo.",
     "exportar_relatorio": (
         "Descarregar o resumo anual em CSV (para abrir numa folha de cálculo) está disponível nos planos "
         "Essencial e Completo. No Free, podes ver o resumo na app e guardá-lo em PDF."

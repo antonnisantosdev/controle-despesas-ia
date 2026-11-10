@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator, model_validator
@@ -209,11 +209,20 @@ class NovoLimite(BaseModel):
     limite: float = Field(gt=0)
 
 
+# Unidade em que se mede a quantidade de um produto: unidades, quilos ou litros.
+# Os preços unitários só se comparam dentro da mesma unidade (1 € por kg não é 1 € por unidade).
+Unidade = Literal["un", "kg", "l"]
+
+
 # Um produto lido do talão. O preço é o da linha (quantidade x preço unitário, já com descontos).
+# nome_generico e unidade servem para comparar o mesmo produto entre lojas (produtos.py). Têm valor
+# por omissão: uma resposta da IA sem eles (formato antigo) continua válida.
 class ItemTalao(BaseModel):
     descricao: str
     quantidade: float
     preco: float
+    nome_generico: str | None = None
+    unidade: Unidade = "un"
 
 
 # O que a IA leu de uma fotografia de talão (saída estruturada). A data fica vazia se não for legível.
@@ -231,6 +240,16 @@ class ItemCompra(BaseModel):
     descricao: str = Field(min_length=1, max_length=200)
     quantidade: float = Field(gt=0)
     preco: float = Field(ge=0)
+    # Vêm da leitura da IA (o frontend devolve-os tal como os recebeu). Opcionais: sem eles, a chave
+    # do produto sai da descrição e a unidade fica "un".
+    nome_generico: str | None = None
+    unidade: Unidade = "un"
+
+    @field_validator("nome_generico", mode="before")
+    @classmethod
+    def cortar_nome_generico(cls, valor):
+        # Corta em vez de recusar: um nome da IA comprido demais não pode impedir de guardar o talão.
+        return valor[:100] if isinstance(valor, str) else valor
 
 
 # Corpo do POST /compras: o talão depois de o utilizador o rever no ecrã.
@@ -253,6 +272,66 @@ class Compra(BaseModel):
     data: date
     total: float
     itens: list[ItemTalao]
+
+
+# --- Preço de um produto por loja (GET /compras/produtos...) ---
+
+
+# Um produto na lista da página de preços: a chave (já depois das junções) e o nome a mostrar.
+class ProdutoResumo(BaseModel):
+    chave: str
+    nome: str
+    # As unidades em que o produto foi comprado (normalmente só uma).
+    unidades: list[Unidade]
+    ultima_data: date
+    n_lojas: int
+    n_compras: int
+
+
+# O preço de um produto numa loja (preços unitários: por unidade, kg ou litro).
+class PrecoNaLoja(BaseModel):
+    loja: str
+    preco_recente: float
+    data_recente: date
+    preco_minimo: float
+    preco_medio: float
+    n_compras: int
+
+
+# Uma compra do produto, para o histórico.
+class PrecoHistorico(BaseModel):
+    data: date
+    loja: str
+    preco_unitario: float
+
+
+# Os preços de um produto numa unidade: por loja (do mais barato agora para o mais caro) e o histórico.
+class PrecosPorUnidade(BaseModel):
+    unidade: Unidade
+    lojas: list[PrecoNaLoja]
+    historico: list[PrecoHistorico]
+
+
+class PrecosDoProduto(BaseModel):
+    chave: str
+    nome: str
+    por_unidade: list[PrecosPorUnidade]
+
+
+# Uma junção do utilizador (GET /compras/produtos/juntar), para o ecrã a poder desfazer.
+# Os nomes são os mostrados de cada chave, ou a própria chave se já não houver itens com ela.
+class JuncaoProdutos(BaseModel):
+    chave_origem: str
+    nome_origem: str
+    chave_destino: str
+    nome_destino: str
+    criado_em: datetime | None = None
+
+
+# Corpo do POST /compras/produtos/juntar: passa a contar os itens de chave_origem como chave_destino.
+class JuntarProdutos(BaseModel):
+    chave_origem: str = Field(min_length=1, max_length=100)
+    chave_destino: str = Field(min_length=1, max_length=100)
 
 
 # Corpo do POST /objetivos: um objetivo de poupança novo. O valor poupado começa a 0 (DEFAULT do SQL).

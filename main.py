@@ -70,6 +70,7 @@ from objetivos import (
     listar_objetivos,
     obter_objetivo,
 )
+from produtos import chave_do_produto, juncoes_do_utilizador, juntar_produtos, precos_do_utilizador, produtos_do_utilizador, separar_produtos
 from orcamento import alertas_de_orcamento, guardar_limite, historico_para_sugestao, planeamento_do_mes
 from models import (
     AlertasOrcamento,
@@ -81,6 +82,8 @@ from models import (
     Credenciais,
     NovaConta,
     GastoCategoria,
+    JuncaoProdutos,
+    JuntarProdutos,
     LinhaOrcamento,
     NovaCompra,
     NovaMovimentacao,
@@ -91,6 +94,8 @@ from models import (
     PlanoDisponivel,
     PlanoPoupanca,
     PoupadoAtualizar,
+    PrecosDoProduto,
+    ProdutoResumo,
     Recorrente,
     RelatorioAnual,
     RespostaChat,
@@ -723,6 +728,54 @@ def criar_compra(nova: NovaCompra, user_id: str = Depends(obter_utilizador_atual
 @app.get("/compras")
 def lista_de_compras(user_id: str = Depends(obter_utilizador_atual)) -> list[Compra]:
     return listar_compras(user_id)
+
+
+# Preço de um produto por loja (a partir dos talões). Só nos planos pagos: 402 no Free.
+# Os produtos comprados, com pesquisa sem acentos (?q=leite). Máx. 50.
+@app.get("/compras/produtos")
+def produtos_comprados(
+    q: str | None = Query(default=None, max_length=100), user_id: str = Depends(obter_utilizador_atual)
+) -> list[ProdutoResumo]:
+    exigir_funcao(user_id, "precos_por_loja")
+    return produtos_do_utilizador(user_id, q)
+
+
+# As junções do utilizador, das mais recentes para as mais antigas (para o ecrã as poder desfazer).
+# Declarada ANTES de /compras/produtos/{chave}: senão o FastAPI lia "juntar" como a chave de um produto.
+@app.get("/compras/produtos/juntar")
+def lista_de_juncoes(user_id: str = Depends(obter_utilizador_atual)) -> list[JuncaoProdutos]:
+    exigir_funcao(user_id, "precos_por_loja")
+    return juncoes_do_utilizador(user_id)
+
+
+# Os preços unitários de um produto em cada loja e o histórico. 404 se o produto não estiver nas compras.
+@app.get("/compras/produtos/{chave}")
+def precos_de_um_produto(chave: str, user_id: str = Depends(obter_utilizador_atual)) -> PrecosDoProduto:
+    exigir_funcao(user_id, "precos_por_loja")
+    if len(chave) > 100:
+        raise HTTPException(status_code=404, detail="Produto não encontrado nas tuas compras.")
+    # A mesma normalização das chaves: "Leite Meio-Gordo" encontra "leite meio gordo".
+    precos = precos_do_utilizador(user_id, chave_do_produto(chave))
+    if precos is None:
+        raise HTTPException(status_code=404, detail="Produto não encontrado nas tuas compras.")
+    return precos
+
+
+# Junta dois produtos que são o mesmo (ex.: "leite meio gordo" e "leite uht meio gordo").
+@app.post("/compras/produtos/juntar", status_code=204)
+def juntar_dois_produtos(pedido: JuntarProdutos, user_id: str = Depends(obter_utilizador_atual)) -> None:
+    exigir_funcao(user_id, "precos_por_loja")
+    juntar_produtos(user_id, pedido.chave_origem, pedido.chave_destino)
+
+
+# Desfaz uma junção: os itens de chave_origem voltam a ser um produto à parte.
+@app.delete("/compras/produtos/juntar/{chave_origem}", status_code=204)
+def separar_dois_produtos(chave_origem: str, user_id: str = Depends(obter_utilizador_atual)) -> None:
+    exigir_funcao(user_id, "precos_por_loja")
+    if len(chave_origem) > 100:
+        raise HTTPException(status_code=404, detail="Esta junção não existe.")
+    # A chave exata e depois a normalizada (ver separar_produtos).
+    separar_produtos(user_id, chave_origem)
 
 
 # Minha reserva: os objetivos de poupança do utilizador, do prazo mais próximo para o mais distante.

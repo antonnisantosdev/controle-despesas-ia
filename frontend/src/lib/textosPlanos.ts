@@ -63,6 +63,11 @@ export const TEXTOS_PRECOS = {
         'É uma página com o teu ano numa só vista: entradas, saídas e saldo, mês a mês, gastos por categoria, comparação com o ano anterior, os maiores gastos e os pagamentos que se repetem. Está em todos os planos e podes guardá-lo em PDF com o "Guardar como PDF" do browser. Descarregar em CSV só existe nos planos Essencial e Completo. O resumo escrito pela IA só existe no Completo e conta como 1 pedido à IA.',
     },
     {
+      pergunta: "Como funciona a comparação de preços?",
+      resposta:
+        "Nos planos Essencial e Completo, a IA lê os produtos e os preços dos talões que fotografas. Em Minhas compras, no separador Preços, vês quanto pagaste por cada produto nas lojas onde o compraste nos últimos 24 meses, à unidade, ao quilo ou ao litro, com cada tamanho de embalagem à parte. Não são preços de mercado nem de lojas onde não compraste, e a leitura pode ter erros: se o mesmo produto aparecer com dois nomes, junta-os em «É o mesmo produto».",
+    },
+    {
       pergunta: "Posso voltar ao Free?",
       resposta:
         "Sim. Pede-nos e passamos a tua conta para o Free. Se um plano pago chegar ao fim sem renovares, a conta passa sozinha para o Free: continuas a entrar e os teus dados ficam guardados. No Free, os pedidos à IA contam-se por mês, importas extratos em CSV e deixas de poder importar PDF e ler talões. As compras e movimentações que já tens ficam lá.",
@@ -105,13 +110,13 @@ export const TEXTOS_CARTOES = {
   essencial: {
     nome: "Essencial",
     frase: "Para quem usa a app todas as semanas.",
-    pontos: ["Leitura de talões por fotografia", "Resumo anual em CSV", "Pagamento por MB Way"],
+    pontos: ["Leitura de talões por fotografia", "Preços por loja, a partir dos talões", "Resumo anual em CSV", "Pagamento por MB Way"],
     botao: "Pedir acesso",
   },
   completo: {
     nome: "Completo",
     frase: "Para quem usa a IA várias vezes por dia.",
-    pontos: ["Leitura de talões por fotografia", "Resumo anual em CSV", "Resumo do ano escrito pela IA", "Pagamento por MB Way"],
+    pontos: ["Leitura de talões por fotografia", "Preços por loja, a partir dos talões", "Resumo anual em CSV", "Resumo do ano escrito pela IA", "Pagamento por MB Way"],
     botao: "Pedir acesso",
   },
 };
