@@ -232,7 +232,8 @@ def registar_forma_do_ip(request: Request) -> None:
         f"IP da ligação: {_posicao(ligacao, entradas)}; "
         f"CF-Connecting-IP: {_posicao(request.headers.get('cf-connecting-ip'), entradas)}; "
         f"True-Client-IP: {_posicao(request.headers.get('true-client-ip'), entradas)}; "
-        f"X-Real-IP: {_posicao(request.headers.get('x-real-ip'), entradas)}."
+        f"X-Real-IP: {_posicao(request.headers.get('x-real-ip'), entradas)}; "
+        f"IP usado nos limites: {_posicao(ip_do_pedido(request), entradas)}."
     )
 
 

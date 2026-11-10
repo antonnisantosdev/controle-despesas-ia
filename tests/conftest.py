@@ -119,6 +119,13 @@ def limites_por_ip_limpos():
     limite_ip.limpar_limites_das_rotas_publicas()
 
 
+@pytest.fixture(autouse=True)
+def sem_proxies_a_frente(monkeypatch):
+    """Nos testes, o X-Forwarded-For simula só o último proxy: o visitante é a entrada mais à direita.
+    A forma do Render (2 proxies a frente) tem testes próprios em test_limite_ip.py."""
+    monkeypatch.setattr(limite_ip, "PROXIES_A_FRENTE", 0)
+
+
 @pytest.fixture
 def limite(monkeypatch):
     limite = Limite()

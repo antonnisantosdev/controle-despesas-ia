@@ -283,3 +283,49 @@ def test_limites_desligados_deixam_passar(api, supabase_falso, relogio, monkeypa
     login = POR_NOME["login"]
     for _ in range(login.por_ip + 5):
         assert pedir(api, login, "203.0.113.60").status_code == 200
+
+
+# --- Forma do Render: [visitante, Cloudflare, proxy interno] (2 proxies a frente) ---
+
+
+@pytest.fixture
+def render(monkeypatch):
+    monkeypatch.setattr(limite_ip, "PROXIES_A_FRENTE", 2)
+
+
+def xff_render(visitante: str, inventadas: str = "") -> str:
+    entradas = [inventadas] if inventadas else []
+    return ", ".join([*entradas, visitante, "172.70.1.1", "10.0.0.9"])
+
+
+def test_render_visitantes_diferentes_contam_em_separado(api, supabase_falso, relogio, render):
+    login = POR_NOME["login"]
+    for _ in range(login.por_ip):
+        assert pedir(api, login, xff_render("203.0.113.70")).status_code == 200
+    assert pedir(api, login, xff_render("203.0.113.70")).status_code == 429
+    # Outro visitante, pelos mesmos proxies, continua a entrar.
+    assert pedir(api, login, xff_render("203.0.113.71")).status_code == 200
+
+
+def test_render_entradas_inventadas_nao_escapam(api, supabase_falso, relogio, render):
+    login = POR_NOME["login"]
+    for i in range(login.por_ip):
+        assert pedir(api, login, xff_render("203.0.113.72", f"198.51.100.{i}")).status_code == 200
+    assert pedir(api, login, xff_render("203.0.113.72", "198.51.100.250")).status_code == 429
+
+
+def test_render_com_poucas_entradas_usa_a_mais_a_esquerda(render):
+    from starlette.requests import Request
+
+    def pedido(xff: str) -> Request:
+        return Request({"type": "http", "headers": [(b"x-forwarded-for", xff.encode())], "client": ("10.0.0.1", 0)})
+
+    assert limite_ip.ip_do_pedido(pedido("203.0.113.5, 172.70.1.1, 10.0.0.9")) == "203.0.113.5"
+    assert limite_ip.ip_do_pedido(pedido("203.0.113.5")) == "203.0.113.5"
+
+
+def test_valor_de_producao_e_2_proxies():
+    # O conftest põe 0 nos testes; isto garante que o valor do Render no código não muda sem querer.
+    from pathlib import Path
+
+    assert "\nPROXIES_A_FRENTE = 2\n" in Path(limite_ip.__file__).read_text(encoding="utf-8")

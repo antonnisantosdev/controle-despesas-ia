@@ -1,6 +1,6 @@
 """Limites de pedidos por IP, na memória do servidor (usados pela demo e pelas rotas de entrada e registo).
 
-- ip_do_pedido: o IP de quem fez o pedido (a entrada mais à direita do X-Forwarded-For, a do proxy do Render).
+- ip_do_pedido: o IP de quem fez o pedido (no Render, a 3.ª entrada a contar da direita do X-Forwarded-For).
 - chave_do_ip: IPv6 conta por prefixo /64; prefixo_48_do_ipv6: segundo limite, por /48 (só IPv6).
 - LimitePorIP: até N pedidos por chave em cada janela; acima disso, 429 com a mensagem do limite.
 
@@ -20,15 +20,24 @@ def _relogio() -> float:
     return time.monotonic()
 
 
-def ip_do_pedido(request: Request) -> str:
-    """O IP de quem fez o pedido.
+# Quantos proxies de confiança acrescentam entradas ao X-Forwarded-For depois do visitante.
+# No Render (log de 2026-11-10): [visitante, Cloudflare, proxy interno do Render] -> 2 proxies.
+# Quem inventa entradas só as consegue pôr à esquerda do visitante, por isso conta-se a partir da direita.
+PROXIES_A_FRENTE = 2
 
-    No Render, o proxy acrescenta o IP que viu no fim do X-Forwarded-For: só essa entrada (a mais à direita)
-    é de confiança. As da esquerda vêm do browser e podem ser inventadas para fugir ao limite.
+
+def ip_do_pedido(request: Request) -> str:
+    """O IP de quem fez o pedido: a entrada do X-Forwarded-For logo à esquerda das que os proxies
+    de confiança acrescentaram (PROXIES_A_FRENTE a contar da direita).
+
+    As entradas mais à esquerda vêm do browser e podem ser inventadas para fugir ao limite.
+    Sem entradas suficientes (ex.: em local, sem proxies), usa a mais à esquerda ou o IP da ligação.
     """
     entradas = _entradas_encaminhadas(request)
+    if len(entradas) > PROXIES_A_FRENTE:
+        return entradas[-(PROXIES_A_FRENTE + 1)]
     if entradas:
-        return entradas[-1]
+        return entradas[0]
     return request.client.host if request.client else "desconhecido"
 
 
@@ -181,10 +190,9 @@ GOOGLE_TROCA_POR_48 = 30
 GOOGLE_TROCA_JANELA_SEGUNDOS = 15 * MINUTO
 
 
-# Desligados até se saber qual das entradas do X-Forwarded-For é o visitante no Render (o log de
-# 2026-11-10 mostrou 3 entradas e a mais à direita não é o visitante: contar por ela juntava toda a gente
-# no mesmo contador e podia bloquear o login a todos). Ligar depois de corrigir ip_do_pedido.
-LIMITES_PUBLICOS_LIGADOS = False
+# Interruptor de emergência: False desliga os limites das 4 rotas públicas (ex.: se o Render mudar
+# a forma do X-Forwarded-For e toda a gente passar a contar como o mesmo IP).
+LIMITES_PUBLICOS_LIGADOS = True
 
 
 class LimiteDaRota:

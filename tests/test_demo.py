@@ -966,7 +966,7 @@ def test_forma_do_x_forwarded_for_fica_no_log_sem_ips(base, api, capsys, monkeyp
     logs = [linha for linha in capsys.readouterr().out.splitlines() if "X-Forwarded-For" in linha]
     assert logs == [
         "Demo: X-Forwarded-For com 3 entrada(s) [privada, privada, privada]; IP da ligação: presente, fora da lista; "
-        "CF-Connecting-IP: entrada 1; True-Client-IP: ausente; X-Real-IP: ausente."
+        "CF-Connecting-IP: entrada 1; True-Client-IP: ausente; X-Real-IP: ausente; IP usado nos limites: entrada 3."
     ]
 
 
