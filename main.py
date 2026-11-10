@@ -5,7 +5,7 @@ import re
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import AuthApiError, AuthError
 
@@ -31,7 +31,7 @@ from demo import (
     registar_forma_do_ip,
 )
 from ferramentas import FERRAMENTAS, executar_ferramenta
-from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_mes, sugerir_orcamento
+from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_ano, resumir_mes, sugerir_orcamento
 from importar_csv import (
     MAX_ENTRADAS_ARVORE_PDF,
     MAX_MOVIMENTOS_CSV,
@@ -92,7 +92,9 @@ from models import (
     PlanoPoupanca,
     PoupadoAtualizar,
     Recorrente,
+    RelatorioAnual,
     RespostaChat,
+    ResumoAnualIA,
     ResultadoImportacao,
     ResumoMes,
     SugestaoOrcamento,
@@ -104,6 +106,7 @@ from models import (
     TransacaoImportada,
 )
 from recorrentes import esquecer_recorrentes, recorrentes_do_utilizador
+from relatorio import ano_valido, dados_para_ia, relatorio_do_ano, relatorio_em_csv
 from resumo import assinatura_dos_dados, guardar_resumo, recolher_dados, resumo_guardado
 from simulador import simular_poupanca
 
@@ -791,6 +794,62 @@ def simulador(
     user_id: str = Depends(obter_utilizador_atual),
 ) -> list[AnoSimulado]:
     return simular_poupanca(mensal, anos, taxa)
+
+
+# --- Resumo anual (nada fiscal: só as contas das movimentações gravadas) ---
+
+
+def relatorio_pedido(ano: int, user_id: str) -> RelatorioAnual:
+    """O relatório do ano para este utilizador, ou 422 se o ano não for de 2000 até ao ano atual (de Lisboa)."""
+    hoje = hoje_em_lisboa()
+    if not ano_valido(ano, hoje):
+        raise HTTPException(status_code=422, detail=f"Ano inválido. Escolhe um ano entre 2000 e {hoje.year}.")
+    return relatorio_do_ano(user_id, ano, hoje)
+
+
+# O resumo do ano em JSON, para a página do relatório. Todos os planos; sem IA. Exemplo: /relatorio?ano=2026
+# Dados financeiros: nem o browser nem um proxy os guardam em cache.
+SEM_CACHE = {"Cache-Control": "no-store"}
+
+
+@app.get("/relatorio")
+def relatorio(ano: int, response: Response, user_id: str = Depends(obter_utilizador_atual)) -> RelatorioAnual:
+    response.headers.update(SEM_CACHE)
+    return relatorio_pedido(ano, user_id)
+
+
+# O mesmo relatório em CSV para o Excel (só nos planos pagos: 402 no Free, como o PDF e os talões).
+@app.get("/relatorio/csv")
+def relatorio_csv(ano: int, user_id: str = Depends(obter_utilizador_atual)) -> Response:
+    exigir_funcao(user_id, "exportar_relatorio")
+    conteudo = relatorio_em_csv(relatorio_pedido(ano, user_id))
+    return Response(
+        content=conteudo,
+        media_type="text/csv; charset=utf-8",
+        headers=SEM_CACHE
+        | {
+            "Content-Disposition": f'attachment; filename="relatorio-{ano}.csv"',
+            # O browser não tenta adivinhar outro tipo (ex.: abrir o CSV como HTML).
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+# A IA escreve um resumo do ano a partir dos números já calculados. Só no plano Completo (402 nos outros).
+# Conta 1 pedido à IA, como as outras funções.
+@app.post("/relatorio/resumo-ia")
+def relatorio_resumo_ia(ano: int, user_id: str = Depends(obter_utilizador_atual)) -> ResumoAnualIA:
+    exigir_funcao(user_id, "resumo_anual_ia")
+    dados = relatorio_pedido(ano, user_id)
+    # Sem movimentações no ano não há nada para resumir: não se gasta um pedido.
+    if not any(mes.com_dados for mes in dados.meses):
+        return ResumoAnualIA(resumo="Ainda não há movimentos neste ano.")
+    registar_pergunta(user_id, "resumo_anual")
+    try:
+        return resumir_ano(dados_para_ia(dados), user_id=user_id, config=plano_e_config_ia(user_id)[1])
+    except ErroIA as erro:
+        print(erro)
+        raise HTTPException(status_code=503, detail="O resumo do ano falhou. Tenta mais tarde.")
 
 
 # O plano do utilizador e quantos pedidos à IA já fez no dia (ou no mês, no Free). O menu lateral mostra-o.

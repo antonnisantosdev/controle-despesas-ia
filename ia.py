@@ -1,6 +1,6 @@
 """Funções de IA: categorização de transações, chat sobre as finanças e resumo mensal.
 
-O resto da API só chama categorizar(), conversar(), resumir_mes(), sugerir_orcamento(), ler_talao(), ler_extrato_pdf() e planear_poupanca(); qual o fornecedor usado (por agora,
+O resto da API só chama categorizar(), conversar(), resumir_mes(), sugerir_orcamento(), ler_talao(), ler_extrato_pdf(), planear_poupanca() e resumir_ano(); qual o fornecedor usado (por agora,
 o Claude) decide-se no .env com IA_FORNECEDOR, sem mudar mais nenhum ficheiro.
 
 As respostas em texto (chat, resumo, orçamento, poupança) recebem a ConfigIA do plano (limites.py):
@@ -11,7 +11,9 @@ deles cresce com o documento e ficam com os valores fixos daqui.
 import base64
 import json
 import os
+import re
 import time
+import unicodedata
 from collections.abc import Callable
 
 import anthropic
@@ -33,6 +35,7 @@ from models import (
     ExtratoPdf,
     MensagemHistorico,
     PlanoPoupanca,
+    ResumoAnualIA,
     ResumoMes,
     SugestaoOrcamento,
     Talao,
@@ -741,4 +744,99 @@ def _planear_poupanca_claude(dados: dict, user_id: str | None, config: ConfigIA)
     _registar_chamada("poupanca", resposta, inicio, user_id)
     if resposta.parsed_output is None:
         raise ErroIA(f"A IA não devolveu um plano válido (stop_reason={resposta.stop_reason})")
+    return resposta.parsed_output
+
+
+# Palavras que o resumo do ano nunca usa (regra do contador): o relatório não é fiscal.
+PALAVRAS_PROIBIDAS_RESUMO_ANUAL = (
+    "IRS",
+    "dedutível",
+    "dedução",
+    "benefício fiscal",
+    "reembolso",
+    "rendimento coletável",
+    "imposto",
+    "IVA",
+    "e-fatura",
+    "Finanças",
+)
+
+# Instruções do resumo do ano. A IA recebe os números já calculados (relatorio.py): só os descreve.
+INSTRUCOES_RESUMO_ANUAL = f"""
+És o assistente de uma app portuguesa de controlo de despesas pessoais.
+Recebes, em JSON, os números de um ano já calculados: entradas, saídas e saldo, mês a mês, saídas por categoria,
+o ano anterior nos mesmos meses (se houver), as maiores saídas, os pagamentos que se repetem e os objetivos de poupança.
+
+O resumo:
+- 4 a 6 frases, em português de Portugal, a tratar o utilizador por "tu", sem Markdown.
+- Só descreves os números recebidos. Nunca inventes, estimes nem refaças contas.
+- Escreve os valores no formato português, por exemplo 1.234,56 €.
+- Diz que os números dependem dos movimentos que o utilizador importou ou registou na app.
+- Se ano_incompleto for true, diz até que mês há dados.
+- Usa "entradas" e "saídas", nunca "rendimento".
+- Não dês conselhos nem recomendações de nenhum tipo (nem "devias poupar", nem "podes cortar"),
+  nem conselhos de investimento ou fiscais.
+- Nunca uses estas palavras: {", ".join(PALAVRAS_PROIBIDAS_RESUMO_ANUAL)}.
+"""
+
+
+def _sem_acentos(texto: str) -> str:
+    decomposto = unicodedata.normalize("NFKD", texto)
+    return "".join(letra for letra in decomposto if not unicodedata.combining(letra)).casefold()
+
+
+# Cada palavra proibida tem de começar uma palavra do texto: "IVA" apanha "IVA" e "iva", mas não "positiva";
+# "imposto" apanha "impostos". Sem maiúsculas nem acentos ("Finanças" = "financas").
+# O que se procura no texto devolvido pela IA: as palavras proibidas, menos "Finanças" (o resumo diz naturalmente
+# "as tuas finanças"; sem maiúsculas não se distingue da AT), mais expressões que só podem ser a AT,
+# e os plurais que não começam pela palavra no singular ("dedutíveis" não começa por "dedutível").
+# "AT" sozinho fica de fora: sem maiúsculas apanhava "atenção" e "ativa".
+VERIFICAR_NO_TEXTO = tuple(palavra for palavra in PALAVRAS_PROIBIDAS_RESUMO_ANUAL if palavra != "Finanças") + (
+    "Portal das Finanças",
+    "Autoridade Tributária",
+    "dedutíveis",
+    "deduções",
+    "benefícios fiscais",
+    "rendimentos coletáveis",
+)
+_PADROES_PROIBIDOS = [
+    re.compile(r"(?<!\w)" + re.escape(_sem_acentos(palavra))) for palavra in VERIFICAR_NO_TEXTO
+]
+
+
+def tem_palavra_proibida(texto: str) -> bool:
+    """Se o texto usa algum termo fiscal de VERIFICAR_NO_TEXTO (o relatório não é fiscal)."""
+    normalizado = _sem_acentos(texto)
+    return any(padrao.search(normalizado) for padrao in _PADROES_PROIBIDOS)
+
+
+def resumir_ano(dados: dict, user_id: str | None = None, config: ConfigIA | None = None) -> ResumoAnualIA:
+    """Pede à IA um resumo do ano a partir dos números já calculados (relatorio.dados_para_ia)."""
+    fornecedor = os.getenv("IA_FORNECEDOR", "claude")
+    if fornecedor == "claude":
+        try:
+            return _resumir_ano_claude(dados, user_id, config or config_ia_do_plano("free"))
+        # ValueError: com o max_tokens do plano, uma resposta cortada a meio não passa na validação.
+        except (anthropic.APIError, ValueError) as erro:
+            raise ErroIA(f"Claude: {erro}") from erro
+    raise RuntimeError(f"Fornecedor de IA desconhecido: {fornecedor}")
+
+
+def _resumir_ano_claude(dados: dict, user_id: str | None, config: ConfigIA) -> ResumoAnualIA:
+    cliente = anthropic.Anthropic()
+    inicio = time.perf_counter()
+    resposta = cliente.messages.parse(
+        model=os.getenv("CLAUDE_MODELO", "claude-haiku-5-5"),
+        max_tokens=config.max_tokens,
+        output_config={"effort": config.effort},
+        system=INSTRUCOES_RESUMO_ANUAL,
+        messages=[{"role": "user", "content": json.dumps(dados, ensure_ascii=False)}],
+        output_format=ResumoAnualIA,
+    )
+    _registar_chamada("resumo_anual", resposta, inicio, user_id)
+    if resposta.parsed_output is None:
+        raise ErroIA(f"A IA não devolveu um resumo do ano válido (stop_reason={resposta.stop_reason})")
+    # As instruções proíbem termos fiscais; se a IA os usar na mesma, o resumo não se mostra (o log não leva o texto).
+    if tem_palavra_proibida(resposta.parsed_output.resumo):
+        raise ErroIA("O resumo do ano usou uma palavra proibida (termo fiscal); resposta descartada")
     return resposta.parsed_output

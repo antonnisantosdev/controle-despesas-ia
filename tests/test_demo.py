@@ -4,6 +4,7 @@ Tudo com dados inventados e um Supabase a fingir: nada é gravado nem pago.
 """
 
 import base64
+import codecs
 import hashlib
 import hmac
 import json
@@ -473,6 +474,7 @@ ROTAS_BLOQUEADAS_NA_DEMO = {
     ("PATCH", "/objetivos/{objetivo_id}"),
     ("DELETE", "/objetivos/{objetivo_id}"),
     ("POST", "/objetivos/{objetivo_id}/plano"),
+    ("POST", "/relatorio/resumo-ia"),
 }
 
 # Valores de exemplo para os pedidos às rotas permitidas.
@@ -482,6 +484,8 @@ PARAMETROS = {
     "/orcamentos": {"mes": "2026-11"},
     "/transacoes": {"mes": "2026-11"},
     "/simulador": {"mensal": 50, "anos": 10, "taxa": 3},
+    "/relatorio": {"ano": 2026},
+    "/relatorio/csv": {"ano": 2026},
 }
 
 
@@ -545,6 +549,23 @@ def test_sugestoes_da_ia_ficam_bloqueadas_na_demo():
     # Decisão do CEO: gastariam os pedidos à IA partilhados por todos os visitantes.
     assert ("POST", "/orcamentos/sugestao") not in demo.PERMISSOES_DEMO
     assert ("POST", "/objetivos/{objetivo_id}/plano") not in demo.PERMISSOES_DEMO
+    assert ("POST", "/relatorio/resumo-ia") not in demo.PERMISSOES_DEMO
+
+
+def test_demo_ve_o_relatorio_do_ano_e_exporta_o_csv(base, api):
+    api.post("/demo")  # grava os 12 meses de dados inventados
+    token = token_demo()
+
+    relatorio = api.get("/relatorio", params={"ano": 2026}, headers=cabecalho(token))
+    csv = api.get("/relatorio/csv", params={"ano": 2026}, headers=cabecalho(token))
+
+    assert relatorio.status_code == 200
+    # A imitação não filtra datas: conta-se só o que é de 2026 (janeiro a novembro, todos com dados).
+    dados = relatorio.json()
+    assert dados["meses_sem_dados"] == [] and len(dados["meses"]) == 11
+    assert dados["ano_incompleto"] is True  # ano corrente
+    assert dados["totais"]["saidas"] > 0 and dados["maiores_saidas"]
+    assert csv.status_code == 200 and csv.content.startswith(codecs.BOM_UTF8)
 
 
 # --- 6. Conta de demo com o token do Supabase ---
@@ -691,7 +712,7 @@ def test_reposicao_cria_os_dados_da_demo(base, api):
     transacoes = base.tabelas["transacoes"]
     assert all(linha["hash_importacao"].startswith("demo-2026-W46-") for linha in transacoes)
     # A marca é a última transação gravada.
-    assert transacoes[-1]["hash_importacao"] == "demo-2026-W46-v2-marca"
+    assert transacoes[-1]["hash_importacao"] == "demo-2026-W46-v3-marca"
     assert len(base.tabelas["objetivos"]) == 2
     assert len(base.tabelas["compras"]) >= 1 and base.tabelas["compra_itens"]
     assert base.tabelas["orcamentos"]
@@ -702,12 +723,14 @@ def test_reposicao_cria_os_dados_da_demo(base, api):
     assert DEMO_USER_ID not in recorrentes._CACHE
 
 
-def test_dados_inventados_tem_6_meses_e_pagamentos_que_se_repetem():
+def test_dados_inventados_tem_12_meses_e_pagamentos_que_se_repetem():
     hoje = date(2026, 11, 10)
     transacoes = dados_demo.transacoes_demo(hoje) + [dados_demo.marca_demo(hoje)]
 
     meses = {linha["data"][:7] for linha in transacoes}
-    assert meses == {"2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11"}
+    assert dados_demo.MESES_COM_DADOS == 12
+    assert len(dados_demo.VARIACAO_POR_MES) == dados_demo.MESES_COM_DADOS
+    assert meses == {f"2026-{mes:02d}" for mes in range(1, 12)} | {"2025-12"}
     assert all(linha["data"] <= hoje.isoformat() for linha in transacoes)  # nada no futuro
     assert len({linha["hash_importacao"] for linha in transacoes}) == len(transacoes)  # hashes únicos
     despesas = [linha for linha in transacoes if linha["valor"] < 0]
@@ -802,7 +825,7 @@ def test_falha_entrega_o_token_sem_marca_e_espera_10_minutos(base, api, monkeypa
     assert resposta.status_code == 200
     assert demo.ler_token_demo(resposta.json()["access_token"], config_valida()) == DEMO_USER_ID
     hashes = [linha["hash_importacao"] for linha in base.tabelas["transacoes"]]
-    assert "demo-2026-W46-v2-marca" not in hashes
+    assert "demo-2026-W46-v3-marca" not in hashes
 
     # Logo a seguir não volta a tentar (nem consulta a base de dados).
     base.falhar_em = None
@@ -814,7 +837,7 @@ def test_falha_entrega_o_token_sem_marca_e_espera_10_minutos(base, api, monkeypa
     # Passados 10 minutos, tenta outra vez e fica com a marca.
     relogio[0] += 600
     api.post("/demo")
-    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W46-v2-marca"
+    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W46-v3-marca"
 
 
 def test_segunda_entrada_da_semana_nao_repoe(base, api, monkeypatch):
@@ -838,7 +861,7 @@ def test_na_semana_seguinte_repoe_outra_vez(base, api, monkeypatch):
 
     api.post("/demo")
 
-    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W47-v2-marca"
+    assert base.tabelas["transacoes"][-1]["hash_importacao"] == "demo-2026-W47-v3-marca"
     assert len(base.pedidos_admin) == 2
     # Os dados novos chegam até ao dia da reposição (há uma movimentação no dia 16), nunca depois.
     datas = {linha["data"] for linha in base.tabelas["transacoes"]}
@@ -849,7 +872,7 @@ def test_semana_iso_usa_o_ano_da_semana():
     assert dados_demo.semana_iso(date(2026, 11, 10)) == "2026-W46"
     # 1 de janeiro de 2027 ainda é da semana 53 de 2026.
     assert dados_demo.semana_iso(date(2027, 1, 1)) == "2026-W53"
-    assert dados_demo.hash_da_marca(date(2027, 1, 1)) == "demo-2026-W53-v2-marca"
+    assert dados_demo.hash_da_marca(date(2027, 1, 1)) == "demo-2026-W53-v3-marca"
 
 
 def test_dados_inventados_nao_tem_numeros_de_telefone():

@@ -67,3 +67,38 @@ body {
   color: var(--texto);
   font-family: var(--font-sans), sans-serif;
 }
+
+/* Impressão (ex.: "Guardar como PDF" no Resumo anual): sempre as cores do tema claro, em fundo branco,
+   mesmo com o tema escuro ligado. O menu, as faixas e os botões escondem-se com print:hidden. */
+@media print {
+  :root,
+  :root.dark,
+  .dark {
+    color-scheme: light;
+    --fundo: #ffffff;
+    --cartao: #ffffff;
+    --menu: #ffffff;
+    --borda: #d6d5d0;
+    --texto: #0b0b0b;
+    --texto-suave: #45443f;
+    --destaque: #047857;
+    --destaque-hover: #047857;
+    --cor-receitas: #2a78d6;
+    --cor-despesas: #eb6834;
+    --grelha: #e5e4e0;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  /* Sem isto, o browser não imprime as cores de fundo (barras das categorias e dos objetivos). */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page {
+    margin: 14mm;
+  }
+}

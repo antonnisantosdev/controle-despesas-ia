@@ -144,7 +144,7 @@ def ler_token_demo(token: str, config: ConfigDemo) -> str | None:
 # --- O que a conta de demo pode fazer ---
 
 # (método, caminho da rota no main.py). Tudo o resto responde 423 à conta de demo.
-# Só leituras e o chat. As sugestões da IA (orçamento e plano de poupança) ficam de fora:
+# Só leituras e o chat. As sugestões da IA (orçamento, plano de poupança, resumo do ano) ficam de fora:
 # gastariam os pedidos à IA partilhados por todos os visitantes.
 PERMISSOES_DEMO: frozenset[tuple[str, str]] = frozenset(
     {
@@ -162,6 +162,9 @@ PERMISSOES_DEMO: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/objetivos"),
         ("GET", "/simulador"),
         ("GET", "/plano"),
+        # Resumo anual: o JSON e o CSV (a demo é Essencial, pode exportar). O resumo pela IA fica de fora.
+        ("GET", "/relatorio"),
+        ("GET", "/relatorio/csv"),
         ("POST", "/chat"),
     }
 )

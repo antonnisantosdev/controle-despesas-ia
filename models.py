@@ -348,3 +348,93 @@ class Recorrente(BaseModel):
 class NovaConta(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=72)
+
+
+# --- Resumo anual (GET /relatorio) ---
+# Os valores das saídas vão sempre em positivo (34.2 e não -34.2), como no dashboard.
+# "categoria" é o nome guardado na base de dados; "etiqueta" é o que se mostra (o "rendimento" aparece como "Entradas").
+
+
+class TotaisAno(BaseModel):
+    entradas: float
+    saidas: float
+    saldo: float
+
+
+class MesRelatorio(BaseModel):
+    mes: str  # "2026-03"
+    entradas: float
+    saidas: float
+    saldo: float
+    com_dados: bool  # False se o mês não tem nenhuma movimentação
+
+
+class CategoriaRelatorio(BaseModel):
+    categoria: str
+    etiqueta: str
+    total: float
+    percentagem: float  # % das saídas do ano, com 1 casa decimal
+
+
+class CategoriaComparada(BaseModel):
+    categoria: str
+    etiqueta: str
+    total: float  # no ano do relatório
+    total_anterior: float  # nos mesmos meses do ano anterior
+    diferenca: float  # total - total_anterior
+
+
+class ComparacaoAno(BaseModel):
+    ano: int  # o ano anterior
+    # Os meses comparados (os mesmos nos dois anos: "01" a "11" se o relatório for até novembro).
+    meses_comparados: list[str]
+    meses_com_dados: int  # meses do ano anterior, dentro dos comparados, com movimentações
+    totais: TotaisAno  # do ano anterior, nesses meses
+    categorias: list[CategoriaComparada]
+
+
+class SaidaRelatorio(BaseModel):
+    data: date
+    descricao: str
+    valor: float
+    categoria: str | None
+    etiqueta: str
+
+
+class RecorrenteAno(BaseModel):
+    descricao: str
+    categoria: str | None
+    etiqueta: str
+    valor_mensal: float  # o último pagamento
+    pagamentos_no_ano: int
+    total_no_ano: float
+
+
+class ObjetivoRelatorio(BaseModel):
+    nome: str
+    valor_alvo: float
+    valor_poupado: float
+    data_alvo: date
+    percentagem: float  # do valor alvo já poupado, com 1 casa decimal
+
+
+class RelatorioAnual(BaseModel):
+    ano: int
+    titulo: str
+    aviso: str
+    nota_categorias: str
+    ate_mes: str  # o último mês contado ("2026-11" no ano corrente; "AAAA-12" nos anos que já acabaram)
+    ano_incompleto: bool  # ano corrente, ou meses sem movimentações
+    meses_sem_dados: list[str]
+    totais: TotaisAno
+    meses: list[MesRelatorio]
+    categorias: list[CategoriaRelatorio]
+    comparacao: ComparacaoAno | None  # None se o ano anterior não tem movimentações nesses meses
+    maiores_saidas: list[SaidaRelatorio]
+    recorrentes: list[RecorrenteAno]
+    objetivos: list[ObjetivoRelatorio]
+
+
+# Resposta da IA no POST /relatorio/resumo-ia (saída estruturada).
+class ResumoAnualIA(BaseModel):
+    resumo: str

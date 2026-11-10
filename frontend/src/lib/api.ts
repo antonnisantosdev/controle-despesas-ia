@@ -94,6 +94,57 @@ export type CorteSugerido = { categoria: string; valor_mensal: number; motivo: s
 export type PlanoPoupanca = { viavel: boolean; explicacao: string; cortes: CorteSugerido[] };
 // Um ano do simulador de poupança (GET /simulador).
 export type AnoSimulado = { ano: number; depositado: number; valor: number };
+// Resumo anual (GET /relatorio?ano=AAAA). Saídas sempre positivas. Mostrar sempre a etiqueta, nunca a categoria.
+export type TotaisAno = { entradas: number; saidas: number; saldo: number };
+export type MesRelatorio = { mes: string; entradas: number; saidas: number; saldo: number; com_dados: boolean };
+export type CategoriaRelatorio = { categoria: string; etiqueta: string; total: number; percentagem: number };
+export type CategoriaComparada = {
+  categoria: string;
+  etiqueta: string;
+  total: number;
+  total_anterior: number;
+  diferenca: number;
+};
+export type ComparacaoAno = {
+  ano: number;
+  meses_comparados: string[];
+  meses_com_dados: number;
+  totais: TotaisAno;
+  categorias: CategoriaComparada[];
+};
+export type SaidaRelatorio = { data: string; descricao: string; valor: number; categoria: string | null; etiqueta: string };
+export type RecorrenteAno = {
+  descricao: string;
+  categoria: string | null;
+  etiqueta: string;
+  valor_mensal: number;
+  pagamentos_no_ano: number;
+  total_no_ano: number;
+};
+export type ObjetivoRelatorio = {
+  nome: string;
+  valor_alvo: number;
+  valor_poupado: number;
+  data_alvo: string;
+  percentagem: number;
+};
+export type RelatorioAnual = {
+  ano: number;
+  titulo: string;
+  aviso: string;
+  nota_categorias: string;
+  ate_mes: string;
+  ano_incompleto: boolean;
+  meses_sem_dados: string[];
+  totais: TotaisAno;
+  meses: MesRelatorio[];
+  categorias: CategoriaRelatorio[];
+  comparacao: ComparacaoAno | null;
+  maiores_saidas: SaidaRelatorio[];
+  recorrentes: RecorrenteAno[];
+  objetivos: ObjetivoRelatorio[];
+};
+export type ResumoAnualIA = { resumo: string };
 // "dia" nos planos pagos, "mes" no Free: o período em que se contam os pedidos à IA (limites.py).
 export type Periodo = "dia" | "mes";
 // O plano do utilizador, os pedidos à IA que já fez no período e o último dia do plano (GET /plano),
@@ -420,6 +471,16 @@ export async function pedirApi<T>(caminho: string, corpo?: object, metodo?: "POS
     }),
   );
   return lerResposta<T>(resposta);
+}
+
+// GET com o token que devolve um ficheiro (ex.: o CSV do resumo anual) em vez de JSON.
+// Os erros (401, 402, 423...) seguem o mesmo caminho do pedirApi.
+export async function descarregarFicheiro(caminho: string): Promise<Blob> {
+  const resposta = await enviarComToken((token) =>
+    fetchComTentativas(`${API_URL}${caminho}`, { headers: { Authorization: `Bearer ${token}` } }),
+  );
+  if (resposta.ok) return await resposta.blob();
+  return lerResposta<never>(resposta); // não é ok: lança SessaoExpirada ou ErroApi
 }
 
 // Envia um ficheiro (multipart/form-data, como um <form enctype="multipart/form-data"> em PHP).

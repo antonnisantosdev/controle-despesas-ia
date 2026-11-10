@@ -1,17 +1,18 @@
 """Dados inventados da conta de demonstração (para recrutadores): movimentações, talões, orçamentos e objetivos.
 
 Tudo é inventado: lojas, empresas e valores são fictícios. As datas são relativas ao mês de hoje
-(o mês atual e os 5 anteriores), para o dashboard ter sempre meses recentes com dados.
+(o mês atual e os 11 anteriores), para o dashboard ter sempre meses recentes com dados.
 Quem grava estes dados na base de dados é o demo.py (sempre com o DEMO_USER_ID da configuração).
 """
 
 from datetime import date
 
-# Meses com dados: o atual e os 5 anteriores.
-MESES_COM_DADOS = 6
+# Meses com dados: o atual e os 11 anteriores (um ano, para o resumo anual).
+MESES_COM_DADOS = 12
 
 # Pequena variação dos gastos de mês para mês (do mês atual para trás), para os gráficos não ficarem iguais.
-VARIACAO_POR_MES = [1.0, 0.92, 1.08, 0.97, 1.05, 0.95]
+# Uma por mês de MESES_COM_DADOS.
+VARIACAO_POR_MES = [1.0, 0.92, 1.08, 0.97, 1.05, 0.95, 1.03, 0.9, 1.12, 0.98, 1.06, 0.94]
 
 # Movimentações que se repetem todos os meses: (dia, descrição, valor, categoria, método de pagamento).
 # Os valores destas não variam: são assinaturas, renda e contas fixas, que o GET /recorrentes deve encontrar.
@@ -44,6 +45,12 @@ OCASIONAIS = [
     (3, 23, "Cinema Sala Estrela", -13.00, "lazer", "cartao_debito"),
     (4, 10, "Livraria Pagina Aberta", -22.50, "compras", "cartao_debito"),
     (5, 21, "Oficina Auto Rapida", -85.00, "transporte", "transferencia"),
+    (6, 13, "Clinica Dentaria Sorriso", -60.00, "saúde", "cartao_debito"),
+    (7, 5, "Loja de Desporto Ativo", -54.90, "compras", "cartao_credito"),
+    (8, 17, "Hotel Praia Serena", -210.00, "lazer", "cartao_credito"),
+    (9, 27, "Seguro Auto Exemplo", -180.00, "transporte", "debito_direto"),
+    (10, 8, "Loja de Eletrodomesticos Casa Nova", -129.00, "compras", "cartao_debito"),
+    (11, 12, "Oculista Visao Clara", -95.00, "saúde", "cartao_debito"),
 ]
 
 # Transferências com o nome de uma pessoa, só no mês atual: (dia, descrição, valor, categoria, método).
@@ -123,12 +130,12 @@ def prefixo_hash(hoje: date) -> str:
 
 
 # Subir quando os dados inventados mudam: a marca muda e a demo volta a ser reposta logo, sem esperar pela
-# semana seguinte. v2 (2026-11-10): transferências da Rita.
-VERSAO_DADOS = 2
+# semana seguinte. v2 (2026-11-10): transferências da Rita. v3 (2026-11-10): 12 meses de dados (resumo anual).
+VERSAO_DADOS = 3
 
 
 def hash_da_marca(hoje: date) -> str:
-    """A impressão digital da movimentação que marca a reposição da semana: "demo-2026-W46-v2-marca"."""
+    """A impressão digital da movimentação que marca a reposição da semana: "demo-2026-W46-v3-marca"."""
     return prefixo_hash(hoje) + f"v{VERSAO_DADOS}-marca"
 
 
@@ -157,7 +164,7 @@ def hash_do_talao(hoje: date, indice: int) -> str:
 
 
 def transacoes_demo(hoje: date) -> list[dict]:
-    """As movimentações inventadas dos últimos 6 meses (sem a marca e sem user_id), cada uma com o seu hash."""
+    """As movimentações inventadas dos últimos MESES_COM_DADOS meses (sem a marca e sem user_id), cada uma com o seu hash."""
     prefixo = prefixo_hash(hoje)
     linhas: list[dict] = []
     for meses_atras in range(MESES_COM_DADOS):

@@ -35,6 +35,7 @@ export const TEXTOS_PRECOS = {
     "Planeamento: orçamento por categoria, com sugestão da IA",
     "Minha reserva: objetivos de poupança e simulador de juros compostos",
     "Pagamentos que se repetem: vê as subscrições e os débitos que te saem todos os meses",
+    "Resumo anual: o teu ano numa página, com comparação com o ano anterior, e guardado em PDF",
     "Instala no telemóvel como uma app",
   ],
   notaPagamento:
@@ -54,7 +55,12 @@ export const TEXTOS_PRECOS = {
     {
       pergunta: "O que conta como pedido à IA?",
       resposta:
-        "Cada vez que a IA trabalha para ti: uma pergunta no chat, a categorização de um extrato importado, a leitura de um talão, uma sugestão de orçamento, o resumo do mês, o plano de poupança de um objetivo, categorizar uma movimentação nova ou um clique em \"Categorizar\" (até 300 de cada vez). Ver o dashboard, as listas e o simulador não conta. Se os pedidos acabarem, os extratos em CSV importam-se na mesma, sem categorias. Nos planos pagos, o contador volta a zero à meia-noite. No Free, volta a zero no dia 1 de cada mês. Os extratos em PDF têm também um limite próprio por mês: 15 no Essencial e 30 no Completo, com até 10 páginas cada. Cada PDF conta para esse limite e gasta também 1 pedido à IA. O limite de PDF volta a zero no dia 1.",
+        "Cada vez que a IA trabalha para ti: uma pergunta no chat, a categorização de um extrato importado, a leitura de um talão, uma sugestão de orçamento, o resumo do mês, o resumo do ano (no Completo), o plano de poupança de um objetivo, categorizar uma movimentação nova ou um clique em \"Categorizar\" (até 300 de cada vez). Ver o dashboard, as listas, o resumo anual e o simulador não conta. Se os pedidos acabarem, os extratos em CSV importam-se na mesma, sem categorias. Nos planos pagos, o contador volta a zero à meia-noite. No Free, volta a zero no dia 1 de cada mês. Os extratos em PDF têm também um limite próprio por mês: 15 no Essencial e 30 no Completo, com até 10 páginas cada. Cada PDF conta para esse limite e gasta também 1 pedido à IA. O limite de PDF volta a zero no dia 1.",
+    },
+    {
+      pergunta: "O que é o resumo anual?",
+      resposta:
+        'É uma página com o teu ano numa só vista: entradas, saídas e saldo, mês a mês, gastos por categoria, comparação com o ano anterior, os maiores gastos e os pagamentos que se repetem. Está em todos os planos e podes guardá-lo em PDF com o "Guardar como PDF" do browser. Descarregar em CSV só existe nos planos Essencial e Completo. O resumo escrito pela IA só existe no Completo e conta como 1 pedido à IA.',
     },
     {
       pergunta: "Posso voltar ao Free?",

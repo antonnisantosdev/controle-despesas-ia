@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import Logo from "@/components/Logo";
 import { apagarToken } from "@/lib/api";
+import { TEXTOS_RELATORIO } from "@/lib/textosRelatorio";
 
 import CartaoPlano from "./CartaoPlano";
 
@@ -14,6 +15,7 @@ const LIGACOES = [
   { href: "/planeamento", nome: "Planeamento", icone: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
   { href: "/compras", nome: "Minhas compras", icone: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3" },
   { href: "/reserva", nome: "Minha reserva", icone: "M5 21V4h13l-3 4 3 4H5" },
+  { href: "/relatorio", nome: TEXTOS_RELATORIO.menu, icone: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4M8 13h3M8 16h6" },
 ];
 
 function Icone({ caminho }: { caminho: string }) {
@@ -45,7 +47,7 @@ export default function MenuLateral() {
   const estiloIcone = "rounded-lg p-2 text-texto-suave hover:bg-fundo hover:text-texto";
 
   return (
-    <aside className="flex shrink-0 flex-col gap-3 border-b border-borda bg-menu p-3 md:sticky md:top-0 md:h-screen md:w-60 md:gap-4 md:border-b-0 md:border-r md:p-4">
+    <aside className="flex shrink-0 print:hidden flex-col gap-3 border-b border-borda bg-menu p-3 md:sticky md:top-0 md:h-screen md:w-60 md:gap-4 md:border-b-0 md:border-r md:p-4">
       <div className="flex items-center justify-between px-1 py-1">
         <Logo altura={36} />
         <div className="flex gap-1 md:hidden">

@@ -111,6 +111,18 @@ FUNCOES_PAGAS = {
         "No Free, podes importar o extrato em CSV."
     ),
     "ler_talao": "A leitura de talões está disponível nos planos Essencial e Completo.",
+    "exportar_relatorio": (
+        "Descarregar o resumo anual em CSV (para abrir numa folha de cálculo) está disponível nos planos "
+        "Essencial e Completo. No Free, podes ver o resumo na app e guardá-lo em PDF."
+    ),
+}
+
+# Funções que só o plano Completo tem, com a mensagem do 402 para os outros planos.
+FUNCOES_SO_COMPLETO = {
+    "resumo_anual_ia": (
+        "O resumo do ano escrito pela IA está disponível no plano Completo. "
+        "Os números do resumo anual continuam disponíveis no teu plano."
+    ),
 }
 
 # Extratos em PDF que cada plano pode importar por mês de Lisboa (o Free não importa PDF).
@@ -197,7 +209,9 @@ def plano_efetivo(plano: str | None, ativo_ate: date | None, hoje: date) -> str 
 
 
 def plano_inclui(plano: str | None, funcao: str) -> bool:
-    """Se o plano tem a função. As que não estão em FUNCOES_PAGAS são de todos os planos."""
+    """Se o plano tem a função. As que não estão em FUNCOES_PAGAS nem em FUNCOES_SO_COMPLETO são de todos os planos."""
+    if funcao in FUNCOES_SO_COMPLETO:
+        return plano == "completo"
     return funcao not in FUNCOES_PAGAS or plano in PLANOS_PAGOS
 
 
@@ -219,7 +233,8 @@ def exigir_funcao(user_id: str, funcao: str) -> None:
     402 e não 403: no frontend, 403 quer dizer "assinatura expirada" e manda para outra página.
     """
     if not plano_inclui(plano_do_utilizador(user_id), funcao):
-        raise HTTPException(status_code=402, detail=FUNCOES_PAGAS[funcao])
+        mensagem = FUNCOES_SO_COMPLETO.get(funcao) or FUNCOES_PAGAS[funcao]
+        raise HTTPException(status_code=402, detail=mensagem)
 
 
 # Códigos de erro do PostgREST quando uma coluna não existe (ex.: uso_ia.funcao antes da sql/016).

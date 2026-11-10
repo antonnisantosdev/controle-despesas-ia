@@ -156,10 +156,10 @@ def _recorrente_do_grupo(movimentos: list[dict], mes_anterior: str) -> Recorrent
     )
 
 
-def detetar_recorrentes(transacoes: list[dict], hoje: date) -> list[Recorrente]:
-    """Os pagamentos mensais nas transações (cada uma com data, descricao, valor e categoria).
+def agrupar_despesas(transacoes: list[dict]) -> dict[str, list[dict]]:
+    """As despesas que podem ser pagamentos mensais, agrupadas pela descrição normalizada.
 
-    Do maior valor mensal para o menor.
+    Cada descrição normaliza-se uma só vez (é a parte mais pesada com milhares de movimentos).
     """
     grupos: dict[str, list[dict]] = {}
     for transacao in transacoes:
@@ -171,10 +171,22 @@ def detetar_recorrentes(transacoes: list[dict], hoje: date) -> list[Recorrente]:
         if e_generica(chave):
             continue
         grupos.setdefault(chave, []).append(transacao)
+    return grupos
 
+
+def recorrentes_dos_grupos(grupos: dict[str, list[dict]], hoje: date) -> list[tuple[str, Recorrente]]:
+    """(chave, pagamento mensal) de cada grupo que é um pagamento mensal, do maior valor mensal para o menor."""
     mes_anterior = _mes_de(_absoluto(hoje.strftime("%Y-%m")) - 1)
-    recorrentes = [r for r in (_recorrente_do_grupo(lista, mes_anterior) for lista in grupos.values()) if r]
-    return sorted(recorrentes, key=lambda r: r.valor_mensal, reverse=True)
+    encontrados = [(chave, _recorrente_do_grupo(lista, mes_anterior)) for chave, lista in grupos.items()]
+    return sorted(((c, r) for c, r in encontrados if r), key=lambda par: par[1].valor_mensal, reverse=True)
+
+
+def detetar_recorrentes(transacoes: list[dict], hoje: date) -> list[Recorrente]:
+    """Os pagamentos mensais nas transações (cada uma com data, descricao, valor e categoria).
+
+    Do maior valor mensal para o menor.
+    """
+    return [recorrente for _, recorrente in recorrentes_dos_grupos(agrupar_despesas(transacoes), hoje)]
 
 
 def _ler_despesas(user_id: str, hoje: date) -> list[dict]:
