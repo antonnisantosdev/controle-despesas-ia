@@ -34,6 +34,8 @@ def ler_todas(nova_consulta: Callable[[], SyncSelectRequestBuilder]) -> list[dic
         consulta = nova_consulta()
         # O range inclui o início e o fim: de 0 a 999 são 1000 linhas.
         resposta = consulta.range(len(linhas), len(linhas) + TAMANHO_PAGINA - 1).execute()
+        # Só uma página vazia diz que acabou. Parar numa página incompleta poupava um pedido,
+        # mas perdia linhas se o Supabase devolvesse menos de TAMANHO_PAGINA por pedido (max_rows menor).
         if not resposta.data:
             break
         linhas.extend(resposta.data)

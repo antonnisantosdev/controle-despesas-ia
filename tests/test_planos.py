@@ -600,6 +600,8 @@ def test_a_rota_plano_mostra_o_limite_o_periodo_e_os_pedidos_usados(cliente, ass
         "terminou_em": None,
         "pdf_usados": 0,
         "pdf_limite": 0,  # o Free não importa PDF
+        "memoria_mensagens": 0,  # o chat do Free não guarda mensagens anteriores
+        "meses_historico": 3,  # o mês atual e os 2 anteriores
     }
     assert pdfs_contados == []  # no Free nem se contam os PDF
 
@@ -706,9 +708,9 @@ def test_a_rota_planos_lista_os_planos_por_ordem_sem_login():
 
     assert resposta.status_code == 200
     assert resposta.json() == [
-        {"plano": "free", "limite_diario": 30, "periodo": "mes", "limite_pdf": 0},
-        {"plano": "essencial", "limite_diario": 20, "periodo": "dia", "limite_pdf": 15},
-        {"plano": "completo", "limite_diario": 50, "periodo": "dia", "limite_pdf": 30},
+        {"plano": "free", "limite_diario": 30, "periodo": "mes", "limite_pdf": 0, "memoria_mensagens": 0, "meses_historico": 3},
+        {"plano": "essencial", "limite_diario": 20, "periodo": "dia", "limite_pdf": 15, "memoria_mensagens": 4, "meses_historico": 12},
+        {"plano": "completo", "limite_diario": 50, "periodo": "dia", "limite_pdf": 30, "memoria_mensagens": 10, "meses_historico": None},
     ]
 
 
@@ -720,6 +722,6 @@ def test_a_rota_planos_segue_os_limites_de_limites_py(monkeypatch):
     resposta = TestClient(main.app).get("/planos")
 
     assert resposta.json() == [
-        {"plano": "free", "limite_diario": 1, "periodo": "mes", "limite_pdf": 0},
-        {"plano": "completo", "limite_diario": 2, "periodo": "dia", "limite_pdf": 3},
+        {"plano": "free", "limite_diario": 1, "periodo": "mes", "limite_pdf": 0, "memoria_mensagens": 0, "meses_historico": 3},
+        {"plano": "completo", "limite_diario": 2, "periodo": "dia", "limite_pdf": 3, "memoria_mensagens": 10, "meses_historico": None},
     ]

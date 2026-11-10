@@ -20,6 +20,18 @@ export function apagarToken() {
 export type ResumoMensal = { mes: string; receitas: number; despesas: number };
 export type GastoCategoria = { categoria: string; total: number };
 export type RespostaChat = { resposta: string };
+// Uma mensagem anterior do chat, enviada em POST /chat (memória só da sessão; a API corta-a para o plano).
+export type MensagemHistorico = { papel: "utilizador" | "ia"; texto: string };
+// Um pagamento que se repete todos os meses (GET /recorrentes, sem IA). ultimo_pagamento em ISO.
+export type Recorrente = {
+  descricao: string;
+  categoria: string | null;
+  valor_mensal: number;
+  // O valor antes de uma mudança de preço (ex.: a assinatura subiu); null ou ausente se não mudou.
+  valor_anterior?: number | null;
+  meses_seguidos: number;
+  ultimo_pagamento: string;
+};
 export type Transacao = {
   id: number;
   data: string;
@@ -58,6 +70,7 @@ export type Periodo = "dia" | "mes";
 // já normalizado por normalizarEstadoPlano(). ativo_ate vem em ISO ("2026-12-31"), ou null no Free (não acaba).
 // plano_terminado e terminou_em: o plano pago que chegou ao fim (a conta está no Free), ou null.
 // pdf_usados e pdf_limite: extratos PDF deste mês (pdf_limite 0 no Free).
+// memoria_mensagens: mensagens anteriores que o chat recebe (0 no Free). meses_historico: meses que o chat vê (null = todos).
 export type EstadoPlano = {
   plano: string | null;
   limite: number;
@@ -68,6 +81,8 @@ export type EstadoPlano = {
   terminou_em: string | null;
   pdf_usados: number;
   pdf_limite: number;
+  memoria_mensagens: number;
+  meses_historico: number | null;
 };
 // O que GET /plano devolve. Uma API antiga (durante o deploy) só traz usadas_hoje e não traz periodo,
 // nem os campos do plano terminado e dos PDF.
@@ -79,6 +94,8 @@ type EstadoPlanoDaApi = Pick<EstadoPlano, "plano" | "limite" | "ativo_ate"> & {
   terminou_em?: string | null;
   pdf_usados?: number;
   pdf_limite?: number;
+  memoria_mensagens?: number;
+  meses_historico?: number | null;
 };
 
 // Põe o estado sempre na forma nova, para nenhum ecrã fazer contas com undefined (NaN).
@@ -94,6 +111,9 @@ export function normalizarEstadoPlano(bruto: EstadoPlanoDaApi): EstadoPlano {
     terminou_em: bruto.terminou_em ?? null,
     pdf_usados: bruto.pdf_usados ?? 0,
     pdf_limite: bruto.pdf_limite ?? 0,
+    // Uma API antiga não envia a memória: sem ela, o chat não manda mensagens anteriores.
+    memoria_mensagens: bruto.memoria_mensagens ?? 0,
+    meses_historico: bruto.meses_historico ?? null,
   };
 }
 
@@ -104,7 +124,15 @@ export async function pedirEstadoPlano(): Promise<EstadoPlano> {
 // Um plano à venda e o seu limite de pedidos à IA no período (GET /planos, público).
 // limite_diario é o nome antigo: no Free é o limite do mês.
 // limite_pdf: extratos PDF por mês (uma API antiga não o envia).
-export type PlanoDisponivel = { plano: string; limite_diario: number; periodo: Periodo; limite_pdf?: number };
+// memoria_mensagens e meses_historico: o que o chat de cada plano guarda e vê (uma API antiga não os envia).
+export type PlanoDisponivel = {
+  plano: string;
+  limite_diario: number;
+  periodo: Periodo;
+  limite_pdf?: number;
+  memoria_mensagens?: number;
+  meses_historico?: number | null;
+};
 
 // O email da conta, lido do próprio token do Supabase (um JWT: a parte do meio é JSON em base64url).
 // Serve só para pré-preencher mensagens; não é verificação nenhuma (essa é feita pela API).

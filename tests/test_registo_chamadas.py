@@ -144,3 +144,15 @@ def test_sem_user_id_e_sem_a_016_grava_na_mesma(tabela):
 
     assert len(tabela.gravadas) == 1
     assert "user_id" not in tabela.gravadas[0]
+
+
+def test_o_custo_registado_conta_os_tokens_da_cache(tabela, monkeypatch):
+    monkeypatch.setenv("CLAUDE_MODELO", "claude-haiku-5-5")
+    uso = SimpleNamespace(input_tokens=200, output_tokens=300, cache_creation_input_tokens=1000, cache_read_input_tokens=5000)
+    resposta = SimpleNamespace(usage=uso, parsed_output="ok", stop_reason="end_turn")
+
+    ia._registar_chamada("chat", resposta, time.perf_counter(), "utilizador-teste")
+
+    linha = tabela.gravadas[0]
+    assert (linha["cache_creation_tokens"], linha["cache_read_tokens"]) == (1000, 5000)
+    assert linha["custo_usd"] == pytest.approx(0.000345)

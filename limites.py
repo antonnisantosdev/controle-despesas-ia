@@ -4,14 +4,22 @@ O plano vem da assinatura (coluna plano da tabela assinaturas). O Free conta os 
 os planos pagos contam por dia. O dia e o mês são os de Lisboa, não os do servidor (o Render está em UTC).
 """
 
+from __future__ import annotations
+
+from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
+from typing import TYPE_CHECKING, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from postgrest.exceptions import APIError
 
 from database import supabase
-from models import EstadoPlano, PlanoDisponivel
+
+# O models.py usa os limites do histórico do chat (abaixo): para não haver importação circular,
+# os modelos importam-se dentro das funções que os usam.
+if TYPE_CHECKING:
+    from models import EstadoPlano, PlanoDisponivel
 
 # Pedidos à IA de cada plano e o período em que se contam ("dia" ou "mes").
 # Para mudar um limite, muda-se só aqui.
@@ -20,6 +28,80 @@ LIMITES_POR_PLANO: dict[str, tuple[int, str]] = {
     "essencial": (20, "dia"),
     "completo": (50, "dia"),
 }
+
+
+# --- Como a IA trabalha em cada plano ---
+
+
+@dataclass(frozen=True)
+class ConfigIA:
+    """O que cada plano recebe da IA nas respostas em texto (chat, resumo, orçamento, poupança).
+
+    effort: quanto a IA "pensa" antes de responder (mais esforço, mais tokens e mais custo).
+    max_tokens: no resumo, orçamento e poupança, o máximo de tokens da resposta; no chat,
+        o orçamento de saída da pergunta inteira (todas as voltas juntas, ver MAX_VOLTAS_CHAT).
+    meses_historico: meses de calendário que as ferramentas do chat veem, a contar com o atual
+        (3 = o mês atual e os 2 anteriores). None = sem limite.
+    memoria_mensagens: mensagens anteriores da conversa que o chat recebe (0 = cada pergunta é nova).
+    cache: se as instruções e as ferramentas do chat vão com prompt caching.
+
+    Não se aplica à leitura de PDF, à categorização nem aos talões: aí a resposta cresce com o
+    tamanho do documento, e com estes max_tokens sairia cortada (ficam com os valores do ia.py).
+    """
+
+    effort: Literal["low", "medium", "high"]
+    max_tokens: int
+    meses_historico: int | None
+    memoria_mensagens: int
+    cache: bool
+
+
+# Decisão do CEO. Para mudar o que um plano recebe da IA, muda-se só aqui.
+CONFIG_IA_POR_PLANO: dict[str, ConfigIA] = {
+    "free": ConfigIA(effort="low", max_tokens=1024, meses_historico=3, memoria_mensagens=0, cache=False),
+    "essencial": ConfigIA(effort="low", max_tokens=2048, meses_historico=12, memoria_mensagens=4, cache=False),
+    "completo": ConfigIA(effort="medium", max_tokens=4096, meses_historico=None, memoria_mensagens=10, cache=True),
+}
+
+# Voltas máximas do chat por pergunta (cada volta é uma chamada à IA, que pode pedir ferramentas).
+# Junto com o orçamento de saída (max_tokens do plano, para a pergunta inteira), põe um teto ao custo
+# de cada pergunta: sem isto, uma pergunta do Completo podia custar 5 voltas x 4096 tokens de saída,
+# mais as entradas repetidas em cada volta. Com 3 voltas e 4096 tokens no total, o pior caso fica limitado.
+MAX_VOLTAS_CHAT = 3
+
+# Tokens de saída mínimos para fazer mais uma volta do chat. Com menos do que isto, a resposta final
+# sairia cortada a meio, e a volta custava as entradas (instruções, ferramentas, conversa) para nada:
+# o chat para e pede para reformular a pergunta.
+MIN_TOKENS_POR_VOLTA = 256
+
+# Pedidos de ferramentas que o chat corre numa só volta. Os que passarem não correm: a IA recebe um erro
+# e pode pedi-los na volta seguinte. Evita que uma resposta peça dezenas de consultas à base de dados.
+MAX_FERRAMENTAS_POR_VOLTA = 4
+
+# Tamanho do histórico do chat (vem do browser e pode ser falsificado). Cada pergunta antiga tem o
+# tamanho máximo de uma pergunta; cada resposta antiga da IA, até 2000 caracteres; e o histórico inteiro
+# até 4000, para não encher o prompt (e o custo), mesmo nos planos com mais memória.
+MAX_CARACTERES_PERGUNTA_HISTORICO = 500
+MAX_CARACTERES_RESPOSTA_HISTORICO = 2000
+MAX_CARACTERES_HISTORICO = 4000
+
+
+def config_ia_do_plano(plano: str | None) -> ConfigIA:
+    """A configuração da IA do plano. Plano desconhecido ou None: a do Free (a mais barata)."""
+    return CONFIG_IA_POR_PLANO.get(plano or "", CONFIG_IA_POR_PLANO["free"])
+
+
+def primeiro_mes_visivel(config: ConfigIA, hoje: date) -> str | None:
+    """O mês mais antigo ("AAAA-MM") que as ferramentas do chat podem ver. None = sem limite.
+
+    Meses de calendário: com 3 meses e hoje a 9 de novembro, vê-se desde setembro (dia 1).
+    """
+    if config.meses_historico is None:
+        return None
+    # Conta em "meses absolutos" (ano x 12 + mês) para atravessar a mudança de ano sem casos especiais.
+    absoluto = hoje.year * 12 + (hoje.month - 1) - (config.meses_historico - 1)
+    return f"{absoluto // 12:04d}-{absoluto % 12 + 1:02d}"
+
 
 # Funções que só os planos pagos têm, com a mensagem do 402 para quem não as tem.
 PLANOS_PAGOS = {"essencial", "completo"}
@@ -125,6 +207,12 @@ def plano_do_utilizador(user_id: str) -> str | None:
     return plano_efetivo(plano, ativo_ate, hoje_em_lisboa())
 
 
+def plano_e_config_ia(user_id: str) -> tuple[str | None, ConfigIA]:
+    """O plano que vale hoje e a configuração da IA desse plano (um pago que terminou conta como Free)."""
+    plano = plano_do_utilizador(user_id)
+    return plano, config_ia_do_plano(plano)
+
+
 def exigir_funcao(user_id: str, funcao: str) -> None:
     """Responde 402 se o plano do utilizador não tiver a função.
 
@@ -227,6 +315,8 @@ def estado_do_plano(user_id: str) -> EstadoPlano:
 
     Um plano pago que terminou aparece como Free, com o nome e a data do plano que terminou.
     """
+    from models import EstadoPlano
+
     na_tabela, ativo_ate = assinatura_do_utilizador(user_id)
     plano = plano_efetivo(na_tabela, ativo_ate, hoje_em_lisboa())
     # Só há "plano terminado" quando se sabe a data (um pago sem data é um erro nos dados).
@@ -247,13 +337,24 @@ def estado_do_plano(user_id: str) -> EstadoPlano:
         terminou_em=terminou_em,
         pdf_usados=pdfs_no_mes(user_id) if limite_pdf > 0 else 0,
         pdf_limite=limite_pdf,
+        memoria_mensagens=config_ia_do_plano(plano).memoria_mensagens,
+        meses_historico=config_ia_do_plano(plano).meses_historico,
     )
 
 
 def planos_disponiveis() -> list[PlanoDisponivel]:
     """Todos os planos e os seus limites, pela ordem de LIMITES_POR_PLANO (free, essencial, completo)."""
+    from models import PlanoDisponivel
+
     return [
-        PlanoDisponivel(plano=plano, limite_diario=limite, periodo=periodo, limite_pdf=limite_pdf_do_plano(plano))
+        PlanoDisponivel(
+            plano=plano,
+            limite_diario=limite,
+            periodo=periodo,
+            limite_pdf=limite_pdf_do_plano(plano),
+            memoria_mensagens=config_ia_do_plano(plano).memoria_mensagens,
+            meses_historico=config_ia_do_plano(plano).meses_historico,
+        )
         for plano, (limite, periodo) in LIMITES_POR_PLANO.items()
     ]
 

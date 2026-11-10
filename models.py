@@ -1,7 +1,9 @@
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator, model_validator
+
+from limites import MAX_CARACTERES_HISTORICO, MAX_CARACTERES_PERGUNTA_HISTORICO, MAX_CARACTERES_RESPOSTA_HISTORICO
 
 # As únicas categorias permitidas, tanto para a IA como para as correções do utilizador.
 # Com Literal, o Pydantic rejeita qualquer outra palavra.
@@ -115,9 +117,34 @@ class Credenciais(BaseModel):
     password: str
 
 
+# Uma mensagem anterior da conversa, enviada pelo browser (memória só da sessão, não se guarda).
+# Só texto, com teto: vem do cliente e pode ser falsificada, por isso a IA nunca tira números daqui.
+# strip_whitespace tira os espaços das pontas antes de contar: "   " fica vazio e é recusado.
+class MensagemHistorico(BaseModel):
+    papel: Literal["utilizador", "ia"]
+    texto: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_CARACTERES_RESPOSTA_HISTORICO)]
+
+    # Uma pergunta antiga tem o mesmo teto de uma pergunta nova; só as respostas da IA podem ser maiores.
+    @model_validator(mode="after")
+    def tamanho_conforme_o_papel(self) -> "MensagemHistorico":
+        if self.papel == "utilizador" and len(self.texto) > MAX_CARACTERES_PERGUNTA_HISTORICO:
+            raise ValueError(f"cada pergunta do histórico tem no máximo {MAX_CARACTERES_PERGUNTA_HISTORICO} caracteres")
+        return self
+
+
 # Pergunta enviada ao chat. O limite de tamanho evita pedidos enormes (que a IA cobraria).
+# historico é opcional (o frontend antigo não o envia); a API corta-o para a memória do plano.
+# O teto de 20 é só contra pedidos enormes: nenhum plano usa mais de 10 (limites.py).
 class PerguntaChat(BaseModel):
-    pergunta: str = Field(min_length=1, max_length=500)
+    pergunta: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    historico: list[MensagemHistorico] = Field(default_factory=list, max_length=20)
+
+    @field_validator("historico")
+    @classmethod
+    def historico_nao_passa_o_total(cls, historico: list[MensagemHistorico]) -> list[MensagemHistorico]:
+        if sum(len(mensagem.texto) for mensagem in historico) > MAX_CARACTERES_HISTORICO:
+            raise ValueError(f"o histórico tem no máximo {MAX_CARACTERES_HISTORICO} caracteres no total")
+        return historico
 
 
 class RespostaChat(BaseModel):
@@ -277,6 +304,9 @@ class EstadoPlano(BaseModel):
     # Extratos em PDF lidos pela IA neste mês, e quantos o plano permite (0 no Free: não importa PDF).
     pdf_usados: int = 0
     pdf_limite: int = 0
+    # Mensagens anteriores que o chat recebe (0 no Free) e meses que o chat vê (None = sem limite).
+    memoria_mensagens: int = 0
+    meses_historico: int | None = None
 
 
 # Um plano à venda e o seu limite de pedidos à IA (GET /planos, público).
@@ -287,6 +317,22 @@ class PlanoDisponivel(BaseModel):
     periodo: Literal["dia", "mes"]
     # Extratos em PDF por mês (0 no Free, que não importa PDF).
     limite_pdf: int = 0
+    # Mensagens anteriores que o chat recebe e meses que o chat vê (None = sem limite).
+    memoria_mensagens: int = 0
+    meses_historico: int | None = None
+
+
+# Um pagamento que se repete todos os meses (GET /recorrentes, sem IA): assinaturas, ginásio, renda...
+class Recorrente(BaseModel):
+    descricao: str
+    categoria: str | None
+    # Valor do último pagamento, em positivo.
+    valor_mensal: float
+    # Se o preço mudou durante a sequência (ex.: a assinatura subiu), o valor de antes. None se não mudou.
+    valor_anterior: float | None = None
+    # Meses seguidos em que apareceu, até ao último pagamento.
+    meses_seguidos: int
+    ultimo_pagamento: date
 
 
 # Registo público (POST /registo). O EmailStr recusa emails mal escritos antes de chegarem ao Supabase.

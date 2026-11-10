@@ -5,7 +5,10 @@ e a base de dados e a IA são substituídas por imitações. Assim os testes sã
 não gastam créditos e podem correr no GitHub, onde não existe o .env.
 """
 
+import copy
 import os
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
 # Têm de vir antes de importar a API: o database.py lê-as logo ao arrancar.
 # Ao contrário do .env, estas ganham sempre (o load_dotenv não substitui variáveis que já existem).
@@ -17,8 +20,10 @@ import pytest  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+import ia  # noqa: E402
 import limites  # noqa: E402
 import main  # noqa: E402
+import recorrentes  # noqa: E402
 import resumo  # noqa: E402
 from postgrest.exceptions import APIError  # noqa: E402
 from auth import obter_utilizador_atual  # noqa: E402
@@ -131,5 +136,40 @@ def cliente(base_dados, limite, monkeypatch):
     # Por omissão, os resumos ficam na memória (como antes da 016); test_resumos_guardados.py testa a tabela.
     monkeypatch.setattr(resumo, "supabase", SemTabelaResumos())
     resumo.RESUMOS_EM_MEMORIA.clear()
+    recorrentes._CACHE.clear()  # a cache dos pagamentos que se repetem não passa de um teste para outro
     yield TestClient(main.app)
     main.app.dependency_overrides.clear()
+
+
+class ClienteFalso:
+    """Imita anthropic.Anthropic(): guarda os argumentos de cada chamada e devolve as respostas dadas."""
+
+    def __init__(self, respostas=None):
+        self.chamadas: list[dict] = []
+        self.respostas = list(respostas or [])
+        self.messages = self
+
+    def __call__(self):
+        return self
+
+    def create(self, **argumentos):
+        # Cópia: o chat continua a mexer na lista de mensagens depois da chamada.
+        self.chamadas.append(copy.deepcopy(argumentos))
+        return self.respostas.pop(0)
+
+    def parse(self, **argumentos):
+        self.chamadas.append(argumentos)
+        return SimpleNamespace(parsed_output=argumentos["output_format"](resumo="ok", alertas=[]), stop_reason="end_turn")
+
+
+@pytest.fixture
+def cliente_falso(monkeypatch):
+    def _criar(respostas=None):
+        falso = ClienteFalso(respostas)
+        monkeypatch.setattr(ia.anthropic, "Anthropic", falso)
+        monkeypatch.setattr(ia, "_registar_chamada", lambda *args, **opcoes: None)
+        # 9 de novembro de 2026, ao meio-dia em Lisboa: o "hoje" das instruções e do histórico.
+        monkeypatch.setattr(limites, "agora_utc", lambda: datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc))
+        return falso
+
+    return _criar

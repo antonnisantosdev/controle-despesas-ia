@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import AlertasOrcamento from "@/components/AlertasOrcamento";
 import AvisoLimite from "@/components/AvisoLimite";
+import PagamentosRecorrentes from "@/components/PagamentosRecorrentes";
 import {
   apagarToken,
   eLimiteDiario,
@@ -195,6 +196,9 @@ export default function PaginaPlaneamento() {
             )}
           </div>
         )}
+
+        {/* Sem IA (não gasta pedidos): despesas que aparecem todos os meses, como assinaturas. */}
+        <PagamentosRecorrentes />
       </div>
     </main>
   );

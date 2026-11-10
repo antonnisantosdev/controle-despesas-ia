@@ -33,6 +33,7 @@ class ConsultaFalsa:
 
 @pytest.mark.parametrize(
     "total, maximo",
+    # (2500, 500): um Supabase que devolve menos linhas por pedido do que TAMANHO_PAGINA não perde nenhuma.
     [(0, 1000), (999, 1000), (1000, 1000), (2500, 1000), (2500, 500)],
 )
 def test_le_todas_as_linhas_sem_repetir(total, maximo):
@@ -43,3 +44,20 @@ def test_le_todas_as_linhas_sem_repetir(total, maximo):
     ids = [linha["id"] for linha in linhas]
     assert len(ids) == total
     assert len(set(ids)) == total
+
+
+@pytest.mark.parametrize(
+    ("total", "pedidos"),
+    [
+        (0, 1),  # vazia: um pedido
+        (999, 2),  # 999 e depois a página vazia que diz que acabou
+        (1000, 2),  # 1000 e a página vazia
+        (2500, 4),  # 1000 + 1000 + 500 e a página vazia
+    ],
+)
+def test_para_so_na_pagina_vazia(total, pedidos):
+    ConsultaFalsa.pedidos = 0
+
+    ler_todas(lambda: ConsultaFalsa(total, 1000))
+
+    assert ConsultaFalsa.pedidos == pedidos

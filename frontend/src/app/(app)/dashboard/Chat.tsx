@@ -4,9 +4,46 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import AvisoLimite from "@/components/AvisoLimite";
 import AvisoQuota from "@/components/AvisoQuota";
-import { eLimiteDiario, pedirApi, pedirEstadoPlano, SessaoExpirada, type EstadoPlano, type RespostaChat } from "@/lib/api";
+import {
+  eLimiteDiario,
+  pedirApi,
+  pedirEstadoPlano,
+  SessaoExpirada,
+  type EstadoPlano,
+  type MensagemHistorico,
+  type RespostaChat,
+} from "@/lib/api";
 
 type Mensagem = { autor: "tu" | "ia"; texto: string };
+
+// Tetos do histórico que a API aceita (limites.py): cada pergunta, cada resposta e o total.
+// Acima deles a API responde 422, por isso corta-se aqui antes de enviar.
+const MAX_CARACTERES_PERGUNTA = 500;
+const MAX_CARACTERES_RESPOSTA = 2000;
+const MAX_CARACTERES_HISTORICO = 4000;
+
+// As últimas perguntas com resposta, para a IA perceber perguntas como "e no mês anterior?".
+// Quantas mensagens vão depende do plano (memoria_mensagens: 0 no Free). Só ficam no ecrã: não se guardam.
+// Vão só pares inteiros (pergunta e resposta): uma pergunta que falhou (503, 429) fica de fora, e as
+// mensagens de erro nunca entram (não estão na lista de mensagens). A API volta a cortar para o plano.
+function historicoParaEnviar(mensagens: Mensagem[], maximo: number): MensagemHistorico[] {
+  const pares: [string, string][] = [];
+  mensagens.forEach((m, i) => {
+    const seguinte = mensagens[i + 1];
+    if (m.autor === "tu" && seguinte?.autor === "ia") {
+      pares.push([m.texto.trim().slice(0, MAX_CARACTERES_PERGUNTA), seguinte.texto.trim().slice(0, MAX_CARACTERES_RESPOSTA)]);
+    }
+  });
+  let escolhidos = maximo >= 2 ? pares.slice(-Math.floor(maximo / 2)) : [];
+  // Os mais antigos saem primeiro até o total caber no teto.
+  while (escolhidos.length > 0 && escolhidos.reduce((soma, [p, r]) => soma + p.length + r.length, 0) > MAX_CARACTERES_HISTORICO) {
+    escolhidos = escolhidos.slice(1);
+  }
+  return escolhidos.flatMap(([pergunta, resposta]): MensagemHistorico[] => [
+    { papel: "utilizador", texto: pergunta },
+    { papel: "ia", texto: resposta },
+  ]);
+}
 
 const EXEMPLOS = ["Quanto gastei em restaurantes em outubro?", "Em que gastei mais este mês?"];
 
@@ -31,6 +68,8 @@ export default function Chat() {
     const texto = pergunta.trim();
     if (!texto || aPensar) return;
 
+    // O histórico é o que estava no ecrã antes desta pergunta (a pergunta vai à parte).
+    const historico = historicoParaEnviar(mensagens, estado?.memoria_mensagens ?? 0);
     setMensagens((m) => [...m, { autor: "tu", texto }]);
     setPergunta("");
     setAPensar(true);
@@ -38,7 +77,7 @@ export default function Chat() {
     setSemPedidos(false);
 
     try {
-      const resposta = await pedirApi<RespostaChat>("/chat", { pergunta: texto });
+      const resposta = await pedirApi<RespostaChat>("/chat", { pergunta: texto, historico });
       setMensagens((m) => [...m, { autor: "ia", texto: resposta.resposta }]);
     } catch (e) {
       if (e instanceof SessaoExpirada) {

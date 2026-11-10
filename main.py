@@ -29,6 +29,7 @@ from limites import (
     exigir_funcao,
     exigir_limite_pdf,
     hoje_em_lisboa,
+    plano_e_config_ia,
     planos_disponiveis,
     pode_usar_ia,
     registar_pergunta,
@@ -62,6 +63,7 @@ from models import (
     PlanoDisponivel,
     PlanoPoupanca,
     PoupadoAtualizar,
+    Recorrente,
     RespostaChat,
     ResultadoImportacao,
     ResumoMes,
@@ -72,6 +74,7 @@ from models import (
     TransacaoCriar,
     TransacaoImportada,
 )
+from recorrentes import esquecer_recorrentes, recorrentes_do_utilizador
 from resumo import assinatura_dos_dados, guardar_resumo, recolher_dados, resumo_guardado
 from simulador import simular_poupanca
 
@@ -213,6 +216,8 @@ def criar_transacao(nova: NovaMovimentacao, user_id: str = Depends(obter_utiliza
     # O dono vem sempre do token, nunca do corpo do pedido.
     dados = nova.model_dump(mode="json") | {"categoria": categoria, "user_id": user_id}
     resposta = supabase.table("transacoes").insert(dados).execute()
+    # As movimentações mudaram: os pagamentos que se repetem voltam a ser calculados.
+    esquecer_recorrentes(user_id)
     return resposta.data[0]
 
 
@@ -230,6 +235,7 @@ def corrigir_categoria(
     )
     if not resposta.data:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
+    esquecer_recorrentes(user_id)  # a categoria aparece nos pagamentos que se repetem
     return resposta.data[0]
 
 
@@ -277,6 +283,7 @@ def categorizar_pendentes(user_id: str = Depends(obter_utilizador_atual)) -> lis
             .execute()
         )
         atualizadas.append(resposta.data[0])
+    esquecer_recorrentes(user_id)
     return atualizadas
 
 
@@ -421,6 +428,7 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
         .upsert(dados, on_conflict="user_id,hash_importacao", ignore_duplicates=True)
         .execute()
     )
+    esquecer_recorrentes(user_id)
     return ResultadoImportacao(
         importadas=len(resposta.data),
         duplicadas=len(dados) - len(resposta.data),
@@ -449,13 +457,18 @@ def dashboard_mensal(user_id: str = Depends(obter_utilizador_atual)) -> list[Res
 def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -> RespostaChat:
     # Antes de gastar uma chamada à IA: conta a pergunta, ou responde 429 se o limite do plano acabou.
     registar_pergunta(user_id, "chat")
+    # O plano vem do servidor: decide a memória, o histórico das ferramentas, o esforço e os tokens.
+    plano, config = plano_e_config_ia(user_id)
 
-    # Closure: uma função que "lembra" o user_id deste pedido. A IA só lhe passa o nome e os argumentos.
+    # Closure: uma função que "lembra" o user_id e o plano deste pedido. A IA só lhe passa o nome e os argumentos.
     def executar(nome: str, argumentos: dict) -> str:
-        return executar_ferramenta(nome, argumentos, user_id)
+        return executar_ferramenta(nome, argumentos, user_id, plano)
 
     try:
-        resposta = conversar(pedido.pergunta, FERRAMENTAS, executar, user_id=user_id)
+        # O histórico vem do browser: o conversar() corta-o para a memória do plano (0 no Free).
+        resposta = conversar(
+            pedido.pergunta, FERRAMENTAS, executar, user_id=user_id, config=config, historico=pedido.historico
+        )
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="O chat falhou. Tenta mais tarde.")
@@ -482,7 +495,7 @@ def resumo_do_mes(
     if not pode_usar_ia(user_id, "resumo"):
         return ResumoMes(resumo=aviso_resumo_sem_pedidos(user_id), alertas=[])
     try:
-        resumo = resumir_mes(dados, user_id=user_id)
+        resumo = resumir_mes(dados, user_id=user_id, config=plano_e_config_ia(user_id)[1])
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="O resumo automático falhou. Tenta mais tarde.")
@@ -527,10 +540,17 @@ def sugestao_orcamento(
     # Conta para o limite do plano, como as perguntas do chat (cada sugestão é uma chamada à IA).
     registar_pergunta(user_id, "orcamento")
     try:
-        return sugerir_orcamento(historico, user_id=user_id)
+        return sugerir_orcamento(historico, user_id=user_id, config=plano_e_config_ia(user_id)[1])
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="A sugestão automática falhou. Tenta mais tarde.")
+
+
+# Pagamentos que se repetem todos os meses (assinaturas, ginásio...). Só contas, sem IA:
+# não gasta pedidos e é de todos os planos. O Planeamento e o dashboard mostram-nos.
+@app.get("/recorrentes")
+def pagamentos_recorrentes(user_id: str = Depends(obter_utilizador_atual)) -> list[Recorrente]:
+    return recorrentes_do_utilizador(user_id, hoje_em_lisboa())
 
 
 # Os formatos de imagem que a IA aceita, e o tamanho máximo de cada imagem na API (5 MB).
@@ -587,7 +607,9 @@ def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual))
 def criar_compra(nova: NovaCompra, user_id: str = Depends(obter_utilizador_atual)) -> Compra:
     # Guardar um talão cria uma transação: conta para o teto de movimentações da conta.
     exigir_espaco_na_conta(contar_transacoes(user_id), 1)
-    return gravar_compra(user_id, nova)
+    compra = gravar_compra(user_id, nova)
+    esquecer_recorrentes(user_id)
+    return compra
 
 
 # As compras guardadas, com os produtos, para a página Minhas compras.
@@ -649,7 +671,7 @@ def plano_do_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_
 
     registar_pergunta(user_id, "poupanca")
     try:
-        return planear_poupanca(dados, user_id=user_id)
+        return planear_poupanca(dados, user_id=user_id, config=plano_e_config_ia(user_id)[1])
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail="O plano de poupança falhou. Tenta mais tarde.")

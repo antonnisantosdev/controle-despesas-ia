@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import AlertasOrcamento from "@/components/AlertasOrcamento";
+import PagamentosRecorrentes from "@/components/PagamentosRecorrentes";
 import {
   apagarToken,
   lerToken,
@@ -116,6 +117,9 @@ export default function PaginaDashboard() {
 
         {/* Só aparece quando o mês escolhido é o atual e há categorias com 90% ou mais do orçamento gasto. */}
         {mes && <AlertasOrcamento mes={mes} />}
+
+        {/* Cartão pequeno, só quando há pagamentos que se repetem (sem IA). A lista completa está no Planeamento. */}
+        {mes && <PagamentosRecorrentes compacto />}
 
         <div className="grid gap-6 lg:grid-cols-3">
           <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6 lg:col-span-2">

@@ -21,7 +21,7 @@ def ia(monkeypatch):
         chamadas.append("categorizar")
         return ["outros"] * len(transacoes)
 
-    def resumir_mes(dados, user_id=None):
+    def resumir_mes(dados, user_id=None, config=None):
         chamadas.append("resumir")
         return ResumoMes(resumo="Resumo de teste", alertas=[])
 
