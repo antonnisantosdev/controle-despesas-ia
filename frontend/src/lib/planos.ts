@@ -12,15 +12,22 @@ export const ORDEM_PLANOS: IdPlano[] = ["free", "essencial", "completo"];
 export const NOMES_PLANOS: Record<IdPlano, string> = { free: "Free", essencial: "Essencial", completo: "Completo" };
 
 // Pedidos à IA de um plano e o período em que se contam (o Free conta por mês, os pagos por dia),
-// e os extratos PDF por mês (0 no Free, que não importa PDF).
-export type LimitePlano = { limite: number; periodo: Periodo; limitePdf: number };
+// os extratos PDF por mês (0 no Free, que não importa PDF), os meses que o chat vê (null = todo o histórico)
+// e as mensagens anteriores que o chat recebe (0 = cada pergunta à parte).
+export type LimitePlano = {
+  limite: number;
+  periodo: Periodo;
+  limitePdf: number;
+  mesesHistorico: number | null;
+  memoriaMensagens: number;
+};
 
 // Só para quando GET /planos falha ou a API ainda está a acordar. Os números certos vêm sempre da API
-// (LIMITES_POR_PLANO e LIMITES_PDF_POR_PLANO em limites.py); se lá mudarem, mudar também aqui.
+// (LIMITES_POR_PLANO, LIMITES_PDF_POR_PLANO e ConfigIA em limites.py); se lá mudarem, mudar também aqui.
 export const LIMITES_RESERVA: Record<IdPlano, LimitePlano> = {
-  free: { limite: 30, periodo: "mes", limitePdf: 0 },
-  essencial: { limite: 20, periodo: "dia", limitePdf: 15 },
-  completo: { limite: 50, periodo: "dia", limitePdf: 30 },
+  free: { limite: 30, periodo: "mes", limitePdf: 0, mesesHistorico: 3, memoriaMensagens: 0 },
+  essencial: { limite: 20, periodo: "dia", limitePdf: 15, mesesHistorico: 12, memoriaMensagens: 4 },
+  completo: { limite: 50, periodo: "dia", limitePdf: 30, mesesHistorico: null, memoriaMensagens: 10 },
 };
 
 // "30 pedidos à IA por mês" / "20 pedidos à IA por dia".
@@ -28,10 +35,32 @@ export function textoDosPedidos({ limite, periodo }: LimitePlano): string {
   return preencher(periodo === "mes" ? TEXTOS_PRECOS.pedidosPorMes : TEXTOS_PRECOS.pedidosPorDia, { limite });
 }
 
-// Os pontos de um cartão de plano: os pedidos à IA, o limite de PDF (só nos pagos) e os pontos fixos do cartão.
+// "O chat vê o mês atual e os 2 anteriores" / "O chat vê todo o teu histórico".
+export function textoDoHistorico(mesesHistorico: number | null): string {
+  if (mesesHistorico === null) return TEXTOS_PRECOS.chatTodoHistorico;
+  return preencher(TEXTOS_PRECOS.chatMeses, { anteriores: Math.max(mesesHistorico - 1, 0) });
+}
+
+// "O chat responde a cada pergunta à parte" / "O chat segue a conversa: lembra-se das últimas 4 mensagens".
+export function textoDaMemoria(memoriaMensagens: number): string {
+  if (memoriaMensagens <= 0) return TEXTOS_PRECOS.chatSemMemoria;
+  return preencher(TEXTOS_PRECOS.chatMemoria, { n: memoriaMensagens });
+}
+
+// Os pontos de um cartão de plano: os pedidos à IA, a importação (PDF nos pagos, CSV no Free), o que o chat
+// vê e guarda (e, no Completo, a análise mais cuidada) e os pontos fixos do cartão.
 export function pontosDoCartao(id: IdPlano, limite: LimitePlano): string[] {
-  const pdf = limite.limitePdf > 0 ? [preencher(TEXTOS_PRECOS.pdfPorMes, { limitePdf: limite.limitePdf })] : [];
-  return [textoDosPedidos(limite), ...pdf, ...TEXTOS_CARTOES[id].pontos];
+  const importacao =
+    limite.limitePdf > 0 ? preencher(TEXTOS_PRECOS.pdfPorMes, { limitePdf: limite.limitePdf }) : TEXTOS_PRECOS.importarCsv;
+  const analise = id === "completo" ? [TEXTOS_PRECOS.analiseCuidada] : [];
+  return [
+    textoDosPedidos(limite),
+    importacao,
+    textoDoHistorico(limite.mesesHistorico),
+    textoDaMemoria(limite.memoriaMensagens),
+    ...analise,
+    ...TEXTOS_CARTOES[id].pontos,
+  ];
 }
 
 // --- Aviso aos 80% dos pedidos à IA ---
@@ -173,17 +202,37 @@ export function deveAvisarRenovar(iso: string | null, hoje: Date = new Date()): 
 
 // Junta os limites que vieram de GET /planos aos de reserva (um plano em falta fica com o de reserva).
 // Uma API antiga, sem periodo, conta por dia (era assim antes de o Free passar a contar por mês);
-// sem limite_pdf, fica o de reserva.
+// sem limite_pdf, meses_historico ou memoria_mensagens, fica o de reserva (meses_historico null = todo o histórico).
 export function juntarLimites(
-  lista: { plano: string; limite_diario: number; periodo?: Periodo; limite_pdf?: number }[] | null,
+  lista:
+    | {
+        plano: string;
+        limite_diario: number;
+        periodo?: Periodo;
+        limite_pdf?: number;
+        meses_historico?: number | null;
+        memoria_mensagens?: number;
+      }[]
+    | null,
 ): Record<IdPlano, LimitePlano> {
   const limites = { ...LIMITES_RESERVA };
-  for (const { plano, limite_diario, periodo, limite_pdf } of lista ?? []) {
+  for (const { plano, limite_diario, periodo, limite_pdf, meses_historico, memoria_mensagens } of lista ?? []) {
     if (eIdPlano(plano)) {
+      const reserva = LIMITES_RESERVA[plano];
       limites[plano] = {
         limite: limite_diario,
         periodo: periodo === "mes" ? "mes" : "dia",
-        limitePdf: typeof limite_pdf === "number" ? limite_pdf : LIMITES_RESERVA[plano].limitePdf,
+        limitePdf: typeof limite_pdf === "number" ? limite_pdf : reserva.limitePdf,
+        // Só null (todo o histórico) ou um inteiro >= 1; outro valor fica com o de reserva.
+        mesesHistorico:
+          meses_historico === null || (Number.isInteger(meses_historico) && (meses_historico as number) >= 1)
+            ? (meses_historico as number | null)
+            : reserva.mesesHistorico,
+        // A API corta a memória por pares (pergunta + resposta), por isso o texto mostra um número par.
+        memoriaMensagens:
+          Number.isInteger(memoria_mensagens) && (memoria_mensagens as number) >= 0
+            ? (memoria_mensagens as number) - ((memoria_mensagens as number) % 2)
+            : reserva.memoriaMensagens,
       };
     }
   }

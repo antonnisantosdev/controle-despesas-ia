@@ -16,6 +16,16 @@ export const TEXTOS_PRECOS = {
   pedidosPorMes: "{limite} pedidos à IA por mês", // TEXTO NOVO
   // Nos cartões pagos, no lugar de "Importar extratos em PDF". O número vem de GET /planos (limite_pdf).
   pdfPorMes: "Até {limitePdf} extratos PDF por mês",
+  // No cartão do Free, no lugar do limite de PDF (o Free não importa PDF).
+  importarCsv: "Importar extratos em CSV", // TEXTO NOVO
+  // O que o chat vê e guarda, a seguir à importação. Os números vêm de GET /planos (meses_historico e
+  // memoria_mensagens, ConfigIA em limites.py). {anteriores} = meses_historico - 1.
+  chatMeses: "O chat vê o mês atual e os {anteriores} anteriores",
+  chatTodoHistorico: "O chat vê todo o teu histórico", // meses_historico null
+  chatSemMemoria: "O chat responde a cada pergunta à parte", // memoria_mensagens 0
+  chatMemoria: "O chat segue a conversa: lembra-se das últimas {n} mensagens",
+  // Só no cartão do Completo (effort "medium" em limites.py; GET /planos não o envia).
+  analiseCuidada: "Análise mais cuidada da IA no chat, no resumo do mês e nas sugestões",
   funcionalidadesTitulo: "Incluído em todos os planos",
   funcionalidades: [
     "Categorias feitas pela IA nos extratos importados", // sem repetir o "Importar extratos em CSV" do cartão Free
@@ -24,6 +34,7 @@ export const TEXTOS_PRECOS = {
     "Resumo do mês com alertas",
     "Planeamento: orçamento por categoria, com sugestão da IA",
     "Minha reserva: objetivos de poupança e simulador de juros compostos",
+    "Pagamentos que se repetem: vê as subscrições e os débitos que te saem todos os meses",
     "Instala no telemóvel como uma app",
   ],
   notaPagamento:
@@ -55,16 +66,29 @@ export const TEXTOS_PRECOS = {
       resposta:
         "Cada conta só vê os seus próprios dados. Para categorizar, ler extratos em PDF e talões e responder no chat, os dados necessários são enviados ao serviço de IA que usamos. A Control Prices não é um banco nem dá conselhos de investimento: o simulador é só uma simulação.",
     },
+    // Os números destas duas respostas vêm de ConfigIA em limites.py (memoria_mensagens e meses_historico):
+    // se lá mudarem, mudar também aqui.
+    {
+      pergunta: "O chat lembra-se da conversa?",
+      resposta:
+        'No Free, não: cada pergunta é respondida à parte. No Essencial, o chat tem em conta as últimas 4 mensagens (as tuas e as respostas dele) e no Completo as últimas 10. Assim percebe perguntas como "e no mês anterior?". Esta memória só dura enquanto a página está aberta: se a fechares ou recarregares, a conversa começa do zero. Os números vêm sempre dos teus dados, nunca da conversa.',
+    },
+    {
+      pergunta: "Até que mês o chat consegue ver?",
+      resposta:
+        "No Free, o chat vê o mês atual e os 2 anteriores. No Essencial, o mês atual e os 11 anteriores. No Completo, todo o histórico que tens na app. Este limite é só para o chat: as tuas movimentações ficam todas guardadas, seja qual for o plano.",
+    },
   ],
 };
 
 // Nome, frase, pontos e botão de cada cartão. O primeiro ponto é sempre o limite (textoDosPedidos, planos.ts),
-// com o número vindo de GET /planos; nos pagos, o segundo é o limite de PDF (pdfPorMes). Aqui ficam só os outros.
+// com o número vindo de GET /planos; o segundo é a importação (pdfPorMes nos pagos, importarCsv no Free);
+// depois vêm os pontos do chat (chatMeses e os seguintes). Aqui ficam só os outros.
 export const TEXTOS_CARTOES = {
   free: {
     nome: "Free",
     frase: "Para experimentar e organizar o dia a dia.",
-    pontos: ["Importar extratos em CSV", "Sem data de fim", "Ativo logo que confirmes o email"], // TEXTO NOVO (1.º ponto)
+    pontos: ["Sem data de fim", "Ativo logo que confirmes o email"],
     botao: "Criar conta grátis",
   },
   essencial: {
