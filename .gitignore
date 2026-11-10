@@ -14,7 +14,8 @@ __pycache__/
 .claude/settings.local.json
 .claude/launch.json
 CLAUDE.md
-# Os agentes em .claude/agents/ vão para o GitHub de propósito (são do projeto).
+# Os agentes do Claude Code são privados: ficam só neste computador.
+.claude/agents/
 
 # Lixo do sistema operativo e do editor
 .DS_Store
