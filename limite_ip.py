@@ -181,6 +181,12 @@ GOOGLE_TROCA_POR_48 = 30
 GOOGLE_TROCA_JANELA_SEGUNDOS = 15 * MINUTO
 
 
+# Desligados até se saber qual das entradas do X-Forwarded-For é o visitante no Render (o log de
+# 2026-11-10 mostrou 3 entradas e a mais à direita não é o visitante: contar por ela juntava toda a gente
+# no mesmo contador e podia bloquear o login a todos). Ligar depois de corrigir ip_do_pedido.
+LIMITES_PUBLICOS_LIGADOS = False
+
+
 class LimiteDaRota:
     """Os dois limites de uma rota: por IP (/64 no IPv6) e por /48 (só IPv6). Cada rota tem os seus contadores."""
 
@@ -196,6 +202,8 @@ class LimiteDaRota:
         Primeiro verifica os dois limites e só depois conta: um pedido recusado pelo limite do IP não sobe
         o contador do /48, para um só telemóvel não bloquear a rede inteira dos vizinhos.
         """
+        if not LIMITES_PUBLICOS_LIGADOS:
+            return
         ip = ip_do_pedido(request)
         self.por_ip.verificar(ip)
         self.por_48.verificar(ip)

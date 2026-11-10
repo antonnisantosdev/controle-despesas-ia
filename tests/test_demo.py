@@ -955,24 +955,31 @@ def test_teto_cheio_responde_com_mensagem_generica(monkeypatch):
     assert erro.value.detail == demo.MENSAGEM_DEMO_CHEIA
 
 
-def test_forma_do_x_forwarded_for_fica_no_log_uma_vez_sem_ips(base, api, capsys, monkeypatch):
-    monkeypatch.setattr(demo, "_FORMA_DO_IP_REGISTADA", threading.Event())
+def test_forma_do_x_forwarded_for_fica_no_log_sem_ips(base, api, capsys, monkeypatch):
+    monkeypatch.setattr(demo, "_VEZES_FORMA_DO_IP", [0])
 
-    api.post("/demo", headers={"X-Forwarded-For": "198.51.100.23, 203.0.113.77"})
-    api.post("/demo", headers={"X-Forwarded-For": "198.51.100.24"})
+    api.post(
+        "/demo",
+        headers={"X-Forwarded-For": "198.51.100.23, 203.0.113.77, 10.0.0.5", "CF-Connecting-IP": "198.51.100.23"},
+    )
 
     logs = [linha for linha in capsys.readouterr().out.splitlines() if "X-Forwarded-For" in linha]
-    assert logs == ["Demo: X-Forwarded-For com 2 entrada(s); a mais à direita não é igual ao IP da ligação."]
-    assert "198.51.100" not in logs[0] and "203.0.113" not in logs[0]
+    assert logs == [
+        "Demo: X-Forwarded-For com 3 entrada(s) [privada, privada, privada]; IP da ligação: presente, fora da lista; "
+        "CF-Connecting-IP: entrada 1; True-Client-IP: ausente; X-Real-IP: ausente."
+    ]
 
 
-def test_forma_do_x_forwarded_for_igual_ao_ip_da_ligacao(base, api, capsys, monkeypatch):
-    monkeypatch.setattr(demo, "_FORMA_DO_IP_REGISTADA", threading.Event())
+def test_forma_do_x_forwarded_for_so_nas_primeiras_vezes(base, api, capsys, monkeypatch):
+    monkeypatch.setattr(demo, "_VEZES_FORMA_DO_IP", [0])
 
-    # O TestClient liga-se como "testclient".
-    api.post("/demo", headers={"X-Forwarded-For": "198.51.100.23, testclient"})
+    for i in range(5):
+        api.post("/demo", headers={"X-Forwarded-For": f"8.8.8.{i}, testclient"})
 
-    assert "a mais à direita é igual ao IP da ligação" in capsys.readouterr().out
+    logs = [linha for linha in capsys.readouterr().out.splitlines() if "X-Forwarded-For" in linha]
+    assert len(logs) == 3
+    assert "[pública, inválida]" in logs[0] and "IP da ligação: entrada 2" in logs[0]
+    assert all("8.8.8" not in linha for linha in logs)
 
 
 # --- 9. O chat da demo conta nos pedidos à IA ---

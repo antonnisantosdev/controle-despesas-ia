@@ -77,6 +77,12 @@ ROTAS = [
 POR_NOME = {rota.nome: rota for rota in ROTAS}
 
 
+@pytest.fixture(autouse=True)
+def limites_ligados(monkeypatch):
+    """Os testes deste ficheiro verificam os limites com eles ligados (em produção podem estar desligados)."""
+    monkeypatch.setattr(limite_ip, "LIMITES_PUBLICOS_LIGADOS", True)
+
+
 @pytest.fixture
 def supabase_falso(monkeypatch):
     """Troca as funções do auth.py usadas pelo main.py: contam as chamadas e nunca saem para a rede."""
@@ -270,3 +276,10 @@ def test_registo_com_erro_de_rede_da_503_sem_detalhes(api, relogio, monkeypatch,
 
     assert resposta.status_code == 503
     assert "pessoa.inventada@exemplo.pt" not in capsys.readouterr().out
+
+
+def test_limites_desligados_deixam_passar(api, supabase_falso, relogio, monkeypatch):
+    monkeypatch.setattr(limite_ip, "LIMITES_PUBLICOS_LIGADOS", False)
+    login = POR_NOME["login"]
+    for _ in range(login.por_ip + 5):
+        assert pedir(api, login, "203.0.113.60").status_code == 200

@@ -10,6 +10,7 @@
 A configuração vem do .env: DEMO_TOKEN_SEGREDO, DEMO_USER_ID e DEMO_EMAIL. Sem ela, a demo fica desligada.
 """
 
+import ipaddress
 import os
 import re
 import threading
@@ -192,24 +193,46 @@ def exigir_permissao_demo(request: Request) -> None:
 # --- Limites por IP (na memória do servidor; as peças genéricas estão em limite_ip.py) ---
 
 
-# Se já se registou nos logs a forma do X-Forwarded-For (uma vez por arranque do servidor).
-_FORMA_DO_IP_REGISTADA = threading.Event()
+# Quantas vezes já se registou nos logs a forma do X-Forwarded-For neste arranque do servidor.
+_VEZES_FORMA_DO_IP = [0]
+_MAX_VEZES_FORMA_DO_IP = 3
+_CADEADO_FORMA_DO_IP = threading.Lock()
+
+
+def _tipo_de_entrada(entrada: str) -> str:
+    try:
+        return "pública" if ipaddress.ip_address(entrada).is_global else "privada"
+    except ValueError:
+        return "inválida"
+
+
+def _posicao(valor: str | None, entradas: list[str]) -> str:
+    """Em que entrada do X-Forwarded-For está este valor (1 = a mais à esquerda), sem dizer o valor."""
+    if not valor:
+        return "ausente"
+    valor = valor.strip()
+    return f"entrada {entradas.index(valor) + 1}" if valor in entradas else "presente, fora da lista"
 
 
 def registar_forma_do_ip(request: Request) -> None:
-    """Uma vez por arranque, deixa nos logs quantas entradas traz o X-Forwarded-For e se a mais à direita
-    é igual ao IP da ligação. Sem IPs no log. Serve para confirmar, depois do deploy, que o Render
-    põe o IP do visitante na entrada mais à direita (ver ip_do_pedido).
+    """Nas primeiras vezes de cada arranque, deixa nos logs a forma do X-Forwarded-For, sem IPs:
+    quantas entradas, se cada uma é pública ou privada, e em que entrada estão o IP da ligação e os
+    cabeçalhos de IP que um proxy à frente pode pôr (CF-Connecting-IP, True-Client-IP, X-Real-IP).
+    Serve para saber qual das entradas é o visitante (ver ip_do_pedido).
     """
-    if _FORMA_DO_IP_REGISTADA.is_set():
-        return
-    _FORMA_DO_IP_REGISTADA.set()
+    with _CADEADO_FORMA_DO_IP:
+        if _VEZES_FORMA_DO_IP[0] >= _MAX_VEZES_FORMA_DO_IP:
+            return
+        _VEZES_FORMA_DO_IP[0] += 1
     entradas = _entradas_encaminhadas(request)
+    tipos = ", ".join(_tipo_de_entrada(entrada) for entrada in entradas)
     ligacao = request.client.host if request.client else None
-    igual = bool(entradas) and entradas[-1] == ligacao
     print(
-        f"Demo: X-Forwarded-For com {len(entradas)} entrada(s); "
-        f"a mais à direita {'é' if igual else 'não é'} igual ao IP da ligação."
+        f"Demo: X-Forwarded-For com {len(entradas)} entrada(s) [{tipos}]; "
+        f"IP da ligação: {_posicao(ligacao, entradas)}; "
+        f"CF-Connecting-IP: {_posicao(request.headers.get('cf-connecting-ip'), entradas)}; "
+        f"True-Client-IP: {_posicao(request.headers.get('true-client-ip'), entradas)}; "
+        f"X-Real-IP: {_posicao(request.headers.get('x-real-ip'), entradas)}."
     )
 
 
