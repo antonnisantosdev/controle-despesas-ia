@@ -19,6 +19,12 @@ import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 type Mensagem = { autor: "tu" | "ia"; texto: string };
 
+// A IA às vezes marca palavras com **negrito** (markdown). Mostra-se como <strong>, sem HTML vindo da resposta:
+// o texto é partido nos "**" e cada parte continua a ser texto simples, que o React escapa.
+function comNegrito(texto: string) {
+  return texto.split("**").map((parte, i) => (i % 2 === 1 ? <strong key={i}>{parte}</strong> : parte));
+}
+
 // Tetos do histórico que a API aceita (limites.py): cada pergunta, cada resposta e o total.
 // Acima deles a API responde 422, por isso corta-se aqui antes de enviar.
 const MAX_CARACTERES_PERGUNTA = 500;
@@ -128,7 +134,7 @@ export default function Chat() {
                   : "max-w-[85%] whitespace-pre-line rounded-lg bg-fundo px-3 py-2 text-sm text-texto"
               }
             >
-              {m.texto}
+              {m.autor === "ia" ? comNegrito(m.texto) : m.texto}
             </p>
           </div>
         ))}

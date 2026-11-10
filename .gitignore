@@ -27,3 +27,6 @@ dados_exemplo/*.jpg
 dados_exemplo/*.jpeg
 dados_exemplo/*.heic
 dados_exemplo/WhatsApp*
+
+# Ficheiros temporários do playwright-cli
+.playwright-cli/
