@@ -99,6 +99,11 @@ class Limite:
         if self.pdfs >= self.maximo_pdf:
             raise HTTPException(status_code=429, detail=limites.mensagem_do_limite_pdf(self.maximo_pdf))
 
+    def registar_pdf(self, user_id):
+        """Como limites.registar_pdf: primeiro o limite de PDF, depois o pedido "importar_pdf"."""
+        self.exigir_pdf(user_id)
+        self.registar(user_id, "importar_pdf")
+
 
 @pytest.fixture
 def limite(monkeypatch):
@@ -106,7 +111,7 @@ def limite(monkeypatch):
     # O main e o limites.py usam a mesma função: troca-se nos dois sítios.
     monkeypatch.setattr(main, "registar_pergunta", limite.registar)
     monkeypatch.setattr(limites, "registar_pergunta", limite.registar)
-    monkeypatch.setattr(main, "exigir_limite_pdf", limite.exigir_pdf)
+    monkeypatch.setattr(main, "registar_pdf", limite.registar_pdf)
     # O plano lê-se sempre pelo limites.py (exigir_funcao, aviso do resumo): troca-se lá.
     monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: limite.plano)
     return limite

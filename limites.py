@@ -441,6 +441,59 @@ def registar_pergunta(user_id: str, funcao: str) -> None:
         raise HTTPException(status_code=429, detail=mensagem_do_limite(limite, periodo))
 
 
+def _chamar_registar_pdf_ia(parametros: dict) -> str | None:
+    """Chama a função registar_pdf_ia (sql/017). None se ainda não existir no Supabase."""
+    try:
+        resposta = supabase.rpc("registar_pdf_ia", parametros).execute()
+    except APIError as erro:
+        if erro.code in FUNCAO_NAO_EXISTE:
+            return None
+        raise
+    # A função devolve texto ('ok', 'pdf' ou 'pedidos'): o PostgREST responde só essa palavra.
+    return resposta.data if isinstance(resposta.data, str) else ""
+
+
+def registar_pdf(user_id: str) -> None:
+    """Conta a leitura de um PDF (um pedido à IA "importar_pdf") ou responde 429 com o limite que falhou.
+
+    Chama-se depois de o PDF ser aceite (plano, tamanho, páginas, espaço na conta) e logo antes
+    de chamar a IA: um PDF recusado nunca conta.
+    Com a sql/017, o limite de PDF do mês e o de pedidos à IA veem-se e o pedido regista-se de uma só vez,
+    na base de dados (sem corridas entre PDF enviados ao mesmo tempo). Sem a 017, usa o caminho antigo
+    em dois passos (exigir_limite_pdf e registar_pergunta) e deixa um aviso nos logs.
+    """
+    plano = plano_do_utilizador(user_id)
+    limite, periodo = limite_do_plano(plano), periodo_do_plano(plano)
+    limite_pdf = limite_pdf_do_plano(plano)
+    agora = agora_utc()
+
+    resultado = _chamar_registar_pdf_ia(
+        {
+            "p_user_id": user_id,
+            "p_desde_pedidos": inicio_do_periodo(periodo, agora).isoformat(),
+            "p_limite_pedidos": limite,
+            "p_desde_pdf": inicio_do_periodo("mes", agora).isoformat(),
+            "p_limite_pdf": limite_pdf,
+        }
+    )
+    if resultado is None:
+        # Aparece nos logs do Render: se continuar a aparecer depois de correr a 017, algo está mal.
+        print("AVISO: função registar_pdf_ia não encontrada (sql/017); a usar o limite de PDF em dois passos.")
+        exigir_limite_pdf(user_id)
+        registar_pergunta(user_id, "importar_pdf")
+        return
+
+    if resultado == "ok":
+        return
+    if resultado == "pdf":
+        raise HTTPException(status_code=429, detail=mensagem_do_limite_pdf(limite_pdf))
+    if resultado == "pedidos":
+        raise HTTPException(status_code=429, detail=mensagem_do_limite(limite, periodo))
+    # Resposta inesperada: falha fechado (não se sabe se o pedido contou, por isso não se chama a IA).
+    print(f"AVISO: registar_pdf_ia devolveu uma resposta inesperada: {resultado!r}")
+    raise HTTPException(status_code=503, detail="Não foi possível importar o PDF agora. Tenta outra vez daqui a pouco.")
+
+
 def pode_usar_ia(user_id: str, funcao: str) -> bool:
     """Como registar_pergunta(), mas devolve False em vez de responder 429.
 

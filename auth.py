@@ -2,7 +2,7 @@ from urllib.parse import urlencode
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from supabase import AuthApiError, create_client
+from supabase import AuthApiError, AuthError, ClientOptions, create_client
 
 from database import SUPABASE_KEY, SUPABASE_URL, supabase
 # Lê o cabeçalho "Authorization: Bearer <token>" de cada pedido.
@@ -10,10 +10,21 @@ from database import SUPABASE_KEY, SUPABASE_URL, supabase
 esquema_bearer = HTTPBearer()
 
 
+def cliente_sem_sessao():
+    """Um cliente do Supabase só para um login: não guarda a sessão nem a renova sozinho.
+
+    Sem isto, cada login deixava no servidor a sessão do utilizador em memória e um temporizador
+    para renovar o token (com o refresh_token), que nunca usamos.
+    """
+    return create_client(
+        SUPABASE_URL, SUPABASE_KEY, options=ClientOptions(auto_refresh_token=False, persist_session=False)
+    )
+
+
 def fazer_login(email: str, password: str) -> str:
     """Faz login no Supabase Auth e devolve o token de acesso do utilizador."""
     # Cliente próprio para o login: a sessão do utilizador não "contamina" o cliente partilhado.
-    cliente = create_client(SUPABASE_URL, SUPABASE_KEY)
+    cliente = cliente_sem_sessao()
     resposta = cliente.auth.sign_in_with_password({"email": email, "password": password})
     return resposta.session.access_token
 
@@ -38,13 +49,44 @@ def destino_google_valido(destino: str, origens: list[str]) -> bool:
     return any(destino == origem.strip().rstrip("/") + CAMINHO_VOLTA_GOOGLE for origem in origens if origem.strip())
 
 
-def url_login_google(destino: str) -> str:
-    """O endereço do Supabase que abre o login com o Google e, no fim, volta ao destino.
+# PKCE (RFC 7636): o browser inventa um segredo (code_verifier) e manda só o seu SHA-256 em base64url
+# (code_challenge, sempre 43 caracteres). O Supabase volta com ?code=, que só vale junto com o segredo:
+# um código roubado ou um link de um atacante não chega para entrar.
+FORMATO_CODE_CHALLENGE = r"^[A-Za-z0-9_-]{43}$"
+# O segredo tem 43 a 128 caracteres "não reservados" (letras, números e - . _ ~), como manda o RFC 7636.
+FORMATO_CODE_VERIFIER = r"^[A-Za-z0-9._~-]{43,128}$"
+# O código que o Supabase devolve (hoje um UUID). Aceita-se um pouco mais, mas só caracteres seguros e com teto.
+FORMATO_CODIGO_GOOGLE = r"^[A-Za-z0-9._~-]{1,256}$"
 
-    O Supabase devolve o token no fragmento do URL (#access_token=...), que só o browser vê.
+
+def url_login_google(destino: str, code_challenge: str) -> str:
+    """O endereço do Supabase que abre o login com o Google e, no fim, volta ao destino com ?code=.
+
+    O código troca-se pelo token na API (trocar_codigo_google), com o segredo que ficou no browser.
+    O método "s256" é o nome que o Supabase Auth usa (o mesmo que o SDK supabase_auth envia).
     """
-    parametros = urlencode({"provider": "google", "redirect_to": destino})
+    parametros = urlencode(
+        {
+            "provider": "google",
+            "redirect_to": destino,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "s256",
+        }
+    )
     return f"{SUPABASE_URL.rstrip('/')}/auth/v1/authorize?{parametros}"
+
+
+def trocar_codigo_google(codigo: str, code_verifier: str) -> str:
+    """Troca o ?code= do regresso do Google pelo token de acesso do utilizador (como o fazer_login).
+
+    O Supabase só aceita o código com o segredo cujo SHA-256 recebeu no início (POST /auth/v1/token?grant_type=pkce).
+    Levanta AuthError se o código ou o segredo não servirem. O refresh_token fica de fora, como no login com email.
+    """
+    cliente = cliente_sem_sessao()
+    resposta = cliente.auth.exchange_code_for_session({"auth_code": codigo, "code_verifier": code_verifier})
+    if not resposta.session or not resposta.session.access_token:
+        raise AuthError("Sem sessão na troca do código", None)
+    return resposta.session.access_token
 
 
 def verificar_assinatura(user_id: str) -> None:

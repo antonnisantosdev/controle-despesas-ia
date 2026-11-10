@@ -1,10 +1,22 @@
 import os
+import re
 
-from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, UploadFile
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from supabase import AuthApiError
+from supabase import AuthApiError, AuthError
 
-from auth import destino_google_valido, fazer_login, fazer_registo, obter_utilizador_atual, url_login_google
+from auth import (
+    FORMATO_CODE_CHALLENGE,
+    destino_google_valido,
+    fazer_login,
+    fazer_registo,
+    obter_utilizador_atual,
+    trocar_codigo_google,
+    url_login_google,
+)
 from compras import gravar_compra, listar_compras
 from dashboard import limites_do_mes, resumo_mensal
 from consultas import gastos_do_mes
@@ -27,11 +39,11 @@ from limites import (
     estado_do_plano,
     exigir_espaco_na_conta,
     exigir_funcao,
-    exigir_limite_pdf,
     hoje_em_lisboa,
     plano_e_config_ia,
     planos_disponiveis,
     pode_usar_ia,
+    registar_pdf,
     registar_pergunta,
 )
 from objetivos import (
@@ -72,6 +84,7 @@ from models import (
     Talao,
     Transacao,
     TransacaoCriar,
+    TrocaGoogle,
     TransacaoImportada,
 )
 from recorrentes import esquecer_recorrentes, recorrentes_do_utilizador
@@ -121,12 +134,50 @@ def login(credenciais: Credenciais):
 
 # Login com o Google (pública): devolve o endereço do Supabase para onde o browser deve ir.
 # O destino tem de ser a página /login/google de um dos endereços do FRONTEND_URL,
-# senão qualquer site podia usar este link para receber o token de quem faz login.
+# senão qualquer site podia usar este link para receber o código de quem faz login.
+# code_challenge: o SHA-256 do segredo PKCE que ficou no browser (ver auth.py); sem ele não há login.
 @app.get("/login/google")
-def login_google(destino: str | None = None):
+def login_google(destino: str | None = None, code_challenge: str | None = None):
     if not destino or not destino_google_valido(destino, ORIGENS_FRONTEND):
         raise HTTPException(status_code=400, detail="Destino do login inválido")
-    return {"url": url_login_google(destino)}
+    if not code_challenge or not re.fullmatch(FORMATO_CODE_CHALLENGE, code_challenge):
+        raise HTTPException(status_code=400, detail="Pedido de login inválido")
+    return {"url": url_login_google(destino, code_challenge)}
+
+
+# Regresso do Google (pública): troca o ?code= pelo token, com o segredo PKCE guardado no browser.
+# Responde como o login com email. Erros sempre genéricos: os detalhes do Supabase ficam só nos logs.
+MENSAGEM_ERRO_GOOGLE = "Não foi possível entrar com o Google. Tenta outra vez."
+CAMINHO_TROCA_GOOGLE = "/login/google/troca"
+
+
+# Na troca do código, um corpo inválido responde 422 com a mensagem genérica: o 422 normal do FastAPI
+# repetia o que foi enviado (o código e o segredo) e mostrava os formatos aceites.
+# As outras rotas continuam com o 422 normal.
+@app.exception_handler(RequestValidationError)
+async def erro_de_validacao(request: Request, erro: RequestValidationError):
+    if request.url.path == CAMINHO_TROCA_GOOGLE:
+        return JSONResponse(status_code=422, content={"detail": MENSAGEM_ERRO_GOOGLE})
+    return await request_validation_exception_handler(request, erro)
+
+
+@app.post(CAMINHO_TROCA_GOOGLE)
+def login_google_troca(troca: TrocaGoogle):
+    try:
+        token = trocar_codigo_google(troca.code, troca.code_verifier)
+    except AuthApiError as erro:
+        # Código já usado, expirado, inventado ou segredo errado: o Supabase recusa com 4xx.
+        print(f"AVISO: troca do código do Google recusada pelo Supabase ({erro.code or erro.status}).")
+        raise HTTPException(status_code=401, detail=MENSAGEM_ERRO_GOOGLE)
+    except AuthError as erro:
+        # Supabase em baixo ou resposta sem sessão: não é culpa do utilizador.
+        print(f"AVISO: troca do código do Google falhou ({type(erro).__name__}).")
+        raise HTTPException(status_code=503, detail=MENSAGEM_ERRO_GOOGLE)
+    except Exception as erro:
+        # Qualquer outra falha (ex.: erro de rede do httpx): 503 genérico, nunca um 500 com detalhes.
+        print(f"AVISO: troca do código do Google falhou ({type(erro).__name__}).")
+        raise HTTPException(status_code=503, detail=MENSAGEM_ERRO_GOOGLE)
+    return {"access_token": token, "token_type": "bearer"}
 
 
 # Registo público: qualquer pessoa cria conta e entra no plano Free (gatilho no Supabase).
@@ -360,12 +411,10 @@ def ler_pdf_enviado(pdf: bytes, user_id: str) -> tuple[list[TransacaoImportada],
     atuais = contar_transacoes(user_id)
     exigir_espaco_na_conta(atuais, 1)
 
-    # O PDF foi aceite: só agora se vê o limite de PDF do mês. Um PDF recusado acima não conta.
-    exigir_limite_pdf(user_id)
-
+    # O PDF foi aceite: só agora se veem o limite de PDF do mês e o de pedidos. Um PDF recusado acima não conta.
     # Ler um PDF é a chamada mais cara da importação: gasta um pedido à IA, registado como "importar_pdf",
-    # e é essa linha que conta para o limite de PDF do mês.
-    registar_pergunta(user_id, "importar_pdf")
+    # e é essa linha que conta para o limite de PDF do mês (as duas coisas de uma vez, ver limites.registar_pdf).
+    registar_pdf(user_id)
     try:
         extrato = ler_extrato_pdf(pdf, user_id=user_id)
     except ErroIA as erro:

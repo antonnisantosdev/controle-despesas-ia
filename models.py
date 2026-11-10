@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator, model_validator
 
+from auth import FORMATO_CODE_VERIFIER, FORMATO_CODIGO_GOOGLE
 from limites import MAX_CARACTERES_HISTORICO, MAX_CARACTERES_PERGUNTA_HISTORICO, MAX_CARACTERES_RESPOSTA_HISTORICO
 
 # As únicas categorias permitidas, tanto para a IA como para as correções do utilizador.
@@ -115,6 +116,13 @@ class CategoriaAtualizar(BaseModel):
 class Credenciais(BaseModel):
     email: str
     password: str
+
+
+# O que a página /login/google manda no regresso do Google (PKCE): o código que o Supabase pôs no endereço
+# e o segredo que ficou guardado no browser. Formato e tamanho validados antes de falar com o Supabase.
+class TrocaGoogle(BaseModel):
+    code: Annotated[str, StringConstraints(pattern=FORMATO_CODIGO_GOOGLE)]
+    code_verifier: Annotated[str, StringConstraints(pattern=FORMATO_CODE_VERIFIER)]
 
 
 # Uma mensagem anterior da conversa, enviada pelo browser (memória só da sessão, não se guarda).

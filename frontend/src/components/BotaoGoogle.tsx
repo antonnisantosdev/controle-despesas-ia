@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { API_URL, fetchComTentativas } from "@/lib/api";
-import { marcarInicioGoogle } from "@/lib/marcaGoogle";
+import { calcularChallenge, gerarVerifier, guardarVerifier } from "@/lib/pkceGoogle";
 import { TEXTOS_GOOGLE } from "@/lib/textosLogin";
 
 // min-h-11 = 44 px (alvo de toque). Foco visível ao navegar com o teclado.
@@ -25,7 +25,7 @@ function LogoGoogle() {
 
 // "Continuar com Google" e, por baixo, o separador "ou" antes do formulário de email.
 // A API devolve o endereço do Supabase (GET /login/google); o browser vai para lá e,
-// depois de escolher a conta Google, volta à página /login/google com o token.
+// depois de escolher a conta Google, volta à página /login/google com um código (?code=).
 export default function BotaoGoogle() {
   const [aAbrir, setAAbrir] = useState(false);
   const [erro, setErro] = useState("");
@@ -44,13 +44,16 @@ export default function BotaoGoogle() {
     setErro("");
     setAAbrir(true);
     try {
+      // Segredo PKCE deste login (ver lib/pkceGoogle.ts): à API só vai o SHA-256 dele.
+      const verifier = gerarVerifier();
+      const challenge = await calcularChallenge(verifier);
       const destino = `${window.location.origin}/login/google`;
-      const resposta = await fetchComTentativas(`${API_URL}/login/google?destino=${encodeURIComponent(destino)}`);
+      const parametros = new URLSearchParams({ destino, code_challenge: challenge });
+      const resposta = await fetchComTentativas(`${API_URL}/login/google?${parametros}`);
       const corpo = await resposta.json().catch(() => null);
       if (!resposta.ok || typeof corpo?.url !== "string") throw new Error("Sem endereço do login");
-      // Marca que o login foi começado aqui (ver lib/marcaGoogle.ts). Só depois sai para o Google;
-      // o aAbrir fica true até a página mudar.
-      marcarInicioGoogle();
+      // Guarda o segredo neste browser. Só depois sai para o Google; o aAbrir fica true até a página mudar.
+      guardarVerifier(verifier);
       window.location.href = corpo.url;
     } catch {
       setErro(TEXTOS_GOOGLE.erroAbrir);

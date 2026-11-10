@@ -259,3 +259,213 @@ def test_outros_erros_na_contagem_nao_sao_escondidos(monkeypatch):
 
     with pytest.raises(APIError):
         limites.pdfs_no_mes("utilizador-teste")
+
+
+# --- Registo atómico do PDF (registar_pdf e a função registar_pdf_ia da sql/017) ---
+
+
+class RpcFalso:
+    """Imita supabase.rpc("registar_pdf_ia", ...): guarda os parâmetros e devolve a resposta dada.
+
+    erro imita o PostgREST a recusar a chamada (ex.: PGRST202 antes da sql/017).
+    """
+
+    def __init__(self, resposta="ok", erro=None):
+        self.resposta = resposta
+        self.erro = erro
+        self.chamadas: list[tuple[str, dict]] = []
+
+    def rpc(self, nome, parametros):
+        self.chamadas.append((nome, parametros))
+        return self
+
+    def execute(self):
+        if self.erro:
+            raise APIError(self.erro)
+        self.data = self.resposta
+        return self
+
+
+@pytest.fixture
+def rpc(monkeypatch):
+    def _criar(resposta="ok", erro=None, plano="essencial"):
+        falso = RpcFalso(resposta, erro)
+        monkeypatch.setattr(limites, "supabase", falso)
+        monkeypatch.setattr(limites, "agora_utc", lambda: AGORA)
+        monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: plano)
+        return falso
+
+    return _criar
+
+
+@pytest.mark.parametrize(
+    ("plano", "pedidos", "desde_pedidos", "pdf"),
+    [
+        ("essencial", 20, "2026-11-20T00:00:00+00:00", 15),  # pedidos por dia de Lisboa
+        ("completo", 50, "2026-11-20T00:00:00+00:00", 30),
+    ],
+)
+def test_registar_pdf_manda_os_dois_limites_numa_so_chamada(rpc, plano, pedidos, desde_pedidos, pdf):
+    falso = rpc("ok", plano=plano)
+
+    limites.registar_pdf("utilizador-teste")  # 'ok': não responde nada
+
+    assert falso.chamadas == [
+        (
+            "registar_pdf_ia",
+            {
+                "p_user_id": "utilizador-teste",
+                "p_desde_pedidos": desde_pedidos,
+                "p_limite_pedidos": pedidos,
+                "p_desde_pdf": "2026-11-01T00:00:00+00:00",  # os PDF contam desde o dia 1 de Lisboa
+                "p_limite_pdf": pdf,
+            },
+        )
+    ]
+
+
+def test_registar_pdf_sem_pdf_no_mes_responde_429_com_a_mensagem_do_pdf(rpc):
+    rpc("pdf")
+
+    with pytest.raises(HTTPException) as erro:
+        limites.registar_pdf("utilizador-teste")
+    assert erro.value.status_code == 429
+    assert erro.value.detail == MENSAGEM_15
+
+
+def test_registar_pdf_sem_pedidos_responde_429_com_a_mensagem_dos_pedidos(rpc):
+    rpc("pedidos")
+
+    with pytest.raises(HTTPException) as erro:
+        limites.registar_pdf("utilizador-teste")
+    assert erro.value.status_code == 429
+    assert erro.value.detail == limites.mensagem_do_limite(20, "dia")
+
+
+@pytest.mark.parametrize("resposta", [None, "", "talvez", True])
+def test_registar_pdf_com_resposta_inesperada_falha_fechado(rpc, resposta):
+    rpc(resposta)
+
+    with pytest.raises(HTTPException) as erro:
+        limites.registar_pdf("utilizador-teste")
+    assert erro.value.status_code == 503
+
+
+@pytest.mark.parametrize("codigo", ["PGRST202", "42883"])
+def test_sem_a_017_usa_o_caminho_antigo_e_avisa(rpc, monkeypatch, capsys, codigo):
+    rpc(erro={"code": codigo, "message": "Could not find the function public.registar_pdf_ia"})
+    ordem = []
+    monkeypatch.setattr(limites, "exigir_limite_pdf", lambda user_id: ordem.append("limite_pdf"))
+    monkeypatch.setattr(limites, "registar_pergunta", lambda user_id, funcao: ordem.append(funcao))
+
+    limites.registar_pdf("utilizador-teste")
+
+    assert ordem == ["limite_pdf", "importar_pdf"]  # a mesma ordem de antes: PDF primeiro, depois o pedido
+    assert "AVISO: função registar_pdf_ia não encontrada" in capsys.readouterr().out
+
+
+def test_sem_a_017_e_sem_pdf_no_mes_nao_gasta_pedido(rpc, monkeypatch):
+    rpc(erro={"code": "PGRST202", "message": "Could not find the function"})
+    pedidos = []
+
+    def sem_pdf(user_id):
+        raise HTTPException(status_code=429, detail=MENSAGEM_15)
+
+    monkeypatch.setattr(limites, "exigir_limite_pdf", sem_pdf)
+    monkeypatch.setattr(limites, "registar_pergunta", lambda user_id, funcao: pedidos.append(funcao))
+
+    with pytest.raises(HTTPException) as erro:
+        limites.registar_pdf("utilizador-teste")
+    assert erro.value.status_code == 429
+    assert pedidos == []
+
+
+def test_outros_erros_da_017_nao_sao_escondidos(rpc):
+    rpc(erro={"code": "42501", "message": "permission denied for function registar_pdf_ia"})
+
+    with pytest.raises(APIError):
+        limites.registar_pdf("utilizador-teste")
+
+
+def test_a_rota_usa_o_registo_atomico_e_nao_os_dois_passos(cliente, ia, limite, monkeypatch):
+    # Na rota, o PDF conta-se só pela registar_pdf (o caminho em dois passos fica dentro dela).
+    chamadas = []
+    monkeypatch.setattr(main, "registar_pdf", lambda user_id: chamadas.append(user_id))
+
+    resposta = importar_pdf(cliente)
+
+    assert resposta.status_code == 201
+    assert chamadas == ["utilizador-teste"]
+    assert limite.funcoes == []  # nada passou pela registar_pergunta
+
+
+# --- Revisão: a rota quando a registar_pdf recusa, planos sem PDF e viragem do dia/mês em Lisboa ---
+
+
+@pytest.mark.parametrize(
+    ("estado", "mensagem"),
+    [
+        (429, MENSAGEM_15),  # sem PDF no mês
+        (429, limites.mensagem_do_limite(20, "dia")),  # sem pedidos à IA
+        (503, "Não foi possível importar o PDF agora. Tenta outra vez daqui a pouco."),  # resposta inesperada
+    ],
+)
+def test_pdf_recusado_pela_registar_pdf_nao_chama_a_ia_nem_grava(cliente, ia, limite, base_dados, monkeypatch, estado, mensagem):
+    def recusar(user_id):
+        raise HTTPException(status_code=estado, detail=mensagem)
+
+    monkeypatch.setattr(main, "registar_pdf", recusar)
+
+    resposta = importar_pdf(cliente)
+
+    assert resposta.status_code == estado
+    assert resposta.json()["detail"] == mensagem
+    assert ia == ["paginas"]  # a IA não foi chamada
+    assert base_dados.gravado == []  # nenhuma movimentação gravada
+    assert limite.funcoes == []  # nenhum pedido contado
+
+
+@pytest.mark.parametrize(
+    ("plano", "limite_pedidos", "desde_pedidos"),
+    [
+        ("free", 30, "2026-11-01T00:00:00+00:00"),  # o Free conta os pedidos por mês
+        (None, 0, "2026-11-20T00:00:00+00:00"),  # sem plano: 0 pedidos (período "dia", como em limites.py)
+        ("plano-inventado", 0, "2026-11-20T00:00:00+00:00"),
+    ],
+)
+def test_planos_sem_pdf_mandam_limite_de_pdf_zero(rpc, plano, limite_pedidos, desde_pedidos):
+    falso = rpc("pdf", plano=plano)
+
+    with pytest.raises(HTTPException) as erro:
+        limites.registar_pdf("utilizador-teste")
+    assert erro.value.status_code == 429
+
+    parametros = falso.chamadas[0][1]
+    assert parametros["p_limite_pdf"] == 0
+    assert parametros["p_limite_pedidos"] == limite_pedidos
+    assert parametros["p_desde_pedidos"] == desde_pedidos
+    assert parametros["p_desde_pdf"] == "2026-11-01T00:00:00+00:00"
+
+
+@pytest.mark.parametrize(
+    ("agora", "desde_dia", "desde_mes"),
+    [
+        # Inverno (Lisboa = UTC): 23h30 UTC do último dia do mês ainda é esse dia em Lisboa.
+        (datetime(2026, 11, 30, 23, 30, tzinfo=UTC), "2026-11-30T00:00:00+00:00", "2026-11-01T00:00:00+00:00"),
+        # Verão (Lisboa = UTC+1): 23h30 UTC de 31 de agosto já é 1 de setembro em Lisboa.
+        (datetime(2026, 8, 31, 23, 30, tzinfo=UTC), "2026-08-31T23:00:00+00:00", "2026-08-31T23:00:00+00:00"),
+        # Verão, a meio do mês: a meia-noite de Lisboa é às 23h00 UTC do dia anterior.
+        (datetime(2026, 7, 15, 12, 0, tzinfo=UTC), "2026-07-14T23:00:00+00:00", "2026-06-30T23:00:00+00:00"),
+        # Passagem de ano no inverno.
+        (datetime(2026, 12, 31, 23, 30, tzinfo=UTC), "2026-12-31T00:00:00+00:00", "2026-12-01T00:00:00+00:00"),
+    ],
+)
+def test_os_inicios_do_dia_e_do_mes_sao_os_de_lisboa(rpc, monkeypatch, agora, desde_dia, desde_mes):
+    falso = rpc("ok", plano="essencial")
+    monkeypatch.setattr(limites, "agora_utc", lambda: agora)
+
+    limites.registar_pdf("utilizador-teste")
+
+    parametros = falso.chamadas[0][1]
+    assert parametros["p_desde_pedidos"] == desde_dia
+    assert parametros["p_desde_pdf"] == desde_mes

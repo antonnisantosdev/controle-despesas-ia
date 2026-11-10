@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import Logo from "@/components/Logo";
 import { TEXTOS_GOOGLE } from "@/lib/textosLogin";
 
-// O token só existe no browser (no fragmento do endereço), por isso esta parte não é desenhada no servidor.
+// O código do endereço e o segredo PKCE só existem no browser, por isso esta parte não é desenhada no servidor.
 const RegressoGoogle = dynamic(() => import("./RegressoGoogle"), {
   ssr: false,
   loading: () => <p className="text-sm text-texto-suave">{TEXTOS_GOOGLE.aEntrar}</p>,

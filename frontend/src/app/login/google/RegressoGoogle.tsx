@@ -2,45 +2,74 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { guardarToken } from "@/lib/api";
-import { apagarMarcaGoogle, marcaGoogleValida } from "@/lib/marcaGoogle";
+import { API_URL, fetchComTentativas, guardarToken } from "@/lib/api";
+import { apagarVerifier, lerVerifier } from "@/lib/pkceGoogle";
 import { TEXTOS_GOOGLE } from "@/lib/textosLogin";
 
-// O que o Supabase mandou no regresso do Google: o token, ou null se houve erro ou não veio token.
-// O token vem no fragmento (#access_token=...&refresh_token=...), que o browser nunca envia a nenhum servidor.
-// Os erros podem vir no fragmento ou na query (?error=...&error_description=...).
-function tokenDoRegresso(hash: string, query: string): string | null {
-  const fragmento = new URLSearchParams(hash.replace(/^#/, ""));
+type PedidoTroca = { code: string; code_verifier: string };
+
+// O que o Supabase mandou no regresso do Google: o código (?code=...) ou um erro.
+// Os erros podem vir na query ou no fragmento (?error=...&error_description=...).
+// eRegresso: se o endereço traz um código ou um erro (é mesmo o regresso de um login começado);
+// codigo: o código, ou null se houve erro ou não veio código.
+function lerRegresso(query: string, hash: string): { eRegresso: boolean; codigo: string | null } {
   const parametros = new URLSearchParams(query);
-  if (fragmento.has("error") || parametros.has("error")) return null;
-  // O refresh_token fica de fora, como no login com email: quando o token expirar, faz-se login outra vez.
-  return fragmento.get("access_token") || null;
+  const fragmento = new URLSearchParams(hash.replace(/^#/, ""));
+  const temErro = parametros.has("error") || fragmento.has("error");
+  const codigo = parametros.get("code") || null;
+  return { eRegresso: temErro || codigo !== null, codigo: temErro ? null : codigo };
+}
+
+// Troca o código pelo token na API (POST /login/google/troca), com o segredo PKCE guardado neste browser.
+// O refresh_token fica de fora, como no login com email: quando o token expirar, faz-se login outra vez.
+async function trocarCodigo(pedido: PedidoTroca): Promise<string> {
+  const resposta = await fetchComTentativas(`${API_URL}/login/google/troca`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pedido),
+  });
+  const corpo = await resposta.json().catch(() => null);
+  if (!resposta.ok || typeof corpo?.access_token !== "string") throw new Error("Troca do código recusada");
+  return corpo.access_token;
 }
 
 // Só corre no browser (a page.tsx carrega-o com ssr: false), por isso pode ler o window.location logo ao abrir.
 export default function RegressoGoogle() {
   const router = useRouter();
-  // Lido uma só vez, quando o componente aparece (antes de o endereço ser limpo).
-  // Sem a marca de início neste browser, o token é recusado: pode ser um link de um atacante
-  // com o token da conta dele (ver lib/marcaGoogle.ts). A sessão que já existir fica intacta.
-  const [token] = useState(() =>
-    marcaGoogleValida() ? tokenDoRegresso(window.location.hash, window.location.search) : null,
-  );
+  // Lido uma só vez, quando o componente aparece (antes de o endereço ser limpo e o segredo apagado).
+  // Sem o segredo deste browser não há troca: pode ser um link de um atacante com o código da conta dele
+  // (ver lib/pkceGoogle.ts). A sessão que já existir fica intacta.
+  const [{ eRegresso, pedido }] = useState<{ eRegresso: boolean; pedido: PedidoTroca | null }>(() => {
+    const regresso = lerRegresso(window.location.search, window.location.hash);
+    const verifier = lerVerifier();
+    const pedido = regresso.codigo && verifier ? { code: regresso.codigo, code_verifier: verifier } : null;
+    return { eRegresso: regresso.eRegresso, pedido };
+  });
+  const [falhou, setFalhou] = useState(false);
+  // O código só serve uma vez: em desenvolvimento o React corre o efeito duas vezes, e a segunda troca falharia.
+  const jaTrocou = useRef(false);
 
   useEffect(() => {
-    // Tira logo o token do endereço, para não ficar no histórico nem ser copiado com o link.
+    // Tira logo o código do endereço, para não ficar no histórico nem ser copiado com o link.
     window.history.replaceState(null, "", window.location.pathname);
-    apagarMarcaGoogle();
-    if (!token) return;
-    guardarToken(token);
-    // O mesmo destino do login com email. Se o plano tiver terminado, a API responde 403
-    // no dashboard e o pedirApi manda para /assinatura-expirada, como no login normal.
-    router.replace("/dashboard");
-  }, [token, router]);
+    // O segredo só se gasta num regresso a sério (com código ou erro). Abrir /login/google sem nada
+    // (ex.: noutro separador, a meio de um login) mostra o erro mas não estraga o login que está a decorrer.
+    if (eRegresso) apagarVerifier();
+    if (!pedido || jaTrocou.current) return;
+    jaTrocou.current = true;
+    trocarCodigo(pedido)
+      .then((token) => {
+        guardarToken(token);
+        // O mesmo destino do login com email. Se o plano tiver terminado, a API responde 403
+        // no dashboard e o pedirApi manda para /assinatura-expirada, como no login normal.
+        router.replace("/dashboard");
+      })
+      .catch(() => setFalhou(true));
+  }, [eRegresso, pedido, router]);
 
-  if (token) {
+  if (pedido && !falhou) {
     return (
       <p className="text-sm text-texto-suave" aria-live="polite">
         {TEXTOS_GOOGLE.aEntrar}
