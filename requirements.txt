@@ -7,8 +7,13 @@ fastapi[standard]==0.162.0
 # Base de dados e login
 supabase==2.33.0
 
-# Token da demo para recrutadores (JWT HS256, ver demo.py)
-PyJWT==2.15.1
+# Token da demo para recrutadores (JWT HS256, ver demo.py) e validação dos tokens do Supabase
+# com as chaves públicas do JWKS (ES256/RS256, ver token_supabase.py): o [crypto] traz o cryptography.
+PyJWT[crypto]==2.15.1
+cryptography==50.0.2
+
+# Pedidos HTTP (cliente do Supabase em database.py e pedido do JWKS em token_supabase.py)
+httpx==0.28.1
 
 # Ler o ficheiro .env
 python-dotenv==1.2.4

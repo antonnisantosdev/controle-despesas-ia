@@ -37,7 +37,7 @@ import orcamento
 import produtos
 import recorrentes
 import resumo
-from auth import obter_utilizador_atual
+from auth import obter_utilizador_atual, obter_utilizador_confirmado
 
 # Valores inventados só para os testes.
 SEGREDO = "segredo-de-teste-inventado-com-mais-de-32-caracteres"
@@ -365,9 +365,10 @@ def test_tokens_estragados_nao_entram_como_demo(base, api, caso):
 
     assert demo.ler_token_demo(token, config_valida()) is None
     # Não é um token da demo: segue para o Supabase, que também o recusa.
+    # O "alg": "none" é recusado logo na API (token_supabase.py), sem pedir ao Supabase.
     resposta = api.get("/eu", headers=cabecalho(token))
     assert resposta.status_code == 401
-    assert base.auth.tokens_pedidos == [token]
+    assert base.auth.tokens_pedidos == ([] if caso == "alg none" else [token])
 
 
 @pytest.mark.filterwarnings("ignore::jwt.warnings.InsecureKeyLengthWarning")
@@ -500,7 +501,10 @@ def _rotas_da_api() -> set[tuple[str, str, bool]]:
     for rota in main.app.routes:
         if not isinstance(rota, APIRoute):
             continue
-        com_login = any(dependencia.call is obter_utilizador_atual for dependencia in rota.dependant.dependencies)
+        com_login = any(
+            dependencia.call in (obter_utilizador_atual, obter_utilizador_confirmado)
+            for dependencia in rota.dependant.dependencies
+        )
         for metodo in rota.methods:
             rotas.add((metodo, rota.path, com_login))
     return rotas

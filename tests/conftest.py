@@ -24,6 +24,7 @@ import pytest  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+import auth  # noqa: E402
 import ia  # noqa: E402
 import limite_ip  # noqa: E402
 import limites  # noqa: E402
@@ -31,7 +32,8 @@ import main  # noqa: E402
 import recorrentes  # noqa: E402
 import resumo  # noqa: E402
 from postgrest.exceptions import APIError  # noqa: E402
-from auth import obter_utilizador_atual  # noqa: E402
+from auth import obter_utilizador_atual, obter_utilizador_confirmado  # noqa: E402
+from fastapi import Depends  # noqa: E402
 
 
 class BaseDadosFalsa:
@@ -126,6 +128,17 @@ def sem_proxies_a_frente(monkeypatch):
     monkeypatch.setattr(limite_ip, "PROXIES_A_FRENTE", 0)
 
 
+@pytest.fixture(autouse=True)
+def jwks_sem_rede(monkeypatch):
+    """Os testes nunca vão buscar o JWKS ao Supabase: por omissão o JWKS vem vazio (como num projeto
+    ainda com o segredo HS256), e os tokens seguem para o get_user imitado. O test_token_supabase.py
+    dá-lhe chaves geradas no próprio teste."""
+    auth.CHAVES_SUPABASE.limpar()
+    monkeypatch.setattr(auth.CHAVES_SUPABASE, "pedir", lambda url: {"keys": []})
+    yield
+    auth.CHAVES_SUPABASE.limpar()
+
+
 @pytest.fixture
 def limite(monkeypatch):
     limite = Limite()
@@ -159,6 +172,8 @@ class SemTabelaResumos:
 def cliente(base_dados, limite, monkeypatch):
     """Um cliente da API já com login feito (como o utilizador "utilizador-teste")."""
     main.app.dependency_overrides[obter_utilizador_atual] = lambda: "utilizador-teste"
+    # O DELETE /conta confirma no Supabase: aqui passa o id do obter_utilizador_atual (o que o teste escolher).
+    main.app.dependency_overrides[obter_utilizador_confirmado] = lambda user_id=Depends(obter_utilizador_atual): user_id
     # Por omissão, os resumos ficam na memória (como antes da 016); test_resumos_guardados.py testa a tabela.
     monkeypatch.setattr(resumo, "supabase", SemTabelaResumos())
     resumo.RESUMOS_EM_MEMORIA.clear()

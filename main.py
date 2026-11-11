@@ -17,6 +17,7 @@ from auth import (
     fazer_login,
     fazer_registo,
     obter_utilizador_atual,
+    obter_utilizador_confirmado,
     trocar_codigo_google,
     url_login_google,
 )
@@ -49,6 +50,7 @@ from limite_ip import (
     LIMITE_GOOGLE_INICIO,
     LIMITE_GOOGLE_TROCA,
     LIMITE_LOGIN,
+    LIMITE_LOGIN_POR_EMAIL,
     LIMITE_REGISTO,
     ip_do_pedido,
 )
@@ -167,18 +169,29 @@ def inicio():
 
 # As rotas públicas de entrada e registo contam os pedidos por IP (e por /48 no IPv6) antes de falarem
 # com o Supabase: acima do limite, 429 com o "detail" a explicar (ver limite_ip.py).
+# Além do limite por IP, cada conta aguenta poucas tentativas falhadas (LIMITE_LOGIN_POR_EMAIL): por (email, rede)
+# e por email num dia, contra quem experimenta palavras-passe na mesma conta. A tentativa conta-se antes de falar
+# com o Supabase e só fica contada se o Supabase responder "invalid_credentials" (email ou palavra-passe
+# errados): login certo, email por confirmar, limites e erros do próprio Supabase devolvem-na.
 @app.post("/login", dependencies=[Depends(LIMITE_LOGIN)])
-def login(credenciais: Credenciais):
+def login(credenciais: Credenciais, request: Request):
+    reserva = LIMITE_LOGIN_POR_EMAIL.reservar(credenciais.email, ip_do_pedido(request))
     try:
         token = fazer_login(credenciais.email, credenciais.password)
     except AuthApiError as erro:
         # Conta criada no registo, mas o link do email de confirmação ainda não foi aberto.
+        if erro.code != "invalid_credentials":
+            LIMITE_LOGIN_POR_EMAIL.devolver(reserva)
         if erro.code == "email_not_confirmed":
             raise HTTPException(
                 status_code=401,
                 detail="Ainda não confirmaste o email. Abre o link que te enviámos para ativar a conta.",
             )
         raise HTTPException(status_code=401, detail="Email ou palavra-passe errados")
+    except Exception:
+        LIMITE_LOGIN_POR_EMAIL.devolver(reserva)
+        raise
+    LIMITE_LOGIN_POR_EMAIL.devolver(reserva)
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -201,13 +214,23 @@ MENSAGEM_ERRO_GOOGLE = "Não foi possível entrar com o Google. Tenta outra vez.
 CAMINHO_TROCA_GOOGLE = "/login/google/troca"
 
 
-# Na troca do código, um corpo inválido responde 422 com a mensagem genérica: o 422 normal do FastAPI
-# repetia o que foi enviado (o código e o segredo) e mostrava os formatos aceites.
-# As outras rotas continuam com o 422 normal.
+# Nas rotas que recebem segredos (palavra-passe, código e segredo do Google), um corpo inválido responde 422
+# com uma mensagem genérica: o 422 normal do FastAPI repetia o que foi enviado (incluindo a palavra-passe)
+# e mostrava os formatos aceites. As outras rotas continuam com o 422 normal.
+MENSAGEM_LOGIN_INVALIDO = "Confirma o email e a palavra-passe."
+MENSAGEM_REGISTO_INVALIDO = "Confirma que o email está bem escrito e que a palavra-passe tem entre 8 e 72 caracteres."
+MENSAGENS_422_GENERICAS = {
+    CAMINHO_TROCA_GOOGLE: MENSAGEM_ERRO_GOOGLE,
+    "/login": MENSAGEM_LOGIN_INVALIDO,
+    "/registo": MENSAGEM_REGISTO_INVALIDO,
+}
+
+
 @app.exception_handler(RequestValidationError)
 async def erro_de_validacao(request: Request, erro: RequestValidationError):
-    if request.url.path == CAMINHO_TROCA_GOOGLE:
-        return JSONResponse(status_code=422, content={"detail": MENSAGEM_ERRO_GOOGLE})
+    mensagem = MENSAGENS_422_GENERICAS.get(request.url.path)
+    if mensagem is not None:
+        return JSONResponse(status_code=422, content={"detail": mensagem})
     return await request_validation_exception_handler(request, erro)
 
 
@@ -278,9 +301,10 @@ MENSAGEM_APAGAR_CONTA_FALHOU = "Não foi possível apagar a conta agora. Tenta m
 
 # Apaga a conta de quem está autenticado (só a própria: o id vem do token, nunca do pedido).
 # A conta de demo nunca chega aqui: o obter_utilizador_atual responde 423 (fora de PERMISSOES_DEMO).
+# obter_utilizador_confirmado: além do token válido, pergunta ao Supabase se a sessão ainda vale (get_user).
 @app.delete("/conta", status_code=204)
 def apagar_conta(
-    pedido: ConfirmacaoApagarConta | None = None, user_id: str = Depends(obter_utilizador_atual)
+    pedido: ConfirmacaoApagarConta | None = None, user_id: str = Depends(obter_utilizador_confirmado)
 ) -> None:
     if pedido is None or pedido.confirmacao != CONFIRMACAO_APAGAR_CONTA:
         raise HTTPException(status_code=400, detail=MENSAGEM_SEM_CONFIRMACAO)

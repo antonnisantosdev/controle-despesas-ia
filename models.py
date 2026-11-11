@@ -119,9 +119,11 @@ class ConfirmacaoApagarConta(BaseModel):
     confirmacao: str | None = Field(default=None, max_length=20)
 
 
+# Tetos de tamanho antes de falar com o Supabase (e de calcular o HMAC do limite por email): acima, 422.
+# 254 é o máximo de um endereço de email (RFC 5321); 256 chega para qualquer palavra-passe real.
 class Credenciais(BaseModel):
-    email: str
-    password: str
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=256)
 
 
 # O que a página /login/google manda no regresso do Google (PKCE): o código que o Supabase pôs no endereço

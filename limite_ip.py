@@ -1,16 +1,21 @@
 """Limites de pedidos por IP, na memória do servidor (usados pela demo e pelas rotas de entrada e registo).
+Também o limite de tentativas falhadas por conta (email) no POST /login: LimiteDeFalhasPorEmail.
 
 - ip_do_pedido: o IP de quem fez o pedido (no Render, a 3.ª entrada a contar da direita do X-Forwarded-For).
 - chave_do_ip: IPv6 conta por prefixo /64; prefixo_48_do_ipv6: segundo limite, por /48 (só IPv6).
 - LimitePorIP: até N pedidos por chave em cada janela; acima disso, 429 com a mensagem do limite.
 
-Nada disto escreve IPs nos logs.
+Nada disto escreve IPs nem emails nos logs.
 """
 
+import hashlib
+import hmac
 import ipaddress
+import secrets
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from fastapi import HTTPException, Request
 
@@ -151,6 +156,20 @@ class LimitePorIP:
                 raise HTTPException(status_code=429, detail=self.mensagem)
             self._pedidos[ip] = (inicio, pedidos + 1)
 
+    def devolver(self, ip: str) -> None:
+        """Desconta um pedido já contado (ex.: uma tentativa reservada que afinal não falhou)."""
+        chave = self.chave(ip)
+        if chave is None:
+            return
+        with self._cadeado:
+            if chave not in self._pedidos:
+                return
+            inicio, pedidos = self._pedidos[chave]
+            if pedidos <= 1:
+                del self._pedidos[chave]
+            else:
+                self._pedidos[chave] = (inicio, pedidos - 1)
+
     def limpar(self) -> None:
         """Esquece todos os IPs (para os testes)."""
         with self._cadeado:
@@ -232,7 +251,123 @@ LIMITE_GOOGLE_TROCA = LimiteDaRota(
     GOOGLE_TROCA_POR_IP, GOOGLE_TROCA_POR_48, GOOGLE_TROCA_JANELA_SEGUNDOS, MENSAGEM_MUITAS_ENTRADAS
 )
 
-LIMITES_DAS_ROTAS_PUBLICAS = (LIMITE_LOGIN, LIMITE_REGISTO, LIMITE_GOOGLE_INICIO, LIMITE_GOOGLE_TROCA)
+
+
+# --- Limite por conta no POST /login (contra quem tenta palavras-passe na mesma conta) ---
+
+# Só contam as tentativas falhadas (email ou palavra-passe errados).
+# - Por (email, rede): 10 falhas em 15 min e 20 por dia. A rede é o /48 no IPv6 ou o próprio IPv4 (rede_do_ip).
+#   Quem bloqueia uma conta assim só a bloqueia para a sua própria rede.
+# - Por email sozinho: 100 falhas por dia, contra ataques distribuídos (só se atinge com 5 ou mais redes).
+LOGIN_FALHAS_POR_EMAIL_E_REDE = 10
+LOGIN_FALHAS_POR_EMAIL_E_REDE_JANELA_SEGUNDOS = 15 * MINUTO
+LOGIN_FALHAS_POR_EMAIL_E_REDE_DIA = 20
+LOGIN_FALHAS_POR_EMAIL_DIA = 100
+# Proposta do dev-seguranca, por aprovar pelo copywriter. A mesma resposta exista ou não a conta.
+MENSAGEM_MUITAS_FALHAS_NA_CONTA = "Muitas tentativas falhadas nesta conta. Tenta mais tarde ou entra com o Google."
+
+# Sal aleatório, novo em cada arranque: a memória guarda só um HMAC-SHA-256 do email, nunca o email em claro,
+# e sem o sal não se confirma um email conhecido contra os contadores.
+_SAL_EMAIL = secrets.token_bytes(32)
+
+
+def rede_do_ip(ip: str) -> str:
+    """A rede com que um IP conta no limite por (email, rede): o /48 no IPv6, o próprio endereço no IPv4."""
+    return prefixo_48_do_ipv6(ip) or chave_do_ip(ip)
+
+
+def chave_do_email(email: str, rede: str | None = None) -> str:
+    """HMAC-SHA-256 do email sem espaços à volta e em minúsculas (e da rede, se vier)."""
+    texto = email.strip().lower()
+    if rede is not None:
+        texto = f"{texto}\x00{rede}"
+    return hmac.new(_SAL_EMAIL, texto.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _a_propria_chave(chave: str) -> str:
+    return chave
+
+
+@dataclass(frozen=True)
+class ReservaDeTentativa:
+    """As chaves de uma tentativa já contada (para a devolver se o login não falhar)."""
+
+    chave_do_par: str
+    chave_do_email: str
+
+
+class LimiteDeFalhasPorEmail:
+    """As falhas de login por (email, rede) numa janela curta e num dia, e por email num dia.
+
+    A tentativa reserva-se ANTES de falar com o Supabase, de uma só vez (sob um cadeado), e devolve-se
+    se o login der certo: assim muitos pedidos ao mesmo tempo não passam todos antes de algum contar.
+    Usa o LimitePorIP com a chave já calculada (a classe só conta chaves, sejam IPs ou emails).
+    Com o teto cheio esquece a chave mais antiga: quem inventa milhares de emails não bloqueia o login a todos.
+    Respeita o interruptor LIMITES_PUBLICOS_LIGADOS.
+    """
+
+    def __init__(self, por_par: int, janela_segundos: float, por_par_dia: int, por_dia: int, mensagem: str):
+        self.curto = LimitePorIP(por_par, janela_segundos, mensagem, chave=_a_propria_chave, esquecer_ao_encher=True)
+        self.par_dia = LimitePorIP(por_par_dia, DIA, mensagem, chave=_a_propria_chave, esquecer_ao_encher=True)
+        self.dia = LimitePorIP(por_dia, DIA, mensagem, chave=_a_propria_chave, esquecer_ao_encher=True)
+        self._cadeado = threading.Lock()
+
+    def _contadores(self, reserva: ReservaDeTentativa) -> list[tuple[LimitePorIP, str]]:
+        """Cada contador com a chave da reserva que lhe toca."""
+        return [
+            (self.curto, reserva.chave_do_par),
+            (self.par_dia, reserva.chave_do_par),
+            (self.dia, reserva.chave_do_email),
+        ]
+
+    def reservar(self, email: str, ip: str) -> ReservaDeTentativa | None:
+        """Conta já esta tentativa, ou responde 429 se a conta chegou a um dos limites (sem contar nada).
+        None com os limites desligados."""
+        if not LIMITES_PUBLICOS_LIGADOS:
+            return None
+        reserva = ReservaDeTentativa(chave_do_email(email, rede_do_ip(ip)), chave_do_email(email))
+        with self._cadeado:
+            contados: list[tuple[LimitePorIP, str]] = []
+            try:
+                for limite, chave in self._contadores(reserva):
+                    limite.registar(chave)
+                    contados.append((limite, chave))
+            except HTTPException:
+                # Um limite recusou: desconta-se o que já tinha sido contado nos outros.
+                for limite, chave in contados:
+                    limite.devolver(chave)
+                raise
+        return reserva
+
+    def devolver(self, reserva: ReservaDeTentativa | None) -> None:
+        """Desconta uma tentativa reservada que não foi uma falha (ver o POST /login em main.py)."""
+        if reserva is None:
+            return
+        with self._cadeado:
+            for limite, chave in self._contadores(reserva):
+                limite.devolver(chave)
+
+    def limpar(self) -> None:
+        self.curto.limpar()
+        self.par_dia.limpar()
+        self.dia.limpar()
+
+
+LIMITE_LOGIN_POR_EMAIL = LimiteDeFalhasPorEmail(
+    LOGIN_FALHAS_POR_EMAIL_E_REDE,
+    LOGIN_FALHAS_POR_EMAIL_E_REDE_JANELA_SEGUNDOS,
+    LOGIN_FALHAS_POR_EMAIL_E_REDE_DIA,
+    LOGIN_FALHAS_POR_EMAIL_DIA,
+    MENSAGEM_MUITAS_FALHAS_NA_CONTA,
+)
+
+LIMITES_DAS_ROTAS_PUBLICAS = (
+    LIMITE_LOGIN,
+    LIMITE_REGISTO,
+    LIMITE_GOOGLE_INICIO,
+    LIMITE_GOOGLE_TROCA,
+    LIMITE_LOGIN_POR_EMAIL,
+)
 
 
 def limpar_limites_das_rotas_publicas() -> None:

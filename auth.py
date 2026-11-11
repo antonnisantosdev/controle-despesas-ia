@@ -6,6 +6,7 @@ from supabase import AuthApiError, AuthError, ClientOptions, create_client
 
 from database import SUPABASE_KEY, SUPABASE_URL, supabase
 from demo import config_demo, exigir_permissao_demo, ler_token_demo
+from token_supabase import CacheJWKS, TokenInvalido, emissor_esperado, ler_token_supabase, url_jwks
 
 # Lê o cabeçalho "Authorization: Bearer <token>" de cada pedido.
 # Também faz aparecer o botão "Authorize" no /docs.
@@ -108,12 +109,41 @@ def verificar_assinatura(user_id: str) -> None:
         raise HTTPException(status_code=403, detail="Sem assinatura ativa")
 
 
+# As chaves públicas do Supabase (JWKS), guardadas em memória: os tokens validam-se aqui (token_supabase.py).
+CHAVES_SUPABASE = CacheJWKS(url_jwks(SUPABASE_URL))
+EMISSOR_SUPABASE = emissor_esperado(SUPABASE_URL)
+
+
+def _id_pelo_supabase(request: Request, token: str) -> str:
+    """Pergunta ao Supabase de quem é o token (get_user): apanha também contas apagadas e sessões terminadas."""
+    try:
+        resposta = supabase.auth.get_user(token)
+    except AuthApiError:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    request.state.confirmado_no_supabase = True
+    return resposta.user.id
+
+
+def _id_do_token(request: Request, token: str) -> str:
+    """O id do dono do token: validado aqui com o JWKS; se não der para decidir aqui, pelo get_user."""
+    try:
+        user_id = ler_token_supabase(token, CHAVES_SUPABASE, EMISSOR_SUPABASE)
+    except TokenInvalido:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    if user_id is None:
+        return _id_pelo_supabase(request, token)
+    return user_id
+
+
 def obter_utilizador_atual(
     request: Request, credenciais: HTTPAuthorizationCredentials = Depends(esquema_bearer)
 ) -> str:
     """Devolve o id (UUID) do dono do token: 401 se o token for inválido, 403 sem assinatura.
 
-    Com a demo ligada, tenta primeiro o token da demo (demo.py); se não for um, segue para o Supabase.
+    Com a demo ligada, tenta primeiro o token da demo (demo.py); se não for um, segue para o token do Supabase,
+    validado na API com o JWKS (sem pedir ao Supabase) ou, se não der, pelo get_user.
+    Um token validado na API vale até expirar, mesmo de uma conta apagada; mas o verificar_assinatura corre
+    em todos os pedidos e a assinatura apaga-se com a conta (ON DELETE CASCADE), por isso essa conta leva 403.
     A conta de demo (pelo id, venha o token de onde vier) só usa as rotas de PERMISSOES_DEMO: as outras dão 423.
     """
     token = credenciais.credentials
@@ -130,14 +160,27 @@ def obter_utilizador_atual(
             verificar_assinatura(config.user_id)
             return config.user_id
 
-    try:
-        resposta = supabase.auth.get_user(token)
-    except AuthApiError:
-        raise HTTPException(status_code=401, detail="Token inválido")
-    user_id = resposta.user.id
+    user_id = _id_do_token(request, token)
     # Todas as rotas usam esta função, por isso a verificação da assinatura protege a API inteira.
     verificar_assinatura(user_id)
     # Quem entrar na conta de demo com o email e a palavra-passe fica com as mesmas regras da demo.
     if config.user_id is not None and str(user_id).lower() == config.user_id:
         exigir_permissao_demo(request)
+    return user_id
+
+
+def obter_utilizador_confirmado(
+    request: Request,
+    user_id: str = Depends(obter_utilizador_atual),
+    credenciais: HTTPAuthorizationCredentials = Depends(esquema_bearer),
+) -> str:
+    """Como o obter_utilizador_atual, mas confirma sempre no Supabase (get_user) que a sessão ainda vale.
+
+    Para as rotas que não se podem desfazer (DELETE /conta): um token roubado de uma sessão terminada
+    ou de uma conta bloqueada no painel não chega para apagar a conta.
+    """
+    if getattr(request.state, "confirmado_no_supabase", False):
+        return user_id
+    if str(_id_pelo_supabase(request, credenciais.credentials)).lower() != str(user_id).lower():
+        raise HTTPException(status_code=401, detail="Token inválido")
     return user_id

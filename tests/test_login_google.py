@@ -303,8 +303,9 @@ def test_troca_com_dados_invalidos_nao_repete_o_que_foi_enviado(cliente_publico,
     assert "A-Za-z" not in resposta.text  # nem os formatos aceites
 
 
-def test_as_outras_rotas_mantem_o_422_normal(cliente_publico):
-    resposta = cliente_publico.post("/registo", json={"email": "não é email"})
+def test_as_outras_rotas_mantem_o_422_normal(cliente):
+    # O /login e o /registo também têm 422 genérico (test_limite_email.py): usa-se uma rota sem segredos.
+    resposta = cliente.get("/transacoes", params={"mes": "não é mês"})
 
     assert resposta.status_code == 422
     assert isinstance(resposta.json()["detail"], list)  # o 422 do FastAPI, com a lista dos campos
