@@ -9,7 +9,9 @@ import BotaoGoogle from "@/components/BotaoGoogle";
 import Logo from "@/components/Logo";
 import RodapeLegal from "@/components/RodapeLegal";
 import { API_URL, fetchComTentativas } from "@/lib/api";
+import { lerOrigem } from "@/lib/origem";
 import { LIMITES_RESERVA, textoDosPedidos } from "@/lib/planos";
+import CampoPalavraPasse from "@/components/CampoPalavraPasse";
 
 const ESTILO_CAMPO = "mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto";
 
@@ -45,7 +47,8 @@ export default function PaginaRegisto() {
       const resposta = await fetchComTentativas(`${API_URL}/registo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        // origem: o canal do utm_source desta sessão (ou fica de fora).
+        body: JSON.stringify({ email, password, origem: lerOrigem() }),
       });
       const corpo = await resposta.json().catch(() => null);
 
@@ -106,24 +109,20 @@ export default function PaginaRegisto() {
 
             <label className="block">
               <span className="text-sm text-texto-suave">Palavra-passe (mínimo 8 caracteres)</span>
-              <input
-                type="password"
-                required
+              <CampoPalavraPasse
                 autoComplete="new-password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={setPassword}
                 className={ESTILO_CAMPO}
               />
             </label>
 
             <label className="block">
               <span className="text-sm text-texto-suave">Repetir a palavra-passe</span>
-              <input
-                type="password"
-                required
+              <CampoPalavraPasse
                 autoComplete="new-password"
                 value={repetir}
-                onChange={(e) => setRepetir(e.target.value)}
+                onChange={setRepetir}
                 className={ESTILO_CAMPO}
               />
             </label>

@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, StrictBool, StringConstraints, field_validator, model_validator
 
 from auth import FORMATO_CODE_VERIFIER, FORMATO_CODIGO_GOOGLE
 from limites import MAX_CARACTERES_HISTORICO, MAX_CARACTERES_PERGUNTA_HISTORICO, MAX_CARACTERES_RESPOSTA_HISTORICO
@@ -119,6 +119,37 @@ class ConfirmacaoApagarConta(BaseModel):
     confirmacao: str | None = Field(default=None, max_length=20)
 
 
+# --- Origem do registo (o utm_source dos links das redes, sem cookies) ---
+# Lista fechada: o que vier de fora desta lista conta como "outro"; vazio ou ausente fica None.
+CANAIS_DE_ORIGEM = ("instagram", "youtube", "tiktok", "linkedin")
+Origem = Literal["instagram", "youtube", "tiktok", "linkedin", "outro"]
+
+
+def normalizar_origem(valor: object) -> str | None:
+    """O canal de origem na lista fechada: um canal conhecido (sem espaços, em minúsculas) fica igual,
+    qualquer outro valor passa a "outro". None ou texto vazio ficam None (sem origem).
+    Nunca falha: uma origem estranha não pode recusar um registo."""
+    if valor is None:
+        return None
+    if not isinstance(valor, str):
+        return "outro"
+    texto = valor.strip().lower()
+    if not texto:
+        return None
+    return texto if texto in CANAIS_DE_ORIGEM else "outro"
+
+
+class ComOrigem(BaseModel):
+    """Base dos pedidos que trazem a origem do registo (opcional)."""
+
+    origem: Origem | None = None
+
+    @field_validator("origem", mode="before")
+    @classmethod
+    def origem_na_lista_fechada(cls, valor: object) -> str | None:
+        return normalizar_origem(valor)
+
+
 # Tetos de tamanho antes de falar com o Supabase (e de calcular o HMAC do limite por email): acima, 422.
 # 254 é o máximo de um endereço de email (RFC 5321); 256 chega para qualquer palavra-passe real.
 class Credenciais(BaseModel):
@@ -128,7 +159,8 @@ class Credenciais(BaseModel):
 
 # O que a página /login/google manda no regresso do Google (PKCE): o código que o Supabase pôs no endereço
 # e o segredo que ficou guardado no browser. Formato e tamanho validados antes de falar com o Supabase.
-class TrocaGoogle(BaseModel):
+# origem: o canal do utm_source (só se guarda se a conta for nova, ver main.py).
+class TrocaGoogle(ComOrigem):
     code: Annotated[str, StringConstraints(pattern=FORMATO_CODIGO_GOOGLE)]
     code_verifier: Annotated[str, StringConstraints(pattern=FORMATO_CODE_VERIFIER)]
 
@@ -432,9 +464,45 @@ class Recorrente(BaseModel):
 
 # Registo público (POST /registo). O EmailStr recusa emails mal escritos antes de chegarem ao Supabase.
 # 72 é o máximo que o Supabase aceita numa palavra-passe.
-class NovaConta(BaseModel):
+class NovaConta(ComOrigem):
     email: EmailStr
     password: str = Field(min_length=8, max_length=72)
+
+
+# POST /lista-espera (pública): avisar quando a app abrir no Brasil.
+# consentimento tem de vir true (caixa não pré-marcada na página /brasil).
+# pais: onde a pessoa vive; paises_cartoes: de que países são os cartões e contas que vai usar (1 a 3, sem repetidos).
+PaisListaEspera = Literal["BR", "PT", "outro"]
+
+
+class InscricaoListaEspera(ComOrigem):
+    email: EmailStr
+    pais: PaisListaEspera
+    paises_cartoes: list[PaisListaEspera] = Field(min_length=1, max_length=3)
+
+    @field_validator("paises_cartoes")
+    @classmethod
+    def paises_sem_repetidos(cls, paises: list[str]) -> list[str]:
+        if len(set(paises)) != len(paises):
+            raise ValueError("países repetidos")
+        return paises
+    consentimento: StrictBool
+
+    @field_validator("consentimento")
+    @classmethod
+    def consentimento_dado(cls, consentimento: bool) -> bool:
+        # Só true (o booleano): false, 1 ou "true" não contam como consentimento.
+        if consentimento is not True:
+            raise ValueError("é preciso aceitar")
+        return consentimento
+
+    @field_validator("email")
+    @classmethod
+    def email_normalizado(cls, email: str) -> str:
+        email = email.strip().lower()
+        if len(email) > 254:
+            raise ValueError("email demasiado comprido")
+        return email
 
 
 # --- Resumo anual (GET /relatorio) ---

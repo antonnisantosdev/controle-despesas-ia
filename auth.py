@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 from fastapi import Depends, HTTPException, Request
@@ -32,11 +34,37 @@ def fazer_login(email: str, password: str) -> str:
     return resposta.session.access_token
 
 
-def fazer_registo(email: str, password: str) -> None:
+def fazer_registo(email: str, password: str) -> str | None:
     """Cria a conta no Supabase Auth. O Supabase envia o email de confirmação,
-    e o gatilho do sql/013_registo_publico.sql dá-lhe logo o plano Free."""
+    e o gatilho do sql/013_registo_publico.sql dá-lhe logo o plano Free.
+
+    Devolve o id da conta (para guardar a origem) só se a conta acabou de ser criada (created_at há menos
+    de JANELA_CONTA_NOVA, como no Google); senão None. Assim um segundo registo com o email de uma conta
+    antiga (ainda por confirmar) não lhe muda a origem. Se o email já tiver conta confirmada, o Supabase
+    devolve um id inventado: mesmo que passe, o UPDATE da origem não encontra nenhuma linha.
+    """
     cliente = create_client(SUPABASE_URL, SUPABASE_KEY)
-    cliente.auth.sign_up({"email": email, "password": password})
+    resposta = cliente.auth.sign_up({"email": email, "password": password})
+    utilizador = getattr(resposta, "user", None)
+    if utilizador is None or not getattr(utilizador, "id", None):
+        return None
+    if not _conta_acabada_de_criar(getattr(utilizador, "created_at", None), datetime.now(timezone.utc)):
+        return None
+    return str(utilizador.id)
+
+
+def guardar_origem(user_id: str | None, origem: str | None) -> None:
+    """Escreve o canal de origem (sql/019) na assinatura da conta, só se ainda estiver vazio.
+
+    A linha foi criada pelo gatilho do registo (sql/013). Nunca falha: um erro aqui (ex.: a migração
+    019 ainda não corrida) só deixa um aviso no log, sem o id nem o email, e o registo segue.
+    """
+    if not user_id or not origem:
+        return
+    try:
+        supabase.table("assinaturas").update({"origem": origem}).eq("user_id", user_id).is_("origem", "null").execute()
+    except Exception as erro:
+        print(f"AVISO: origem do registo não gravada ({type(erro).__name__}).")
 
 
 # Página do frontend que recebe o token depois do login com o Google.
@@ -79,7 +107,34 @@ def url_login_google(destino: str, code_challenge: str) -> str:
     return f"{SUPABASE_URL.rstrip('/')}/auth/v1/authorize?{parametros}"
 
 
-def trocar_codigo_google(codigo: str, code_verifier: str) -> str:
+# Uma conta Google criada há menos disto conta como nova (primeiro login): só então se guarda a origem.
+JANELA_CONTA_NOVA = timedelta(minutes=10)
+
+
+@dataclass(frozen=True)
+class SessaoGoogle:
+    """O resultado da troca do código: o token e, se o Supabase os devolver, o id e se a conta é nova."""
+
+    token: str
+    user_id: str | None = None
+    conta_nova: bool = False
+
+
+def _conta_acabada_de_criar(criada_em: object, agora: datetime) -> bool:
+    """Se a conta foi criada há menos de JANELA_CONTA_NOVA (aceita datetime ou texto ISO do Supabase)."""
+    if isinstance(criada_em, str):
+        try:
+            criada_em = datetime.fromisoformat(criada_em.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+    if not isinstance(criada_em, datetime):
+        return False
+    if criada_em.tzinfo is None:
+        criada_em = criada_em.replace(tzinfo=timezone.utc)
+    return timedelta(0) <= agora - criada_em <= JANELA_CONTA_NOVA
+
+
+def trocar_codigo_google(codigo: str, code_verifier: str) -> SessaoGoogle:
     """Troca o ?code= do regresso do Google pelo token de acesso do utilizador (como o fazer_login).
 
     O Supabase só aceita o código com o segredo cujo SHA-256 recebeu no início (POST /auth/v1/token?grant_type=pkce).
@@ -89,7 +144,11 @@ def trocar_codigo_google(codigo: str, code_verifier: str) -> str:
     resposta = cliente.auth.exchange_code_for_session({"auth_code": codigo, "code_verifier": code_verifier})
     if not resposta.session or not resposta.session.access_token:
         raise AuthError("Sem sessão na troca do código", None)
-    return resposta.session.access_token
+    utilizador = getattr(resposta, "user", None) or getattr(resposta.session, "user", None)
+    if utilizador is None or not getattr(utilizador, "id", None):
+        return SessaoGoogle(resposta.session.access_token)
+    conta_nova = _conta_acabada_de_criar(getattr(utilizador, "created_at", None), datetime.now(timezone.utc))
+    return SessaoGoogle(resposta.session.access_token, str(utilizador.id), conta_nova)
 
 
 def apagar_utilizador(user_id: str) -> None:

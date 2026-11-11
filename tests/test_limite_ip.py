@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import pytest
 from fastapi.testclient import TestClient
 
+import auth
 import limite_ip
 import main
 
@@ -73,6 +74,16 @@ ROTAS = [
         limite_ip.GOOGLE_TROCA_JANELA_SEGUNDOS,
         limite_ip.MENSAGEM_MUITAS_ENTRADAS,
     ),
+    Rota(
+        "lista_espera",
+        "POST",
+        "/lista-espera",
+        {"json": {"email": "teste@exemplo.pt", "pais": "BR", "paises_cartoes": ["BR"], "consentimento": True}},
+        limite_ip.LISTA_ESPERA_POR_IP,
+        limite_ip.LISTA_ESPERA_POR_48,
+        limite_ip.LISTA_ESPERA_JANELA_SEGUNDOS,
+        limite_ip.MENSAGEM_MUITAS_INSCRICOES,
+    ),
 ]
 POR_NOME = {rota.nome: rota for rota in ROTAS}
 
@@ -101,12 +112,16 @@ def supabase_falso(monkeypatch):
 
     def troca(codigo, code_verifier):
         chamadas.append("google_troca")
-        return "token-inventado"
+        return auth.SessaoGoogle("token-inventado")
 
     monkeypatch.setattr(main, "fazer_login", login)
     monkeypatch.setattr(main, "fazer_registo", registo)
     monkeypatch.setattr(main, "url_login_google", inicio)
+    def inscrever(email, pais, paises_cartoes, origem):
+        chamadas.append("lista_espera")
+
     monkeypatch.setattr(main, "trocar_codigo_google", troca)
+    monkeypatch.setattr(main, "inscrever", inscrever)
     monkeypatch.setattr(main, "ORIGENS_FRONTEND", [ORIGEM])
     return chamadas
 
@@ -183,7 +198,7 @@ def test_contadores_separados_por_rota(api, supabase_falso, relogio):
     assert pedir(api, login, "203.0.113.20").status_code == 429
 
     # O mesmo IP continua a poder usar as outras rotas.
-    for nome in ("registo", "google_inicio", "google_troca"):
+    for nome in ("registo", "google_inicio", "google_troca", "lista_espera"):
         assert pedir(api, POR_NOME[nome], "203.0.113.20").status_code in (200, 201), nome
 
 

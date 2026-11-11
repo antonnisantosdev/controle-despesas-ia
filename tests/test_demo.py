@@ -457,6 +457,7 @@ ROTAS_PUBLICAS = {
     ("GET", "/login/google"),
     ("POST", "/login/google/troca"),
     ("POST", "/registo"),
+    ("POST", "/lista-espera"),
     ("POST", "/demo"),
     ("GET", "/planos"),
 }

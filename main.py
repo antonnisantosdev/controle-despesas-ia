@@ -16,6 +16,7 @@ from auth import (
     destino_google_valido,
     fazer_login,
     fazer_registo,
+    guardar_origem,
     obter_utilizador_atual,
     obter_utilizador_confirmado,
     trocar_codigo_google,
@@ -49,11 +50,13 @@ from importar_csv import (
 from limite_ip import (
     LIMITE_GOOGLE_INICIO,
     LIMITE_GOOGLE_TROCA,
+    LIMITE_LISTA_ESPERA,
     LIMITE_LOGIN,
     LIMITE_LOGIN_POR_EMAIL,
     LIMITE_REGISTO,
     ip_do_pedido,
 )
+from lista_espera import inscrever
 from limites import (
     MAX_PAGINAS_PDF,
     aviso_resumo_sem_pedidos,
@@ -88,6 +91,7 @@ from models import (
     Credenciais,
     NovaConta,
     GastoCategoria,
+    InscricaoListaEspera,
     JuncaoProdutos,
     JuntarProdutos,
     LinhaOrcamento,
@@ -219,10 +223,15 @@ CAMINHO_TROCA_GOOGLE = "/login/google/troca"
 # e mostrava os formatos aceites. As outras rotas continuam com o 422 normal.
 MENSAGEM_LOGIN_INVALIDO = "Confirma o email e a palavra-passe."
 MENSAGEM_REGISTO_INVALIDO = "Confirma que o email está bem escrito e que a palavra-passe tem entre 8 e 72 caracteres."
+# A lista de espera não recebe segredos, mas recebe um email: o 422 também não o repete.
+# Os textos da lista de espera estão em português do Brasil (página /brasil), aprovados pelo copywriter.
+MENSAGEM_LISTA_ESPERA_INVALIDA = "Confira se o email está correto e se você marcou a caixa de consentimento."
+CAMINHO_LISTA_ESPERA = "/lista-espera"
 MENSAGENS_422_GENERICAS = {
     CAMINHO_TROCA_GOOGLE: MENSAGEM_ERRO_GOOGLE,
     "/login": MENSAGEM_LOGIN_INVALIDO,
     "/registo": MENSAGEM_REGISTO_INVALIDO,
+    CAMINHO_LISTA_ESPERA: MENSAGEM_LISTA_ESPERA_INVALIDA,
 }
 
 
@@ -237,7 +246,7 @@ async def erro_de_validacao(request: Request, erro: RequestValidationError):
 @app.post(CAMINHO_TROCA_GOOGLE, dependencies=[Depends(LIMITE_GOOGLE_TROCA)])
 def login_google_troca(troca: TrocaGoogle):
     try:
-        token = trocar_codigo_google(troca.code, troca.code_verifier)
+        sessao = trocar_codigo_google(troca.code, troca.code_verifier)
     except AuthApiError as erro:
         # Código já usado, expirado, inventado ou segredo errado: o Supabase recusa com 4xx.
         print(f"AVISO: troca do código do Google recusada pelo Supabase ({erro.code or erro.status}).")
@@ -250,7 +259,10 @@ def login_google_troca(troca: TrocaGoogle):
         # Qualquer outra falha (ex.: erro de rede do httpx): 503 genérico, nunca um 500 com detalhes.
         print(f"AVISO: troca do código do Google falhou ({type(erro).__name__}).")
         raise HTTPException(status_code=503, detail=MENSAGEM_ERRO_GOOGLE)
-    return {"access_token": token, "token_type": "bearer"}
+    # Origem do registo: só no primeiro login (a conta Google acabou de ser criada) e só se ainda estiver vazia.
+    if sessao.conta_nova:
+        guardar_origem(sessao.user_id, troca.origem)
+    return {"access_token": sessao.token, "token_type": "bearer"}
 
 
 # Demo para recrutadores (pública): entrega um token da conta de demo, só de leitura (ver demo.py).
@@ -273,7 +285,7 @@ def entrar_na_demo(request: Request):
 @app.post("/registo", status_code=201, dependencies=[Depends(LIMITE_REGISTO)])
 def registo(conta: NovaConta):
     try:
-        fazer_registo(conta.email, conta.password)
+        user_id = fazer_registo(conta.email, conta.password)
     except AuthApiError as erro:
         # Só o código do erro: a mensagem do Supabase pode trazer o email.
         print(f"AVISO: registo recusado pelo Supabase ({erro.code or erro.status}).")
@@ -282,9 +294,29 @@ def registo(conta: NovaConta):
         # Supabase em baixo ou erro de rede: 503 genérico, nunca um 500 com detalhes (só o tipo no log).
         print(f"AVISO: registo falhou ({type(erro).__name__}).")
         raise HTTPException(status_code=503, detail="Não foi possível criar a conta agora. Tenta mais tarde.")
+    # O canal de onde a pessoa veio (utm_source). Se falhar, o registo segue (só um aviso no log).
+    guardar_origem(user_id, conta.origem)
     # A mesma resposta exista ou não uma conta com este email: assim ninguém usa o registo
     # para descobrir quem tem conta na app.
     return {"mensagem": "Enviámos um email de confirmação. Abre o link para ativar a conta."}
+
+
+# Lista de espera do Brasil (pública, página /brasil): só com consentimento (caixa não pré-marcada).
+# Como o /registo, não lê token nenhum (nem o da demo): é igual para toda a gente.
+# A mesma resposta esteja ou não o email já inscrito, para ninguém usar a rota para descobrir quem se inscreveu.
+# O email nunca vai para os logs (só o tipo do erro).
+MENSAGEM_LISTA_ESPERA_OK = "Inscrição feita. Avisaremos você por email quando a Control Prices estiver disponível no Brasil."
+MENSAGEM_LISTA_ESPERA_FALHOU = "Não foi possível salvar seu email agora. Tente novamente em alguns minutos."
+
+
+@app.post(CAMINHO_LISTA_ESPERA, status_code=201, dependencies=[Depends(LIMITE_LISTA_ESPERA)])
+def lista_de_espera(inscricao: InscricaoListaEspera):
+    try:
+        inscrever(inscricao.email, inscricao.pais, inscricao.paises_cartoes, inscricao.origem)
+    except Exception as erro:
+        print(f"AVISO: inscrição na lista de espera falhou ({type(erro).__name__}).")
+        raise HTTPException(status_code=503, detail=MENSAGEM_LISTA_ESPERA_FALHOU)
+    return {"mensagem": MENSAGEM_LISTA_ESPERA_OK}
 
 
 # Rota de teste: mostra quem é o utilizador do token enviado.

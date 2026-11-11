@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { API_URL, fetchComTentativas, guardarToken } from "@/lib/api";
+import { lerOrigem, type Origem } from "@/lib/origem";
 import { apagarVerifier, lerVerifier } from "@/lib/pkceGoogle";
 import { TEXTOS_GOOGLE } from "@/lib/textosLogin";
 
-type PedidoTroca = { code: string; code_verifier: string };
+// origem: o canal do utm_source; a API só o guarda se a conta for nova (primeiro login).
+type PedidoTroca = { code: string; code_verifier: string; origem?: Origem };
 
 // O que o Supabase mandou no regresso do Google: o código (?code=...) ou um erro.
 // Os erros podem vir na query ou no fragmento (?error=...&error_description=...).
@@ -53,7 +55,7 @@ export default function RegressoGoogle() {
   const [{ eRegresso, pedido }] = useState<{ eRegresso: boolean; pedido: PedidoTroca | null }>(() => {
     const regresso = lerRegresso(window.location.search, window.location.hash);
     const verifier = lerVerifier();
-    const pedido = regresso.codigo && verifier ? { code: regresso.codigo, code_verifier: verifier } : null;
+    const pedido = regresso.codigo && verifier ? { code: regresso.codigo, code_verifier: verifier, origem: lerOrigem() } : null;
     return { eRegresso: regresso.eRegresso, pedido };
   });
   const [falhou, setFalhou] = useState(false);

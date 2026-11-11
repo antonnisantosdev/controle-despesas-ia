@@ -191,6 +191,9 @@ MENSAGEM_MUITOS_REGISTOS = (
     "Houve muitos pedidos para criar conta a partir desta rede. Tenta outra vez mais tarde."
 )
 
+# POST /lista-espera (página /brasil, em português do Brasil). Texto aprovado pelo copywriter.
+MENSAGEM_MUITAS_INSCRICOES = "Muitas tentativas a partir desta rede. Tente novamente mais tarde."
+
 # POST /login (email e palavra-passe).
 LOGIN_POR_IP = 10
 LOGIN_POR_48 = 30
@@ -199,6 +202,10 @@ LOGIN_JANELA_SEGUNDOS = 15 * MINUTO
 REGISTO_POR_IP = 5
 REGISTO_POR_48 = 15
 REGISTO_JANELA_SEGUNDOS = HORA
+# POST /lista-espera: os mesmos números do registo.
+LISTA_ESPERA_POR_IP = 5
+LISTA_ESPERA_POR_48 = 15
+LISTA_ESPERA_JANELA_SEGUNDOS = HORA
 # GET /login/google (o endereço do Supabase para começar o login com o Google).
 GOOGLE_INICIO_POR_IP = 20
 GOOGLE_INICIO_POR_48 = 60
@@ -209,7 +216,7 @@ GOOGLE_TROCA_POR_48 = 30
 GOOGLE_TROCA_JANELA_SEGUNDOS = 15 * MINUTO
 
 
-# Interruptor de emergência: False desliga os limites das 4 rotas públicas (ex.: se o Render mudar
+# Interruptor de emergência: False desliga os limites das rotas públicas (ex.: se o Render mudar
 # a forma do X-Forwarded-For e toda a gente passar a contar como o mesmo IP).
 LIMITES_PUBLICOS_LIGADOS = True
 
@@ -244,6 +251,9 @@ class LimiteDaRota:
 
 LIMITE_LOGIN = LimiteDaRota(LOGIN_POR_IP, LOGIN_POR_48, LOGIN_JANELA_SEGUNDOS, MENSAGEM_MUITAS_ENTRADAS)
 LIMITE_REGISTO = LimiteDaRota(REGISTO_POR_IP, REGISTO_POR_48, REGISTO_JANELA_SEGUNDOS, MENSAGEM_MUITOS_REGISTOS)
+LIMITE_LISTA_ESPERA = LimiteDaRota(
+    LISTA_ESPERA_POR_IP, LISTA_ESPERA_POR_48, LISTA_ESPERA_JANELA_SEGUNDOS, MENSAGEM_MUITAS_INSCRICOES
+)
 LIMITE_GOOGLE_INICIO = LimiteDaRota(
     GOOGLE_INICIO_POR_IP, GOOGLE_INICIO_POR_48, GOOGLE_INICIO_JANELA_SEGUNDOS, MENSAGEM_MUITAS_ENTRADAS
 )
@@ -364,6 +374,7 @@ LIMITE_LOGIN_POR_EMAIL = LimiteDeFalhasPorEmail(
 LIMITES_DAS_ROTAS_PUBLICAS = (
     LIMITE_LOGIN,
     LIMITE_REGISTO,
+    LIMITE_LISTA_ESPERA,
     LIMITE_GOOGLE_INICIO,
     LIMITE_GOOGLE_TROCA,
     LIMITE_LOGIN_POR_EMAIL,

@@ -11,6 +11,7 @@ import BotaoDemo from "@/components/BotaoDemo";
 import RodapeLegal from "@/components/RodapeLegal";
 import { API_URL, contaApagada, EVENTO_SESSAO, fetchComTentativas, guardarToken } from "@/lib/api";
 import { TEXTOS_APAGAR_CONTA } from "@/lib/textosPlanos";
+import CampoPalavraPasse from "@/components/CampoPalavraPasse";
 
 // Avisa o React quando a marca "a conta foi apagada" muda (ver terminarSessaoContaApagada em api.ts).
 function subscrever(avisar: () => void) {
@@ -94,11 +95,9 @@ export default function PaginaLogin() {
 
           <label className="block">
             <span className="text-sm text-texto-suave">Palavra-passe</span>
-            <input
-              type="password"
-              required
+            <CampoPalavraPasse
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
               className="mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto"
             />
           </label>
