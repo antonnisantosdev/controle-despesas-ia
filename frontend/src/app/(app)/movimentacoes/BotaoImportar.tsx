@@ -13,6 +13,7 @@ import {
   type ResultadoImportacao,
 } from "@/lib/api";
 import { ID_NOTA_DEMO } from "@/components/NotaDemo";
+import { TEXTOS_IMPORTAR } from "@/lib/textosMovimentacoes";
 import { TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
 
 type Props = {
@@ -71,9 +72,9 @@ export default function BotaoImportar({
         onErro(e.detalhe, []);
       } else if (e instanceof ErroApi && e.detalhe && typeof e.detalhe === "object") {
         const { erros } = e.detalhe as { erros: string[] };
-        onErro("O extrato tem linhas inválidas. Corrige-as e volta a importar.", erros ?? []);
+        onErro(TEXTOS_IMPORTAR.linhasInvalidas, erros ?? []);
       } else {
-        onErro("Não foi possível ligar à API. Confirma que o fastapi dev está a correr.", []);
+        onErro(TEXTOS_IMPORTAR.semApi, []);
       }
     } finally {
       setAImportar(false);
@@ -101,7 +102,7 @@ export default function BotaoImportar({
         onClick={() => entradaFicheiro.current?.click()}
         className="rounded-lg border border-borda bg-cartao px-4 py-2 text-sm font-medium text-texto hover:bg-fundo disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {aImportar ? "A importar e a categorizar..." : "Importar extrato"}
+        {aImportar ? TEXTOS_IMPORTAR.aImportar : TEXTOS_IMPORTAR.botao}
       </button>
     </>
   );

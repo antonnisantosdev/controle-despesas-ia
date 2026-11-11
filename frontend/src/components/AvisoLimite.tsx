@@ -1,28 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
-import { pedirEstadoPlano, type EstadoPlano } from "@/lib/api";
+import { useEstadoPlano } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
 import { TEXTOS_DEMO } from "@/lib/textosDemo";
 import { TEXTOS_LIMITE } from "@/lib/textosPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 // O aviso do 429 (limite de pedidos à IA), igual em todos os ecrãs que usam a IA.
-// Pede o /plano para saber o limite, o período (dia ou mês) e o plano: no Completo não há plano maior,
+// Usa o /plano (do ProvedorConta, no layout da app) para saber o limite, o período (dia ou mês) e o plano: no Completo não há plano maior,
 // por isso não há link.
 // Numa sessão de demo, o texto é o do limite da demo (por IP ou dos pedidos partilhados), sem link para mudar de plano.
 // mensagem: o "detail" do 429 que a API mandou (na demo, mostra-se esse em vez do texto fixo).
 export default function AvisoLimite({ mensagem }: { mensagem?: string }) {
   const demo = useSessaoDemo();
-  const [estado, setEstado] = useState<EstadoPlano | null>(null);
-
-  useEffect(() => {
-    pedirEstadoPlano()
-      .then(setEstado)
-      .catch(() => setEstado(null)); // sem o número, mostra o aviso sem ele
-  }, []);
+  const estado = useEstadoPlano(); // null: sem o número, mostra o aviso sem ele
 
   // Enquanto o /plano não chega (ou se falhar): "Já usaste os pedidos à IA do teu plano...", sem o número.
   // Sem o /plano não se sabe o período: fica o texto do dia, como antes (o dos planos pagos).

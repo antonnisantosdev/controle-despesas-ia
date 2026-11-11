@@ -15,59 +15,60 @@ import {
   eSoPlanosPagos,
   lerToken,
   pedirApi,
-  pedirEstadoPlano,
   SessaoExpirada,
   type ComparacaoAno,
   type RelatorioAnual,
   type ResumoAnualIA,
   type TotaisAno,
 } from "@/lib/api";
+import { useEstadoPlano, useFormatos } from "@/lib/conta";
+import type { Formatos } from "@/lib/formatos";
 import { dataPorExtenso, preencher, temFuncoesPagas } from "@/lib/planos";
 import { TEXTOS_RELATORIO as T } from "@/lib/textosRelatorio";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import CartaoResumo from "../dashboard/CartaoResumo";
-import { euros } from "../dashboard/formatos";
 import GraficoAnual from "./GraficoAnual";
 
 // Anos no seletor: o atual e os 5 anteriores (a API aceita de 2000 até ao ano atual).
 const ANOS_NO_SELETOR = 6;
 
 // --- Formatos desta página ---
+// f: os formatos da conta (useFormatos()), com o país e a moeda.
 
 // "2026-11" -> "novembro de 2026"
-function mesLongo(mes: string) {
-  return new Date(`${mes}-01T00:00:00`).toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+function mesLongo(mes: string, f: Formatos) {
+  return f.data(mes, { month: "long", year: "numeric" });
 }
 
 // "2026-03" ou "03" -> "março"
-function nomeDoMes(mes: string) {
+function nomeDoMes(mes: string, f: Formatos) {
   const numero = Number(mes.slice(-2));
-  return new Date(2000, numero - 1, 1).toLocaleDateString("pt-PT", { month: "long" });
+  return f.data(new Date(2000, numero - 1, 1), { month: "long" });
 }
 
 // "2026-03" -> "mar."
-function mesCurto(mes: string) {
-  return new Date(`${mes}-01T00:00:00`).toLocaleDateString("pt-PT", { month: "short" });
+function mesCurto(mes: string, f: Formatos) {
+  return f.data(mes, { month: "short" });
 }
 
 // "2026-03-14" -> "14/03"
-function diaCurto(data: string) {
-  return new Date(`${data}T00:00:00`).toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit" });
+function diaCurto(data: string, f: Formatos) {
+  return f.data(data, { day: "2-digit", month: "2-digit" });
 }
 
 // +12,30 € / −12,30 € / igual: o sinal escrito, para a diferença não depender só da cor.
-function diferencaEuros(valor: number) {
+function diferencaDinheiro(valor: number, f: Formatos) {
   if (Math.abs(valor) < 0.005) return T.comparacaoIgual;
-  return valor > 0 ? preencher(T.comparacaoMais, { valor: euros(valor) }) : euros(valor);
+  return valor > 0 ? preencher(T.comparacaoMais, { valor: f.dinheiro(valor) }) : f.dinheiro(valor);
 }
 
 // "janeiro a novembro" / "ano inteiro"
-function textoDosMeses(meses: string[]) {
+function textoDosMeses(meses: string[], f: Formatos) {
   if (meses.length === 0) return "";
   if (meses.length === 12) return T.anoInteiro;
-  if (meses.length === 1) return nomeDoMes(meses[0]);
-  return preencher(T.mesesAte, { de: nomeDoMes(meses[0]), ate: nomeDoMes(meses[meses.length - 1]) });
+  if (meses.length === 1) return nomeDoMes(meses[0], f);
+  return preencher(T.mesesAte, { de: nomeDoMes(meses[0], f), ate: nomeDoMes(meses[meses.length - 1], f) });
 }
 
 // --- Peças da página ---
@@ -99,27 +100,29 @@ function Titulo({ titulo, texto }: { titulo: string; texto?: string }) {
 type PropsLinha = { nome: string; atual: number; anterior: number; ano: number; anoAnterior: number };
 
 function LinhaComparada({ nome, atual, anterior, ano, anoAnterior }: PropsLinha) {
+  const f = useFormatos();
   return (
     <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-sm">
       <span className="text-texto">{nome}</span>
       <span className="flex flex-wrap items-baseline gap-x-3 tabular-nums">
         <span className="text-xs text-texto-suave">
-          {ano}: {euros(atual)} · {anoAnterior}: {euros(anterior)}
+          {ano}: {f.dinheiro(atual)} · {anoAnterior}: {f.dinheiro(anterior)}
         </span>
-        <span className="font-semibold text-texto">{diferencaEuros(atual - anterior)}</span>
+        <span className="font-semibold text-texto">{diferencaDinheiro(atual - anterior, f)}</span>
       </span>
     </li>
   );
 }
 
 function Comparacao({ comparacao, ano, totais }: { comparacao: ComparacaoAno; ano: number; totais: TotaisAno }) {
+  const f = useFormatos();
   const anterior = comparacao.ano;
   const anos = { ano, anoAnterior: anterior };
   return (
     <section className={ESTILO_SECAO}>
       <Titulo
         titulo={preencher(T.comparacaoTitulo, { ano: anterior })}
-        texto={preencher(T.comparacaoMeses, { meses: textoDosMeses(comparacao.meses_comparados) })}
+        texto={preencher(T.comparacaoMeses, { meses: textoDosMeses(comparacao.meses_comparados, f) })}
       />
       {comparacao.meses_com_dados < comparacao.meses_comparados.length && (
         <p className="-mt-2 mb-3 text-xs text-texto-suave">
@@ -147,6 +150,7 @@ function Comparacao({ comparacao, ano, totais }: { comparacao: ComparacaoAno; an
 }
 
 function Relatorio({ dados }: { dados: RelatorioAnual }) {
+  const f = useFormatos();
   const maiorCategoria = dados.categorias[0]?.percentagem ?? 0;
   return (
     <>
@@ -195,12 +199,12 @@ function Relatorio({ dados }: { dados: RelatorioAnual }) {
           <tbody className="tabular-nums">
             {dados.meses.map((m) => (
               <tr key={m.mes} className="border-b border-borda">
-                <th scope="row" className="py-1 text-left font-normal capitalize">{nomeDoMes(m.mes)}</th>
+                <th scope="row" className="py-1 text-left font-normal capitalize">{nomeDoMes(m.mes, f)}</th>
                 {m.com_dados ? (
                   <>
-                    <td className="py-1 text-right">{euros(m.entradas)}</td>
-                    <td className="py-1 text-right">{euros(m.saidas)}</td>
-                    <td className="py-1 text-right">{euros(m.saldo)}</td>
+                    <td className="py-1 text-right">{f.dinheiro(m.entradas)}</td>
+                    <td className="py-1 text-right">{f.dinheiro(m.saidas)}</td>
+                    <td className="py-1 text-right">{f.dinheiro(m.saldo)}</td>
                   </>
                 ) : (
                   <td colSpan={3} className="py-1 text-right text-texto-suave">
@@ -224,9 +228,9 @@ function Relatorio({ dados }: { dados: RelatorioAnual }) {
                 <li key={c.categoria} className="text-sm">
                   <div className="flex items-baseline gap-3">
                     <span className="min-w-0 flex-1 truncate capitalize text-texto">{c.etiqueta}</span>
-                    <span className="shrink-0 tabular-nums text-texto">{euros(c.total)}</span>
+                    <span className="shrink-0 tabular-nums text-texto">{f.dinheiro(c.total)}</span>
                     <span className="w-12 shrink-0 text-right text-xs tabular-nums text-texto-suave">
-                      {c.percentagem.toLocaleString("pt-PT")}%
+                      {f.numero(c.percentagem)}%
                     </span>
                   </div>
                   {/* A barra é relativa à maior categoria, para as pequenas ainda se verem. */}
@@ -268,10 +272,10 @@ function Relatorio({ dados }: { dados: RelatorioAnual }) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-texto print:whitespace-normal">{s.descricao}</p>
                   <p className="text-xs text-texto-suave">
-                    {diaCurto(s.data)} · <span className="capitalize">{s.etiqueta}</span>
+                    {diaCurto(s.data, f)} · <span className="capitalize">{s.etiqueta}</span>
                   </p>
                 </div>
-                <span className="shrink-0 font-semibold tabular-nums text-texto">{euros(s.valor)}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-texto">{f.dinheiro(s.valor)}</span>
               </li>
             ))}
           </ol>
@@ -291,13 +295,13 @@ function Relatorio({ dados }: { dados: RelatorioAnual }) {
                     <p className="truncate text-texto print:whitespace-normal">{r.descricao}</p>
                     <p className="text-xs text-texto-suave">
                       <span className="capitalize">{r.etiqueta}</span> ·{" "}
-                      {preencher(T.recorrentesPorMes, { valor: euros(r.valor_mensal) })} ·{" "}
+                      {preencher(T.recorrentesPorMes, { valor: f.dinheiro(r.valor_mensal) })} ·{" "}
                       {r.pagamentos_no_ano === 1
                         ? T.recorrentesUmPagamento
                         : preencher(T.recorrentesPagamentos, { n: r.pagamentos_no_ano })}
                     </p>
                   </div>
-                  <span className="shrink-0 font-semibold tabular-nums text-texto">{euros(r.total_no_ano)}</span>
+                  <span className="shrink-0 font-semibold tabular-nums text-texto">{f.dinheiro(r.total_no_ano)}</span>
                 </li>
               ))}
             </ul>
@@ -323,7 +327,7 @@ function Relatorio({ dados }: { dados: RelatorioAnual }) {
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="min-w-0 truncate font-medium text-texto">{o.nome}</span>
                     <span className="shrink-0 text-xs tabular-nums text-texto-suave">
-                      {o.percentagem.toLocaleString("pt-PT")}%
+                      {f.numero(o.percentagem)}%
                     </span>
                   </div>
                   <div
@@ -337,8 +341,8 @@ function Relatorio({ dados }: { dados: RelatorioAnual }) {
                     <div className="h-2 rounded-full bg-destaque" style={{ width: `${Math.min(o.percentagem, 100)}%` }} />
                   </div>
                   <p className="mt-1 text-xs text-texto-suave">
-                    {preencher(T.objetivosPoupado, { poupado: euros(o.valor_poupado), alvo: euros(o.valor_alvo) })} ·{" "}
-                    {preencher(T.objetivosPrazo, { data: dataPorExtenso(o.data_alvo) })}
+                    {preencher(T.objetivosPoupado, { poupado: f.dinheiro(o.valor_poupado), alvo: f.dinheiro(o.valor_alvo) })} ·{" "}
+                    {preencher(T.objetivosPrazo, { data: dataPorExtenso(o.data_alvo, f) })}
                   </p>
                 </li>
               ))}
@@ -364,6 +368,7 @@ type ResumoIA = { ano: number; texto?: string; erro?: string; semPedidos?: boole
 
 export default function PaginaRelatorio() {
   const router = useRouter();
+  const f = useFormatos();
   const demo = useSessaoDemo();
   const anoAtual = useSyncExternalStore(nadaParaOuvir, lerAnoAtual, semAnoNoServidor);
   const anos = anoAtual === null ? [] : Array.from({ length: ANOS_NO_SELETOR }, (_, i) => anoAtual - i);
@@ -372,7 +377,8 @@ export default function PaginaRelatorio() {
   const ano = anoEscolhido ?? anoAtual; // null só no pré-render
   const [tentativa, setTentativa] = useState(0); // "Tentar outra vez" volta a pedir o mesmo ano
   const [resultado, setResultado] = useState<Resultado | null>(null);
-  const [plano, setPlano] = useState<string | null>(null);
+  // O plano só decide o que se mostra (a API decide a sério: 402). Vem do ProvedorConta (layout da app).
+  const plano = useEstadoPlano()?.plano ?? null;
 
   const [aDescarregar, setADescarregar] = useState(false);
   const [csvErro, setCsvErro] = useState("");
@@ -417,14 +423,6 @@ export default function PaginaRelatorio() {
       cancelado = true;
     };
   }, [ano, tentativa, router]);
-
-  // O plano só decide o que se mostra (a API decide a sério: 402).
-  useEffect(() => {
-    if (!lerToken()) return;
-    pedirEstadoPlano()
-      .then((estado) => setPlano(estado.plano))
-      .catch(() => setPlano(null));
-  }, []);
 
   function mudarAno(novo: number) {
     setAno(novo);
@@ -600,11 +598,11 @@ export default function PaginaRelatorio() {
 
             {dados.ano_incompleto && (
               <div className="rounded-xl border border-l-4 border-borda border-l-amber-500 bg-cartao p-3 text-sm text-texto">
-                {dados.ano === anoAtual && <p>{preencher(T.anoAtual, { mes: mesLongo(dados.ate_mes) })}</p>}
+                {dados.ano === anoAtual && <p>{preencher(T.anoAtual, { mes: mesLongo(dados.ate_mes, f) })}</p>}
                 {dados.meses_sem_dados.length > 0 && (
                   <p>{preencher(T.mesesSemDados, {
                       // Os meses abreviados acabam em "." ("nov."): tira-se o do último para não ficar "nov..".
-                      meses: dados.meses_sem_dados.map(mesCurto).join(", ").replace(/\.$/, ""),
+                      meses: dados.meses_sem_dados.map((m) => mesCurto(m, f)).join(", ").replace(/\.$/, ""),
                     })}</p>
                 )}
               </div>

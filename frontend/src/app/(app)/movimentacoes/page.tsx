@@ -11,18 +11,18 @@ import {
   eBloqueadoNaDemo,
   apagarToken,
   pedirApi,
-  pedirEstadoPlano,
   SessaoExpirada,
   type ResultadoImportacao,
   type ResumoMensal,
   type Transacao,
 } from "@/lib/api";
+import { useEstadoPlano, useFormatos } from "@/lib/conta";
 import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
 import { mesAtual, preencher, temFuncoesPagas } from "@/lib/planos";
+import { TEXTOS_MOVIMENTACOES } from "@/lib/textosMovimentacoes";
 import { TEXTOS_APAGAR_MOVIMENTO, TEXTOS_CATEGORIZAR, TEXTOS_ENVIO_IA, TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
-import { euros, nomeMes } from "../dashboard/formatos";
 import BotaoCategorizar from "./BotaoCategorizar";
 import BotaoImportar from "./BotaoImportar";
 import DialogoApagar from "./DialogoApagar";
@@ -36,6 +36,7 @@ function diaMes(data: string) {
 
 export default function PaginaMovimentacoes() {
   const router = useRouter();
+  const f = useFormatos();
   const [meses, setMeses] = useState<string[]>([]);
   const [mes, setMes] = useState("");
   // Como no resumo: guarda-se o mês a que a lista pertence, para saber se ainda está a carregar.
@@ -57,7 +58,9 @@ export default function PaginaMovimentacoes() {
   // 402: o PDF é só dos planos pagos. Guarda a mensagem da API para o AvisoPlanoPago.
   const [soPlanosPagos, setSoPlanosPagos] = useState<string | null>(null);
   // Free: só importa CSV. Avisa antes de escolher o ficheiro. Se o /plano falhar, aceita os dois (a API decide).
-  const [soCsv, setSoCsv] = useState(false);
+  // O /plano vem do ProvedorConta (layout da app).
+  const estadoPlano = useEstadoPlano();
+  const soCsv = estadoPlano ? !temFuncoesPagas(estadoPlano.plano) : false;
   // Muda sempre que é criada uma movimentação, para a lista voltar a ser pedida à API.
   const [versao, setVersao] = useState(0);
   // Transações sem categoria em TODOS os meses: a lista só tem o mês escolhido, mas o
@@ -74,7 +77,7 @@ export default function PaginaMovimentacoes() {
       apagarToken();
       router.replace("/login");
     } else {
-      setErro("Não foi possível carregar as movimentações. Confirma que a API está a correr.");
+      setErro(TEXTOS_MOVIMENTACOES.erroCarregar);
     }
   }
 
@@ -88,9 +91,6 @@ export default function PaginaMovimentacoes() {
         setMes(lista[lista.length - 1]);
       })
       .catch(tratarErro);
-    pedirEstadoPlano()
-      .then((estado) => setSoCsv(!temFuncoesPagas(estado.plano)))
-      .catch(() => {}); // a sessão expirada já é tratada pelo pedido dos meses
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -114,7 +114,10 @@ export default function PaginaMovimentacoes() {
     setSoPlanosPagos(null);
     setAviso({
       tipo: "sucesso",
-      mensagem: `${resultado.importadas} importada(s), ${resultado.duplicadas} já existia(m).`,
+      mensagem: preencher(TEXTOS_MOVIMENTACOES.importadas, {
+        importadas: resultado.importadas,
+        duplicadas: resultado.duplicadas,
+      }),
       erros: [],
       nota: resultado.aviso,
     });
@@ -192,7 +195,7 @@ export default function PaginaMovimentacoes() {
       if (e instanceof SessaoExpirada) {
         tratarErro(e);
       } else {
-        setErro("Não foi possível guardar a categoria. Tenta outra vez.");
+        setErro(TEXTOS_MOVIMENTACOES.erroCategoria);
       }
     }
   }
@@ -202,19 +205,19 @@ export default function PaginaMovimentacoes() {
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-destaque">As tuas transações</p>
-            <h1 className="text-2xl font-semibold text-texto">Movimentações</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-destaque">{TEXTOS_MOVIMENTACOES.etiquetaTopo}</p>
+            <h1 className="text-2xl font-semibold text-texto">{TEXTOS_MOVIMENTACOES.titulo}</h1>
           </div>
           <div className="flex gap-2">
             <select
               value={mes}
               onChange={(e) => setMes(e.target.value)}
-              aria-label="Mês"
+              aria-label={TEXTOS_MOVIMENTACOES.rotuloMes}
               className="rounded-lg border border-borda bg-cartao px-3 py-2 text-sm text-texto"
             >
               {meses.map((m) => (
                 <option key={m} value={m}>
-                  {nomeMes(m)}
+                  {f.mesAno(m)}
                 </option>
               ))}
             </select>
@@ -255,7 +258,7 @@ export default function PaginaMovimentacoes() {
               aria-describedby={demo ? ID_NOTA_DEMO : undefined}
               className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
-              + Nova movimentação
+              {TEXTOS_MOVIMENTACOES.novaMovimentacao}
             </button>
           </div>
         </header>
@@ -302,7 +305,7 @@ export default function PaginaMovimentacoes() {
                 <p className="font-medium">{aviso.mensagem}</p>
                 {aviso.nota && <p className="mt-1">{aviso.nota}</p>}
               </div>
-              <button type="button" onClick={() => setAviso(null)} aria-label="Fechar aviso" className="opacity-70 hover:opacity-100">
+              <button type="button" onClick={() => setAviso(null)} aria-label={TEXTOS_MOVIMENTACOES.fecharAviso} className="opacity-70 hover:opacity-100">
                 ✕
               </button>
             </div>
@@ -335,9 +338,9 @@ export default function PaginaMovimentacoes() {
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
 
         <section className="overflow-hidden rounded-xl border border-borda bg-cartao">
-          {aCarregar && <p className="p-6 text-sm text-texto-suave">A carregar...</p>}
+          {aCarregar && <p className="p-6 text-sm text-texto-suave">{TEXTOS_MOVIMENTACOES.aCarregar}</p>}
           {!aCarregar && transacoes.length === 0 && (
-            <p className="p-6 text-sm text-texto-suave">Sem movimentações neste mês.</p>
+            <p className="p-6 text-sm text-texto-suave">{TEXTOS_MOVIMENTACOES.vazio}</p>
           )}
 
           {transacoes.length > 0 && (
@@ -347,13 +350,13 @@ export default function PaginaMovimentacoes() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-borda text-left text-xs text-texto-suave">
-                    <th className="px-4 py-3 font-medium">Data</th>
-                    <th className="px-4 py-3 font-medium">Descrição</th>
-                    <th className="px-4 py-3 font-medium">Categoria</th>
-                    <th className="px-4 py-3 font-medium">Método</th>
-                    <th className="px-4 py-3 text-right font-medium">Valor</th>
+                    <th className="px-4 py-3 font-medium">{TEXTOS_MOVIMENTACOES.colunaData}</th>
+                    <th className="px-4 py-3 font-medium">{TEXTOS_MOVIMENTACOES.colunaDescricao}</th>
+                    <th className="px-4 py-3 font-medium">{TEXTOS_MOVIMENTACOES.colunaCategoria}</th>
+                    <th className="px-4 py-3 font-medium">{TEXTOS_MOVIMENTACOES.colunaMetodo}</th>
+                    <th className="px-4 py-3 text-right font-medium">{TEXTOS_MOVIMENTACOES.colunaValor}</th>
                     <th className="px-2 py-3">
-                      <span className="sr-only">Ações</span>
+                      <span className="sr-only">{TEXTOS_MOVIMENTACOES.colunaAcoes}</span>
                     </th>
                   </tr>
                 </thead>
@@ -369,12 +372,12 @@ export default function PaginaMovimentacoes() {
                           onChange={(e) => mudarCategoria(t, e.target.value)}
                           disabled={demo}
                           aria-describedby={demo ? ID_NOTA_DEMO : undefined}
-                          aria-label={`Categoria de ${t.descricao}`}
+                          aria-label={preencher(TEXTOS_MOVIMENTACOES.rotuloCategoria, { descricao: t.descricao })}
                           className="cursor-pointer rounded-full disabled:cursor-default disabled:hover:border-transparent border border-transparent bg-fundo px-2.5 py-1 text-xs capitalize text-texto-suave hover:border-borda"
                         >
                           {t.categoria === null && (
                             <option value="" disabled>
-                              sem categoria
+                              {TEXTOS_MOVIMENTACOES.semCategoria}
                             </option>
                           )}
                           {CATEGORIAS.map((c) => (
@@ -394,7 +397,7 @@ export default function PaginaMovimentacoes() {
                         }`}
                       >
                         {t.valor > 0 ? "+" : ""}
-                        {euros(t.valor)}
+                        {f.dinheiro(t.valor)}
                       </td>
                       <td className="px-2 py-1 text-right">
                         <button
@@ -404,7 +407,7 @@ export default function PaginaMovimentacoes() {
                           aria-label={preencher(TEXTOS_APAGAR_MOVIMENTO.rotuloBotao, {
                             descricao: t.descricao,
                             data: diaMes(t.data),
-                            valor: euros(t.valor),
+                            valor: f.dinheiro(t.valor),
                           })}
                           aria-describedby={demo ? ID_NOTA_DEMO : undefined}
                           className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2 text-xs font-medium text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent dark:text-red-300 dark:hover:bg-red-950/40"

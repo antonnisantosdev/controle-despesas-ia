@@ -1,16 +1,12 @@
+import type { Formatos } from "@/lib/formatos";
 import { SUFIXO_UNIDADE, TEXTOS_PRECOS_LOJAS as T } from "@/lib/textosPrecosLojas";
 import { preencher } from "@/lib/planos";
 
-import { euros } from "../dashboard/formatos";
+// As datas ("2026-10-28" -> "28/10/2026") formatam-se com useFormatos().data.
 
-// "2026-10-28" -> "28/10/2026"
-export function dataCurta(data: string) {
-  return new Date(`${data}T00:00:00`).toLocaleDateString("pt-PT");
-}
-
-// 1.09 + "kg" -> "1,09 €/kg"
-export function precoUnitario(valor: number, unidade: string) {
-  return `${euros(valor)}${SUFIXO_UNIDADE[unidade] ?? ""}`;
+// 1.09 + "kg" -> "1,09 €/kg" (ou "R$ 1,09/kg"). f: os formatos da conta (useFormatos()).
+export function precoUnitario(valor: number, unidade: string, f: Formatos) {
+  return `${f.dinheiro(valor)}${SUFIXO_UNIDADE[unidade] ?? ""}`;
 }
 
 export function textoLojas(n: number) {

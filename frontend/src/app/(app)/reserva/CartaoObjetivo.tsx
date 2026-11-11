@@ -5,9 +5,11 @@ import { useState, type FormEvent } from "react";
 import { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import AvisoLimite from "@/components/AvisoLimite";
 import { eBloqueadoNaDemo, eLimiteDiario, ErroApi, pedirApi, SessaoExpirada, type Objetivo, type PlanoPoupanca } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
+import type { Formatos } from "@/lib/formatos";
+import { preencher } from "@/lib/planos";
+import { TEXTOS_OBJETIVO } from "@/lib/textosReserva";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
-
-import { euros } from "../dashboard/formatos";
 
 // Quanto do objetivo já foi poupado, de 0 a 100. É este número que define a largura da barra.
 function percentagemPoupada(valorPoupado: number, valorAlvo: number): number {
@@ -16,9 +18,9 @@ function percentagemPoupada(valorPoupado: number, valorAlvo: number): number {
   return 0;
 }
 
-// "2027-07-01" -> "julho de 2027"
-function mesDoPrazo(data: string) {
-  return new Date(`${data}T00:00:00`).toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+// "2027-07-01" -> "julho de 2027" (f: os formatos da conta, useFormatos())
+function mesDoPrazo(data: string, f: Formatos) {
+  return f.data(data, { month: "long", year: "numeric" });
 }
 
 type Props = {
@@ -38,6 +40,7 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
   const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite de pedidos à IA
   // Na demo (só leitura): juntar, apagar e o plano da IA ficam desligados; a API recusa-os na mesma (423).
   const demo = useSessaoDemo();
+  const f = useFormatos();
   const descricaoDemo = demo ? ID_NOTA_DEMO : undefined; // aponta para a explicação (NotaDemo)
 
   const percentagem = percentagemPoupada(objetivo.valor_poupado, objetivo.valor_alvo);
@@ -55,7 +58,7 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
     evento.preventDefault();
     const numero = Number(valor.replace(",", "."));
     if (!(numero > 0)) {
-      setErro("Escreve um valor maior do que zero.");
+      setErro(TEXTOS_OBJETIVO.erroValor);
       return;
     }
 
@@ -68,7 +71,7 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
       setAJuntar(false);
       setPlano(null); // o plano antigo já não conta com este dinheiro
     } catch (e) {
-      tratarErro(e, "Não foi possível atualizar o valor poupado.");
+      tratarErro(e, TEXTOS_OBJETIVO.erroAtualizar);
     }
   }
 
@@ -79,7 +82,7 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
     try {
       setPlano(await pedirApi<PlanoPoupanca>(`/objetivos/${objetivo.id}/plano`, {}));
     } catch (e) {
-      tratarErro(e, "Não foi possível criar o plano. Tenta outra vez.");
+      tratarErro(e, TEXTOS_OBJETIVO.erroPlano);
     } finally {
       setAPlanear(false);
     }
@@ -92,7 +95,7 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
       onApagado(objetivo.id);
     } catch (e) {
       setAConfirmar(false);
-      tratarErro(e, "Não foi possível apagar o objetivo.");
+      tratarErro(e, TEXTOS_OBJETIVO.erroApagar);
     }
   }
 
@@ -104,16 +107,17 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="font-medium text-texto">{objetivo.nome}</h2>
-          <p className="text-xs text-texto-suave">Até {mesDoPrazo(objetivo.data_alvo)}</p>
+          <p className="text-xs text-texto-suave">{preencher(TEXTOS_OBJETIVO.ate, { mes: mesDoPrazo(objetivo.data_alvo, f) })}</p>
         </div>
         <p className="text-sm text-texto-suave">
-          <span className="font-semibold text-texto">{euros(objetivo.valor_poupado)}</span> de {euros(objetivo.valor_alvo)}
+          <span className="font-semibold text-texto">{f.dinheiro(objetivo.valor_poupado)}</span>
+          {preencher(TEXTOS_OBJETIVO.de, { alvo: f.dinheiro(objetivo.valor_alvo) })}
         </p>
       </div>
 
       <div
         role="progressbar"
-        aria-label={`Progresso de ${objetivo.nome}`}
+        aria-label={preencher(TEXTOS_OBJETIVO.rotuloProgresso, { nome: objetivo.nome })}
         aria-valuenow={percentagem}
         aria-valuemin={0}
         aria-valuemax={100}
@@ -122,23 +126,23 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
         {/* A largura muda com os dados, por isso vem em style e não numa classe do Tailwind. */}
         <div className="h-full rounded-full bg-destaque" style={{ width: `${percentagem}%` }} />
       </div>
-      <p className="text-xs text-texto-suave">{percentagem}% do objetivo</p>
+      <p className="text-xs text-texto-suave">{preencher(TEXTOS_OBJETIVO.percentagem, { percentagem })}</p>
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => setAJuntar(!aJuntar)} disabled={demo} aria-describedby={descricaoDemo} className={estiloBotao}>
-          + Juntei dinheiro
+          {TEXTOS_OBJETIVO.juntei}
         </button>
         <button type="button" onClick={pedirPlano} disabled={aPlanear || demo} aria-describedby={descricaoDemo} className={estiloBotao}>
-          {aPlanear ? "A IA está a pensar..." : "✨ Plano de poupança"}
+          {aPlanear ? TEXTOS_OBJETIVO.aPlanear : TEXTOS_OBJETIVO.planoPoupanca}
         </button>
         {aConfirmar ? (
           <span className="ml-auto flex items-center gap-2 text-sm text-texto-suave">
-            Apagar?
+            {TEXTOS_OBJETIVO.apagarPergunta}
             <button type="button" onClick={apagar} className="font-medium text-red-600 dark:text-red-400">
-              Sim
+              {TEXTOS_OBJETIVO.sim}
             </button>
             <button type="button" onClick={() => setAConfirmar(false)} className="hover:text-texto">
-              Não
+              {TEXTOS_OBJETIVO.nao}
             </button>
           </span>
         ) : (
@@ -149,7 +153,7 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
             aria-describedby={descricaoDemo}
             className="ml-auto text-sm text-texto-suave hover:text-texto disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Apagar
+            {TEXTOS_OBJETIVO.apagar}
           </button>
         )}
       </div>
@@ -160,17 +164,17 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
             required
             autoFocus
             inputMode="decimal"
-            aria-label="Valor que juntaste, em euros"
+            aria-label={preencher(TEXTOS_OBJETIVO.rotuloValor, { moeda: f.nomeMoeda })}
             value={valor}
             onChange={(e) => setValor(e.target.value)}
-            placeholder="0,00 €"
+            placeholder={preencher(TEXTOS_OBJETIVO.marcadorValor, { zero: f.comSimbolo("0,00") })}
             className="w-32 rounded-md border border-borda bg-cartao px-3 py-1.5 text-sm text-texto"
           />
           <button
             type="submit"
             className="rounded-md bg-destaque px-4 py-1.5 text-sm font-medium text-white hover:bg-destaque-hover"
           >
-            Adicionar
+            {TEXTOS_OBJETIVO.adicionar}
           </button>
         </form>
       )}
@@ -181,15 +185,16 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
       {plano && (
         <div className="space-y-2 rounded-lg bg-fundo p-3 text-sm">
           <p className={`font-medium ${plano.viavel ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>
-            {plano.viavel ? "Consegues chegar lá" : "Assim não chegas lá"}
+            {plano.viavel ? TEXTOS_OBJETIVO.viavel : TEXTOS_OBJETIVO.inviavel}
           </p>
           <p className="text-texto">{plano.explicacao}</p>
           {plano.cortes.length > 0 && (
             <ul className="space-y-1 border-t border-borda pt-2">
               {plano.cortes.map((corte) => (
                 <li key={corte.categoria} className="text-texto-suave">
-                  <span className="font-medium capitalize text-texto">{corte.categoria}</span>: menos{" "}
-                  {euros(corte.valor_mensal)} por mês. {corte.motivo}
+                  <span className="font-medium capitalize text-texto">{corte.categoria}</span>
+                  {preencher(TEXTOS_OBJETIVO.corte, { valor: f.dinheiro(corte.valor_mensal) })}
+                  {corte.motivo}
                 </li>
               ))}
             </ul>

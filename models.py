@@ -1,10 +1,11 @@
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, EmailStr, Field, StrictBool, StringConstraints, field_validator, model_validator
+from pydantic import AfterValidator, BaseModel, EmailStr, Field, StrictBool, StringConstraints, field_validator, model_validator
 
 from auth import FORMATO_CODE_VERIFIER, FORMATO_CODIGO_GOOGLE
 from limites import MAX_CARACTERES_HISTORICO, MAX_CARACTERES_PERGUNTA_HISTORICO, MAX_CARACTERES_RESPOSTA_HISTORICO
+from perfil import Perfil, perfil_inicial
 
 # As únicas categorias permitidas, tanto para a IA como para as correções do utilizador.
 # Com Literal, o Pydantic rejeita qualquer outra palavra.
@@ -150,6 +151,55 @@ class ComOrigem(BaseModel):
         return normalizar_origem(valor)
 
 
+# --- Perfil da conta (sql/020): país onde vive, países dos cartões e contas, moeda principal ---
+Pais = Literal["PT", "BR"]
+Moeda = Literal["EUR", "BRL"]
+# 1 ou 2 países, sem repetidos (validado em paises_sem_repetidos).
+def paises_sem_repetidos(paises: list[str]) -> list[str]:
+    if len(set(paises)) != len(paises):
+        raise ValueError("países repetidos")
+    return paises
+
+
+PaisesBancos = Annotated[list[Pais], Field(min_length=1, max_length=2), AfterValidator(paises_sem_repetidos)]
+
+
+class ComPerfil(ComOrigem):
+    """Base do registo e do 1.º login com o Google: o perfil escolhido no registo (tudo opcional).
+
+    Sem nenhum dos três, a conta fica com o de sempre (PT, {PT}, EUR: DEFAULT da sql/020).
+    Com algum, o perfil completo resolve-se já aqui (perfil.perfil_inicial): uma moeda que não é
+    de um dos países das contas dá 422. Só se grava em conta acabada de criar (ver main.py).
+    """
+
+    pais: Pais | None = None
+    paises_bancos: PaisesBancos | None = None
+    moeda: Moeda | None = None
+
+    @model_validator(mode="after")
+    def moeda_coerente(self) -> "ComPerfil":
+        perfil_inicial(self.pais, self.paises_bancos, self.moeda)  # ValueError se for incoerente
+        return self
+
+    def perfil_pedido(self) -> Perfil | None:
+        """O perfil completo a gravar, ou None se o pedido não trouxe nenhum dos três campos."""
+        return perfil_inicial(self.pais, self.paises_bancos, self.moeda)
+
+
+# Corpo do PUT /conta/perfil: muda o que vier (o resto fica). A moeda só muda com a conta sem dados (409).
+class PerfilConta(BaseModel):
+    pais: Pais | None = None
+    paises_bancos: PaisesBancos | None = None
+    moeda: Moeda | None = None
+
+
+# Resposta do PUT /conta/perfil: o perfil como ficou.
+class PerfilGuardado(BaseModel):
+    pais: Pais
+    paises_bancos: list[Pais]
+    moeda: Moeda
+
+
 # Tetos de tamanho antes de falar com o Supabase (e de calcular o HMAC do limite por email): acima, 422.
 # 254 é o máximo de um endereço de email (RFC 5321); 256 chega para qualquer palavra-passe real.
 class Credenciais(BaseModel):
@@ -160,7 +210,7 @@ class Credenciais(BaseModel):
 # O que a página /login/google manda no regresso do Google (PKCE): o código que o Supabase pôs no endereço
 # e o segredo que ficou guardado no browser. Formato e tamanho validados antes de falar com o Supabase.
 # origem: o canal do utm_source (só se guarda se a conta for nova, ver main.py).
-class TrocaGoogle(ComOrigem):
+class TrocaGoogle(ComPerfil):
     code: Annotated[str, StringConstraints(pattern=FORMATO_CODIGO_GOOGLE)]
     code_verifier: Annotated[str, StringConstraints(pattern=FORMATO_CODE_VERIFIER)]
 
@@ -434,6 +484,11 @@ class EstadoPlano(BaseModel):
     # Mensagens anteriores que o chat recebe (0 no Free) e meses que o chat vê (None = sem limite).
     memoria_mensagens: int = 0
     meses_historico: int | None = None
+    # Perfil da conta (sql/020): onde vive, de que países são os cartões e contas, e a moeda principal.
+    # Com valores por omissão (os de todas as contas até aqui), para o frontend atual não partir.
+    pais: Pais = "PT"
+    paises_bancos: list[Pais] = Field(default_factory=lambda: ["PT"])
+    moeda: Moeda = "EUR"
 
 
 # Um plano à venda e o seu limite de pedidos à IA (GET /planos, público).
@@ -464,7 +519,7 @@ class Recorrente(BaseModel):
 
 # Registo público (POST /registo). O EmailStr recusa emails mal escritos antes de chegarem ao Supabase.
 # 72 é o máximo que o Supabase aceita numa palavra-passe.
-class NovaConta(ComOrigem):
+class NovaConta(ComPerfil):
     email: EmailStr
     password: str = Field(min_length=8, max_length=72)
 

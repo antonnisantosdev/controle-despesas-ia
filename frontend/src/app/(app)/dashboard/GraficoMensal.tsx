@@ -3,8 +3,10 @@
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import type { ResumoMensal } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
+import { TEXTOS_GRAFICOS } from "@/lib/textosDashboard";
 
-import { ESTILO_TOOLTIP, euros, nomeMes } from "./formatos";
+import { ESTILO_TOOLTIP } from "./formatos";
 
 const COR_RECEITAS = "var(--cor-receitas)";
 const COR_DESPESAS = "var(--cor-despesas)";
@@ -12,6 +14,7 @@ const COR_EIXO = "var(--texto-suave)";
 
 // Evolução das receitas e despesas: duas linhas com uma área esbatida por baixo.
 export default function GraficoMensal({ dados }: { dados: ResumoMensal[] }) {
+  const f = useFormatos();
   return (
     <ResponsiveContainer width="100%" height={260}>
       <AreaChart data={dados} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
@@ -27,9 +30,10 @@ export default function GraficoMensal({ dados }: { dados: ResumoMensal[] }) {
           </linearGradient>
         </defs>
         <CartesianGrid vertical={false} stroke="var(--grelha)" strokeDasharray="3 3" />
-        <XAxis dataKey="mes" tickFormatter={nomeMes} axisLine={false} tickLine={false} tick={{ fill: COR_EIXO, fontSize: 12 }} />
+        <XAxis dataKey="mes" tickFormatter={(mes) => f.mesAno(String(mes))} axisLine={false} tickLine={false} tick={{ fill: COR_EIXO, fontSize: 12 }} />
         <YAxis
-          tickFormatter={(v) => `${v} €`}
+          // O valor tal como o Recharts o dá (em PT, "1500 €" como sempre); nos outros países, à maneira local.
+          tickFormatter={(v) => f.comSimbolo(f.pais === "PT" ? String(v) : f.numero(Number(v)))}
           axisLine={false}
           tickLine={false}
           tick={{ fill: COR_EIXO, fontSize: 12 }}
@@ -37,14 +41,14 @@ export default function GraficoMensal({ dados }: { dados: ResumoMensal[] }) {
         />
         <Tooltip
           contentStyle={ESTILO_TOOLTIP}
-          formatter={(valor) => euros(Number(valor))}
-          labelFormatter={(mes) => nomeMes(String(mes))}
+          formatter={(valor) => f.dinheiro(Number(valor))}
+          labelFormatter={(mes) => f.mesAno(String(mes))}
         />
         <Legend iconType="circle" formatter={(nome) => <span style={{ color: COR_EIXO, fontSize: 12 }}>{nome}</span>} />
         <Area
           type="monotone"
           dataKey="receitas"
-          name="Receitas"
+          name={TEXTOS_GRAFICOS.receitas}
           stroke={COR_RECEITAS}
           strokeWidth={2}
           fill="url(#degradeReceitas)"
@@ -54,7 +58,7 @@ export default function GraficoMensal({ dados }: { dados: ResumoMensal[] }) {
         <Area
           type="monotone"
           dataKey="despesas"
-          name="Despesas"
+          name={TEXTOS_GRAFICOS.despesas}
           stroke={COR_DESPESAS}
           strokeWidth={2}
           fill="url(#degradeDespesas)"

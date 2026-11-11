@@ -23,10 +23,15 @@ def linha_do_item(item: ItemCompra, compra_id: int) -> dict:
     }
 
 
-def gravar_compra(user_id: str, nova: NovaCompra) -> Compra:
-    """Grava 3 coisas, por esta ordem: a transação (com o total), a compra e os produtos."""
+def gravar_compra(user_id: str, nova: NovaCompra, moeda: str | None = None) -> Compra:
+    """Grava 3 coisas, por esta ordem: a transação (com o total), a compra e os produtos.
+
+    moeda: a moeda principal da conta (limites.moeda_da_conta), nunca a do pedido. None antes da sql/020
+    (a coluna ainda não existe: não se envia). Depois da 020, um gatilho põe a mesma moeda de qualquer forma.
+    """
+    com_moeda = {"moeda": moeda} if moeda else {}
     # 1. A transação: é ela que entra no dashboard, no Planeamento e no chat, como qualquer outra despesa.
-    transacao = {
+    transacao = com_moeda | {
         "data": nova.data.isoformat(),
         "descricao": f"Talão: {nova.loja}",
         "valor": -nova.total,  # é uma despesa: na tabela, as despesas são negativas
@@ -41,7 +46,8 @@ def gravar_compra(user_id: str, nova: NovaCompra) -> Compra:
         compra = (
             supabase.table("compras")
             .insert(
-                {
+                com_moeda
+                | {
                     "user_id": user_id,
                     "transacao_id": transacao_id,
                     "loja": nova.loja,

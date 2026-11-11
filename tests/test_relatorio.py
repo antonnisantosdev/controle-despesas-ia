@@ -166,7 +166,7 @@ def leituras(cliente, monkeypatch):
 
     monkeypatch.setattr(relatorio, "movimentos_entre", movimentos_entre)
     monkeypatch.setattr(relatorio, "listar_objetivos", lambda user_id: pedidos.append((user_id, "objetivos")) or [])
-    monkeypatch.setattr(main, "hoje_em_lisboa", lambda: HOJE)
+    monkeypatch.setattr(main, "hoje_do_utilizador", lambda user_id: HOJE)
     return pedidos
 
 
@@ -221,7 +221,7 @@ def test_a_consulta_filtra_pelo_user_id(cliente, monkeypatch):
     falsa = ConsultaQueGuardaFiltros()
     monkeypatch.setattr(consultas, "supabase", falsa)
     monkeypatch.setattr(relatorio, "listar_objetivos", lambda user_id: [])
-    monkeypatch.setattr(main, "hoje_em_lisboa", lambda: HOJE)
+    monkeypatch.setattr(main, "hoje_do_utilizador", lambda user_id: HOJE)
 
     resposta = cliente.get("/relatorio?ano=2025")
 
@@ -340,7 +340,7 @@ def test_resumo_ia_sem_movimentos_nao_gasta_pedido(cliente, limite, ia_imitada, 
     limite.plano = "completo"
     monkeypatch.setattr(relatorio, "movimentos_entre", lambda *args: [])
     monkeypatch.setattr(relatorio, "listar_objetivos", lambda user_id: [])
-    monkeypatch.setattr(main, "hoje_em_lisboa", lambda: HOJE)
+    monkeypatch.setattr(main, "hoje_do_utilizador", lambda user_id: HOJE)
 
     resposta = cliente.post("/relatorio/resumo-ia?ano=2025")
 

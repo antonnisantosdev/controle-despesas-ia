@@ -371,6 +371,46 @@ LIMITE_LOGIN_POR_EMAIL = LimiteDeFalhasPorEmail(
     MENSAGEM_MUITAS_FALHAS_NA_CONTA,
 )
 
+# --- Limite por conta no PUT /conta/perfil (mudar país, países das contas e moeda) ---
+
+# Cada pedido lê a assinatura e chama a função atualizar_perfil_conta (que prende a linha da conta e conta
+# os dados em 4 tabelas): sem teto, um script com uma conta válida martelava a base de dados.
+# Conta por user_id (vem do token, nunca do pedido), na memória do servidor, como os limites por IP.
+# Conta os pedidos que chegam à rota: já com sessão válida, fora da demo (423 antes) e com o corpo válido
+# (um corpo inválido é recusado pelo Pydantic, sem tocar na base de dados). Os 409, 422 da moeda e 503
+# também contam: cada um destes já leu a base de dados.
+PERFIL_POR_CONTA = 10
+PERFIL_JANELA_SEGUNDOS = HORA
+# Proposta, por aprovar pelo copywriter.
+MENSAGEM_MUITAS_MUDANCAS_DE_PERFIL = "Mudaste as definições muitas vezes. Tenta daqui a uma hora."
+
+# Interruptor de emergência: False desliga este limite (não depende do X-Forwarded-For, por isso é à parte
+# do LIMITES_PUBLICOS_LIGADOS).
+LIMITE_PERFIL_LIGADO = True
+
+# Com o teto cheio esquece a conta mais antiga: muitas contas a mudar o perfil ao mesmo tempo nunca
+# bloqueiam as definições de quem não abusou.
+LIMITE_PERFIL = LimitePorIP(
+    PERFIL_POR_CONTA,
+    PERFIL_JANELA_SEGUNDOS,
+    MENSAGEM_MUITAS_MUDANCAS_DE_PERFIL,
+    chave=_a_propria_chave,
+    esquecer_ao_encher=True,
+)
+
+
+def registar_mudanca_de_perfil(user_id: str) -> None:
+    """Conta um pedido de mudança de perfil desta conta, ou responde 429 acima de PERFIL_POR_CONTA por hora."""
+    if not LIMITE_PERFIL_LIGADO:
+        return
+    LIMITE_PERFIL.registar(str(user_id))
+
+
+def limpar_limite_do_perfil() -> None:
+    """Esquece os contadores do PUT /conta/perfil (para os testes)."""
+    LIMITE_PERFIL.limpar()
+
+
 LIMITES_DAS_ROTAS_PUBLICAS = (
     LIMITE_LOGIN,
     LIMITE_REGISTO,

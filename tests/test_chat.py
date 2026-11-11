@@ -1,5 +1,6 @@
 """O chat: memória da sessão cortada pelo plano, orçamento de saída da pergunta, voltas e cache."""
 
+from datetime import date
 from types import SimpleNamespace
 
 import pytest
@@ -363,8 +364,8 @@ def conversa_falsa(monkeypatch):
     """Substitui o conversar() do main e guarda com que argumentos foi chamado."""
     chamadas = []
 
-    def conversar(pergunta, ferramentas, executar, user_id=None, config=None, historico=None):
-        chamadas.append({"pergunta": pergunta, "config": config, "historico": historico, "executar": executar})
+    def conversar(pergunta, ferramentas, executar, user_id=None, config=None, historico=None, hoje=None):
+        chamadas.append({"pergunta": pergunta, "config": config, "historico": historico, "executar": executar, "hoje": hoje})
         return "resposta de teste"
 
     monkeypatch.setattr(main, "conversar", conversar)
@@ -422,11 +423,15 @@ def test_as_ferramentas_recebem_o_user_id_do_token_e_o_plano(cliente, conversa_f
     limite.plano = "completo"
     recebidos = []
     monkeypatch.setattr(main, "executar_ferramenta", lambda *args: recebidos.append(args) or "[]")
+    # O dia do país onde o utilizador vive (aqui fixo): vai para as ferramentas e para as instruções da IA.
+    hoje = date(2026, 11, 30)
+    monkeypatch.setattr(main, "hoje_do_utilizador", lambda user_id: hoje)
 
     cliente.post("/chat", json={"pergunta": "?"})
     conversa_falsa[0]["executar"]("gastos_por_categoria", {"mes": "2026-11"})
 
-    assert recebidos == [("gastos_por_categoria", {"mes": "2026-11"}, "utilizador-teste", "completo")]
+    assert recebidos == [("gastos_por_categoria", {"mes": "2026-11"}, "utilizador-teste", "completo", hoje)]
+    assert conversa_falsa[0]["hoje"] == hoje
 
 
 @pytest.mark.parametrize("pergunta", ["", "   ", "\n\t"])
@@ -448,11 +453,11 @@ def test_plano_pago_terminado_com_historico_manda_0_mensagens(cliente, limite, c
     # O Completo acabou ontem (hoje é 9 de novembro): conta como Free, e o Free não tem memória.
     from datetime import date
 
-    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: ("completo", date(2026, 11, 8)))
+    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: limites.Assinatura("completo", date(2026, 11, 8)))
     monkeypatch.setattr(
         limites,
         "plano_do_utilizador",
-        lambda user_id: limites.plano_efetivo(*limites.assinatura_do_utilizador(user_id), limites.hoje_em_lisboa()),
+        lambda user_id: limites.plano_efetivo("completo", date(2026, 11, 8), limites.hoje_em_lisboa()),
     )
     falso = cliente_falso([texto("Gastaste 10,00 €.")])
     corpo = {"pergunta": "E em outubro?", "historico": [h.model_dump() for h in historico(4)]}

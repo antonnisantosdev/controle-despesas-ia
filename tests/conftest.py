@@ -115,10 +115,13 @@ class Limite:
 @pytest.fixture(autouse=True)
 def limites_por_ip_limpos():
     """Cada teste começa com os contadores por IP do login e do registo a zero (todos os pedidos
-    dos testes vêm do mesmo IP, e os contadores ficam na memória entre testes)."""
+    dos testes vêm do mesmo IP, e os contadores ficam na memória entre testes), e com o limite
+    do PUT /conta/perfil a zero (todos os testes usam a mesma conta)."""
     limite_ip.limpar_limites_das_rotas_publicas()
+    limite_ip.limpar_limite_do_perfil()
     yield
     limite_ip.limpar_limites_das_rotas_publicas()
+    limite_ip.limpar_limite_do_perfil()
 
 
 @pytest.fixture(autouse=True)
@@ -178,6 +181,10 @@ def cliente(base_dados, limite, monkeypatch):
     monkeypatch.setattr(resumo, "supabase", SemTabelaResumos())
     resumo.RESUMOS_EM_MEMORIA.clear()
     recorrentes._CACHE.clear()  # a cache dos pagamentos que se repetem não passa de um teste para outro
+    # Por omissão a conta é PT (sql/020): hoje em Lisboa e moeda EUR, sem ler a tabela assinaturas.
+    # O test_perfil.py testa as contas BR.
+    monkeypatch.setattr(main, "hoje_do_utilizador", lambda user_id: limites.hoje_em_lisboa())
+    monkeypatch.setattr(main, "moeda_da_conta", lambda user_id: "EUR")
     yield TestClient(main.app)
     main.app.dependency_overrides.clear()
 

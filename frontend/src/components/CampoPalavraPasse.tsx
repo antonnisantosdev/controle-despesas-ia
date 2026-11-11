@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { TEXTOS_PALAVRA_PASSE } from "@/lib/textosComuns";
+
 // Campo de palavra-passe com um botão (olho) para mostrar ou esconder o que se escreveu.
 // Fica dentro do <label> da página: o input é o primeiro controlo, por isso é ele que o rótulo nomeia.
 type Props = {
@@ -28,7 +30,7 @@ export default function CampoPalavraPasse({ value, onChange, autoComplete = "cur
       <button
         type="button"
         onClick={() => setVisivel((v) => !v)}
-        aria-label={visivel ? "Esconder a palavra-passe" : "Mostrar a palavra-passe"}
+        aria-label={visivel ? TEXTOS_PALAVRA_PASSE.esconder : TEXTOS_PALAVRA_PASSE.mostrar}
         aria-pressed={visivel}
         className="absolute inset-y-0 right-0 mt-1 flex w-11 items-center justify-center rounded-r-md text-texto-suave hover:text-texto focus-visible:outline focus-visible:outline-2 focus-visible:outline-destaque"
       >

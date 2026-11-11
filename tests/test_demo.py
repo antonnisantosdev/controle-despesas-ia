@@ -469,6 +469,7 @@ ROTAS_BLOQUEADAS_NA_DEMO = {
     ("PATCH", "/transacoes/{transacao_id}"),
     ("DELETE", "/transacoes/{transacao_id}"),
     ("DELETE", "/conta"),
+    ("PUT", "/conta/perfil"),
     ("POST", "/transacoes/categorizar"),
     ("POST", "/transacoes/importar"),
     ("PUT", "/orcamentos/{categoria}"),
@@ -547,6 +548,19 @@ def test_rotas_fora_da_lista_dao_423_a_demo(base, api, monkeypatch, metodo, cami
 
     assert resposta.status_code == 423
     assert resposta.json() == {"detail": demo.MENSAGEM_BLOQUEIO_DEMO}
+
+
+def test_a_demo_leva_sempre_423_no_perfil_e_nao_gasta_o_limite_do_perfil(base, api, monkeypatch):
+    # O 423 vem do token (antes da rota): a demo nunca chega ao limite de 10 por hora, nem o gasta.
+    contados = []
+    monkeypatch.setattr(main, "registar_mudanca_de_perfil", contados.append)
+
+    respostas = [
+        api.put("/conta/perfil", json={"pais": "BR"}, headers=cabecalho(token_demo())).status_code for _ in range(12)
+    ]
+
+    assert respostas == [423] * 12
+    assert contados == []
 
 
 @pytest.mark.parametrize(("metodo", "caminho"), sorted(demo.PERMISSOES_DEMO))

@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 
-import { pedirEstadoPlano, type EstadoPlano } from "@/lib/api";
+import { useEstadoPlano } from "@/lib/conta";
 import { avisoCurtoDeQuota, nomeDoPlano, preencher } from "@/lib/planos";
+import { TEXTOS_CARTAO_PLANO } from "@/lib/textosComuns";
 import { TEXTOS_DEMO } from "@/lib/textosDemo";
 import { TEXTOS_MEU_PLANO } from "@/lib/textosPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
@@ -27,16 +27,9 @@ export function corDaBarra(usadas: number, limite: number): string {
 export default function CartaoPlano() {
   const pagina = usePathname();
   const demo = useSessaoDemo();
-  const [estado, setEstado] = useState<EstadoPlano | null>(null);
-
-  // O menu não se desmonta ao mudar de página, por isso volta a pedir o estado a cada página nova:
-  // assim o número acompanha os pedidos feitos no chat, nas importações, etc.
-  useEffect(() => {
-    if (demo) return;
-    pedirEstadoPlano()
-      .then(setEstado)
-      .catch(() => setEstado(null)); // Se falhar, o cartão simplesmente não aparece (a página trata da sessão).
-  }, [pagina, demo]);
+  // O ProvedorConta (layout da app) volta a pedir o estado a cada página nova: assim o número acompanha
+  // os pedidos feitos no chat, nas importações, etc. Se falhar, é null e o cartão não aparece.
+  const estado = useEstadoPlano();
 
   if (demo) {
     const ativoDemo = pagina === "/plano";
@@ -70,7 +63,7 @@ export default function CartaoPlano() {
       aria-current={ativo ? "page" : undefined}
       className={`block rounded-lg border bg-cartao p-3 transition-colors hover:border-destaque focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque ${ativo ? "border-destaque" : "border-borda"}`}
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-destaque-hover">Plano {nome}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-destaque-hover">{preencher(TEXTOS_CARTAO_PLANO.plano, { nome })}</p>
       <p className="mt-1 text-sm text-texto">{texto}</p>
       <div
         className="mt-2 h-1.5 overflow-hidden rounded-full bg-fundo"
@@ -78,7 +71,7 @@ export default function CartaoPlano() {
         aria-valuenow={usadas}
         aria-valuemin={0}
         aria-valuemax={estado.limite}
-        aria-label={doMes ? "Pedidos à IA usados este mês" : "Pedidos à IA usados hoje"}
+        aria-label={doMes ? TEXTOS_CARTAO_PLANO.barraMes : TEXTOS_CARTAO_PLANO.barraHoje}
       >
         <div className={`h-full rounded-full ${corDaBarra(usadas, estado.limite)}`} style={{ width: `${percentagem}%` }} />
       </div>

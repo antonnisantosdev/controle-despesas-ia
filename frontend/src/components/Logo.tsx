@@ -1,5 +1,7 @@
 import Image from "next/image";
 
+import { TEXTOS_APP } from "@/lib/textosComuns";
+
 // As duas versões da logo vão para a página, e o CSS mostra só a do tema atual
 // (dark:hidden / dark:block). Assim a logo muda junto com o tema, sem JavaScript.
 export default function Logo({ altura = 36 }: { altura?: number }) {
@@ -8,7 +10,7 @@ export default function Logo({ altura = 36 }: { altura?: number }) {
     <>
       <Image
         src="/logo-tema-claro.webp"
-        alt="Control Prices"
+        alt={TEXTOS_APP.nome}
         width={largura}
         height={altura}
         priority
@@ -16,7 +18,7 @@ export default function Logo({ altura = 36 }: { altura?: number }) {
       />
       <Image
         src="/logo-tema-escuro.webp"
-        alt="Control Prices"
+        alt={TEXTOS_APP.nome}
         width={largura}
         height={altura}
         priority

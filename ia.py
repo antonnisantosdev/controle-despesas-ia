@@ -15,6 +15,7 @@ import re
 import time
 import unicodedata
 from collections.abc import Callable
+from datetime import date
 
 import anthropic
 from dotenv import load_dotenv
@@ -342,9 +343,12 @@ def montar_mensagens(pergunta: str, historico: list[MensagemHistorico], maximo: 
     return [{"role": "user", "content": texto}]
 
 
-def instrucoes_do_chat(config: ConfigIA) -> str | list[dict]:
-    """As instruções do chat, com a data de hoje. Com cache (Completo), vão como bloco com cache_control."""
-    texto = f"{INSTRUCOES_CHAT}\nHoje é {hoje_em_lisboa().isoformat()}."
+def instrucoes_do_chat(config: ConfigIA, hoje: date | None = None) -> str | list[dict]:
+    """As instruções do chat, com a data de hoje. Com cache (Completo), vão como bloco com cache_control.
+
+    hoje: a data no país onde o utilizador vive (limites.hoje_do_utilizador); sem ela, a de Lisboa.
+    """
+    texto = f"{INSTRUCOES_CHAT}\nHoje é {(hoje or hoje_em_lisboa()).isoformat()}."
     if not config.cache:
         return texto
     return [{"type": "text", "text": texto, "cache_control": {"type": "ephemeral"}}]
@@ -365,18 +369,20 @@ def conversar(
     user_id: str | None = None,
     config: ConfigIA | None = None,
     historico: list[MensagemHistorico] | None = None,
+    hoje: date | None = None,
 ) -> str:
     """Responde a uma pergunta, deixando a IA pedir ferramentas.
 
     `executar(nome, argumentos)` corre a ferramenta pedida e devolve o resultado em texto.
     Quem chama já ligou essa função ao utilizador certo: a IA nunca vê o user_id.
     config é a do plano do utilizador (sem config, a do Free: a mais barata).
+    hoje é a data no país onde o utilizador vive (sem ela, a de Lisboa).
     """
     fornecedor = os.getenv("IA_FORNECEDOR", "claude")
     if fornecedor == "claude":
         try:
             return _conversar_claude(
-                pergunta, ferramentas, executar, user_id, config or config_ia_do_plano("free"), historico or []
+                pergunta, ferramentas, executar, user_id, config or config_ia_do_plano("free"), historico or [], hoje
             )
         except anthropic.APIError as erro:
             raise ErroIA(f"Claude: {erro}") from erro
@@ -417,9 +423,10 @@ def _conversar_claude(
     user_id: str | None,
     config: ConfigIA,
     historico: list[MensagemHistorico],
+    hoje: date | None = None,
 ) -> str:
     cliente = anthropic.Anthropic()
-    instrucoes = instrucoes_do_chat(config)
+    instrucoes = instrucoes_do_chat(config, hoje)
     ferramentas = ferramentas_do_chat(ferramentas, config)
     mensagens = montar_mensagens(pergunta, historico, config.memoria_mensagens)
 

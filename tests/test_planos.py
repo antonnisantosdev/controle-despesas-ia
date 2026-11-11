@@ -166,15 +166,27 @@ def test_os_pedidos_de_ontem_nao_contam_nos_pagos(preparar, plano, limite):
     assert uso.inseridas == 1
 
 
-def test_o_dia_vira_a_meia_noite_de_lisboa_no_verao(preparar):
-    # 23:30 UTC de 15 de julho já é 00:30 de 16 em Lisboa (UTC+1): os pedidos das 22:30 UTC
-    # (23:30 de 15 em Lisboa) são de ontem e já não contam.
+def test_perto_da_meia_noite_de_lisboa_o_dia_dos_contadores_ainda_e_o_de_sao_paulo(preparar):
+    # 23:30 UTC de 15 de julho: em Lisboa já é dia 16 (00:30), em São Paulo ainda é 15 (20:30).
+    # Os contadores começam na meia-noite mais antiga (03:00 UTC de 15, a de São Paulo): os pedidos
+    # das 22:30 UTC ainda contam, mesmo numa conta PT. É o preço de mudar de país não dar pedidos a mais.
     agora = datetime(2026, 7, 15, 23, 30, tzinfo=UTC)
     uso = preparar("essencial", [datetime(2026, 7, 15, 22, 30, tzinfo=UTC)] * 20, agora)
 
+    with pytest.raises(HTTPException) as erro:
+        limites.registar_pergunta("utilizador-teste", "chat")
+    assert erro.value.status_code == 429
+    assert uso.inseridas == 0
+    assert uso.desde == datetime(2026, 7, 15, 3, 0, tzinfo=UTC)
+
+
+def test_os_pedidos_de_antes_da_meia_noite_de_sao_paulo_ja_nao_contam(preparar):
+    # Os mesmos 23:30 UTC: os pedidos das 02:00 UTC de 15 (antes das duas meias-noites) são de ontem.
+    agora = datetime(2026, 7, 15, 23, 30, tzinfo=UTC)
+    uso = preparar("essencial", [datetime(2026, 7, 15, 2, 0, tzinfo=UTC)] * 20, agora)
+
     limites.registar_pergunta("utilizador-teste", "chat")
     assert uso.inseridas == 1
-    assert uso.desde == datetime(2026, 7, 15, 23, 0, tzinfo=UTC)
 
 
 def test_no_verao_um_pedido_depois_da_meia_noite_de_lisboa_conta_para_hoje(preparar):
@@ -185,9 +197,21 @@ def test_no_verao_um_pedido_depois_da_meia_noite_de_lisboa_conta_para_hoje(prepa
         limites.registar_pergunta("utilizador-teste", "chat")
 
 
-def test_o_mes_vira_no_dia_1_de_lisboa(preparar):
-    # 23:30 UTC de 31 de julho já é 1 de agosto em Lisboa: os 30 pedidos de julho deixam de contar.
+def test_o_mes_so_vira_quando_e_dia_1_em_lisboa_e_em_sao_paulo(preparar):
+    # 23:30 UTC de 31 de julho: em Lisboa já é 1 de agosto, em São Paulo ainda é julho.
+    # Os 30 pedidos de julho continuam a contar até às 03:00 UTC de 1 de agosto.
     agora = datetime(2026, 7, 31, 23, 30, tzinfo=UTC)
+    uso = preparar("free", [datetime(2026, 7, 31, 22, 0, tzinfo=UTC)] * 30, agora)
+
+    with pytest.raises(HTTPException):
+        limites.registar_pergunta("utilizador-teste", "chat")
+    assert uso.inseridas == 0
+    assert uso.desde == datetime(2026, 7, 1, 3, 0, tzinfo=UTC)
+
+
+def test_o_mes_vira_quando_ja_e_dia_1_nos_dois_fusos(preparar):
+    # 03:00 UTC de 1 de agosto: já é dia 1 em Lisboa e em São Paulo. Os pedidos de julho deixam de contar.
+    agora = datetime(2026, 8, 1, 3, 0, tzinfo=UTC)
     uso = preparar("free", [datetime(2026, 7, 31, 22, 0, tzinfo=UTC)] * 30, agora)
 
     limites.registar_pergunta("utilizador-teste", "chat")
@@ -573,7 +597,7 @@ def assinatura(monkeypatch):
 
     def _assinatura(plano, ativo_ate, pedidos=0, pdfs=0):
         pdfs_contados = []
-        monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: (plano, ativo_ate))
+        monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: limites.Assinatura(plano, ativo_ate))
         por_periodo = pedidos if isinstance(pedidos, dict) else {"dia": pedidos, "mes": pedidos}
         monkeypatch.setattr(limites, "pedidos_no_periodo", lambda user_id, periodo: por_periodo[periodo])
         monkeypatch.setattr(limites, "pdfs_no_mes", lambda user_id: pdfs_contados.append(user_id) or pdfs)
@@ -602,6 +626,10 @@ def test_a_rota_plano_mostra_o_limite_o_periodo_e_os_pedidos_usados(cliente, ass
         "pdf_limite": 0,  # o Free não importa PDF
         "memoria_mensagens": 0,  # o chat do Free não guarda mensagens anteriores
         "meses_historico": 3,  # o mês atual e os 2 anteriores
+        # Perfil da conta (sql/020): o de sempre, para as contas que já existiam.
+        "pais": "PT",
+        "paises_bancos": ["PT"],
+        "moeda": "EUR",
     }
     assert pdfs_contados == []  # no Free nem se contam os PDF
 
@@ -655,7 +683,7 @@ def test_um_plano_pago_que_terminou_conta_os_pedidos_do_mes_e_nao_tem_pdf(monkey
     # O Free conta todos os pedidos do mês, incluindo os feitos ainda no plano pago (aceite pelo CEO).
     uso = UsoIaFalso([datetime(2026, 11, 5, 10, 0, tzinfo=UTC)] * 30)
     monkeypatch.setattr(limites, "supabase", uso)
-    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: ("essencial", date(2026, 11, 19)))
+    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: limites.Assinatura("essencial", date(2026, 11, 19)))
     monkeypatch.setattr(limites, "agora_utc", lambda: AGORA)
 
     with pytest.raises(HTTPException) as erro:
@@ -670,7 +698,7 @@ def test_um_plano_pago_que_terminou_conta_os_pedidos_do_mes_e_nao_tem_pdf(monkey
 
 def test_o_free_nunca_mostra_data_de_fim(monkeypatch):
     # Mesmo que a coluna ativo_ate tenha uma data perdida, o Free não acaba.
-    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: ("free", date(2026, 1, 1)))
+    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: limites.Assinatura("free", date(2026, 1, 1)))
     monkeypatch.setattr(limites, "pedidos_no_periodo", lambda user_id, periodo: 0)
 
     assert limites.estado_do_plano("utilizador-teste").ativo_ate is None
@@ -699,7 +727,8 @@ class AssinaturasFalsas:
 )
 def test_a_assinatura_le_o_plano_e_a_data(monkeypatch, linhas, esperado):
     monkeypatch.setattr(limites, "supabase", AssinaturasFalsas(linhas))
-    assert limites.assinatura_do_utilizador("utilizador-teste") == esperado
+    conta = limites.assinatura_do_utilizador("utilizador-teste")
+    assert (conta.plano, conta.ativo_ate) == esperado
 
 
 def test_a_rota_planos_lista_os_planos_por_ordem_sem_login():

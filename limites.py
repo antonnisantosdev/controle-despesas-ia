@@ -1,7 +1,10 @@
 """Limites de pedidos à IA e funções de cada plano, para cada utilizador não gastar demasiados créditos.
 
 O plano vem da assinatura (coluna plano da tabela assinaturas). O Free conta os pedidos por mês;
-os planos pagos contam por dia. O dia e o mês são os de Lisboa, não os do servidor (o Render está em UTC).
+os planos pagos contam por dia. Os contadores começam no início do dia (ou mês) mais antigo entre
+Lisboa e São Paulo (inicio_dos_contadores), não no do servidor (o Render está em UTC): mudar de país
+nunca dá pedidos a mais. O "hoje" mostrado é o do país onde a pessoa vive (sql/020). O ativo_ate dos
+planos pagos conta-se sempre em Lisboa (é o CEO que o escreve, em Portugal).
 """
 
 from __future__ import annotations
@@ -152,9 +155,18 @@ def exigir_espaco_na_conta(atuais: int, novas: int) -> None:
         )
 
 
-# Hora de Lisboa, com a mudança de hora incluída. No Windows a base de dados de fusos vem
+# Hora de Lisboa e de São Paulo, com a mudança de hora incluída. No Windows a base de dados de fusos vem
 # do pacote tzdata (requirements.txt); no Linux (Render, GitHub Actions) já vem com o sistema.
 FUSO_LISBOA = ZoneInfo("Europe/Lisbon")
+FUSO_SAO_PAULO = ZoneInfo("America/Sao_Paulo")
+
+# O fuso de cada país onde a pessoa pode viver (assinaturas.pais). País desconhecido: Lisboa.
+FUSO_POR_PAIS: dict[str, ZoneInfo] = {"PT": FUSO_LISBOA, "BR": FUSO_SAO_PAULO}
+
+
+def fuso_do_pais(pais: str | None) -> ZoneInfo:
+    """O fuso horário do país onde a pessoa vive. País desconhecido ou None: Lisboa (como até aqui)."""
+    return FUSO_POR_PAIS.get(pais or "", FUSO_LISBOA)
 
 
 def agora_utc() -> datetime:
@@ -162,17 +174,34 @@ def agora_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def hoje_no_fuso(fuso: ZoneInfo) -> date:
+    """A data de hoje nesse fuso (o servidor está em UTC: em Lisboa, às 23:30 UTC de verão já é amanhã;
+    em São Paulo, às 01:00 UTC ainda é ontem)."""
+    return agora_utc().astimezone(fuso).date()
+
+
 def hoje_em_lisboa() -> date:
-    """A data de hoje em Lisboa (o servidor está em UTC: entre as 23:00 e a meia-noite de verão já é amanhã)."""
-    return agora_utc().astimezone(FUSO_LISBOA).date()
+    """A data de hoje em Lisboa. Serve para o ativo_ate dos planos e para o que não é de um utilizador (demo)."""
+    return hoje_no_fuso(FUSO_LISBOA)
 
 
-def inicio_do_periodo(periodo: str, agora: datetime) -> datetime:
-    """O início do dia ou do mês de Lisboa em que cai agora, em UTC (é assim que o criado_em se compara)."""
-    hoje_em_lisboa = agora.astimezone(FUSO_LISBOA).date()
-    primeiro_dia = hoje_em_lisboa.replace(day=1) if periodo == "mes" else hoje_em_lisboa
-    meia_noite = datetime.combine(primeiro_dia, time(0), tzinfo=FUSO_LISBOA)
+def inicio_do_periodo(periodo: str, agora: datetime, fuso: ZoneInfo = FUSO_LISBOA) -> datetime:
+    """O início do dia ou do mês (no fuso dado) em que cai agora, em UTC (é assim que o criado_em se compara)."""
+    hoje = agora.astimezone(fuso).date()
+    primeiro_dia = hoje.replace(day=1) if periodo == "mes" else hoje
+    meia_noite = datetime.combine(primeiro_dia, time(0), tzinfo=fuso)
     return meia_noite.astimezone(timezone.utc)
+
+
+def inicio_dos_contadores(periodo: str, agora: datetime) -> datetime:
+    """O início do período dos limites (pedidos à IA e PDF): o MAIS ANTIGO entre todos os fusos de FUSO_POR_PAIS.
+
+    Revisão de segurança: se cada conta contasse no fuso do seu país, mudar de país nas definições
+    (Lisboa <-> São Paulo) abria uma janela nova e dava pedidos a dobrar. Com o mais antigo, mudar de país
+    nunca dá pedidos a mais (falha fechada). O preço: perto da meia-noite o período fica umas horas maior
+    (até 3 h, ou 4 h com a hora de verão de Lisboa). O fuso do país serve só para mostrar datas e o "hoje".
+    """
+    return min(inicio_do_periodo(periodo, agora, fuso) for fuso in FUSO_POR_PAIS.values())
 
 
 # --- Planos ---
@@ -219,8 +248,13 @@ def plano_inclui(plano: str | None, funcao: str) -> bool:
 
 def plano_do_utilizador(user_id: str) -> str | None:
     """O plano que vale hoje para o utilizador (plano_efetivo), ou None se não houver linha."""
-    plano, ativo_ate = assinatura_do_utilizador(user_id)
-    return plano_efetivo(plano, ativo_ate, hoje_em_lisboa())
+    conta = assinatura_do_utilizador(user_id)
+    return plano_efetivo(conta.plano, conta.ativo_ate, hoje_em_lisboa())
+
+
+def hoje_do_utilizador(user_id: str) -> date:
+    """A data de hoje no país onde o utilizador vive (mês dos alertas, relatório, histórico do chat...)."""
+    return hoje_no_fuso(assinatura_do_utilizador(user_id).fuso)
 
 
 def plano_e_config_ia(user_id: str) -> tuple[str | None, ConfigIA]:
@@ -244,13 +278,13 @@ COLUNA_NAO_EXISTE = {"PGRST204", "42703"}
 
 
 def pdfs_no_mes(user_id: str) -> int:
-    """Quantos extratos em PDF o utilizador já mandou ler à IA neste mês de Lisboa.
+    """Quantos extratos em PDF o utilizador já mandou ler à IA neste mês (desde inicio_dos_contadores).
 
     Conta as linhas da uso_ia com funcao='importar_pdf' (sql/016). Antes da 016 a coluna não existe:
     conta-se então pelas chamadas à IA de leitura de PDF (chamadas_ia, sql/014). Se nem isso der,
     devolve 0 (fica só o limite de pedidos à IA, como antes) e deixa um aviso nos logs.
     """
-    inicio = inicio_do_periodo("mes", agora_utc()).isoformat()
+    inicio = inicio_dos_contadores("mes", agora_utc()).isoformat()
     try:
         resposta = (
             supabase.table("uso_ia")
@@ -304,8 +338,8 @@ def exigir_limite_pdf(user_id: str) -> None:
 
 
 def pedidos_no_periodo(user_id: str, periodo: str) -> int:
-    """Quantos pedidos à IA o utilizador já fez neste dia (ou mês) de Lisboa."""
-    inicio = inicio_do_periodo(periodo, agora_utc())
+    """Quantos pedidos à IA o utilizador já fez neste dia (ou mês), desde inicio_dos_contadores."""
+    inicio = inicio_dos_contadores(periodo, agora_utc())
     # count="exact" pede ao Supabase só o número de linhas (como um SELECT COUNT(*)), sem as trazer.
     resposta = (
         supabase.table("uso_ia")
@@ -317,14 +351,80 @@ def pedidos_no_periodo(user_id: str, periodo: str) -> int:
     return resposta.count or 0
 
 
-def assinatura_do_utilizador(user_id: str) -> tuple[str | None, date | None]:
-    """O plano e o ativo_ate da assinatura, numa só consulta. (None, None) se não houver linha."""
-    resposta = supabase.table("assinaturas").select("plano, ativo_ate").eq("user_id", user_id).execute()
+# --- Assinatura e perfil da conta (país, países das contas e moeda: sql/020) ---
+
+PAISES = ("PT", "BR")
+MOEDAS = ("EUR", "BRL")
+# A moeda de cada país das contas: bancos só PT, a moeda é EUR; só BR, BRL.
+MOEDA_DO_PAIS = {"PT": "EUR", "BR": "BRL"}
+
+
+@dataclass(frozen=True)
+class Assinatura:
+    """A linha da conta na tabela assinaturas.
+
+    pais: onde a pessoa vive (língua, fuso, formatos). paises_bancos: de que países são os cartões e contas.
+    moeda: a moeda principal (Fase 1: uma moeda por conta). com_perfil: False se as colunas da sql/020
+    ainda não existem (o perfil é então o de sempre, PT / {PT} / EUR, e a API não escreve a moeda).
+    """
+
+    plano: str | None = None
+    ativo_ate: date | None = None
+    pais: str = "PT"
+    paises_bancos: tuple[str, ...] = ("PT",)
+    moeda: str = "EUR"
+    com_perfil: bool = False
+
+    @property
+    def fuso(self) -> ZoneInfo:
+        return fuso_do_pais(self.pais)
+
+
+def _perfil_da_linha(linha: dict) -> dict:
+    """O país, os países das contas e a moeda de uma linha da base de dados. Valores fora da lista
+    (não deviam existir: há CHECK na sql/020) passam aos de sempre, para nada partir."""
+    pais = linha.get("pais") if linha.get("pais") in PAISES else "PT"
+    bancos = tuple(p for p in (linha.get("paises_bancos") or []) if p in PAISES) or ("PT",)
+    moeda = linha.get("moeda") if linha.get("moeda") in MOEDAS else "EUR"
+    return {"pais": pais, "paises_bancos": bancos, "moeda": moeda}
+
+
+def assinatura_do_utilizador(user_id: str) -> Assinatura:
+    """A assinatura da conta (plano, ativo_ate e perfil), numa só consulta. Sem linha: Assinatura() (plano None).
+
+    Antes da sql/020 as colunas do perfil não existem: lê só o plano e o ativo_ate, e o perfil fica
+    PT / {PT} / EUR (como todas as contas até aqui), com um aviso nos logs.
+    """
+    try:
+        resposta = (
+            supabase.table("assinaturas")
+            .select("plano, ativo_ate, pais, paises_bancos, moeda")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        com_perfil = True
+    except APIError as erro:
+        if erro.code not in COLUNA_NAO_EXISTE:
+            raise
+        print("AVISO: colunas pais/paises_bancos/moeda não encontradas (sql/020); a conta conta como PT/EUR.")
+        resposta = supabase.table("assinaturas").select("plano, ativo_ate").eq("user_id", user_id).execute()
+        com_perfil = False
     if not resposta.data:
-        return None, None
+        return Assinatura()
     linha = resposta.data[0]
     ativo_ate = date.fromisoformat(linha["ativo_ate"]) if linha.get("ativo_ate") else None
-    return linha["plano"], ativo_ate
+    perfil = _perfil_da_linha(linha) if com_perfil else {}
+    return Assinatura(plano=linha["plano"], ativo_ate=ativo_ate, com_perfil=com_perfil, **perfil)
+
+
+def moeda_da_conta(user_id: str) -> str | None:
+    """A moeda principal da conta, para gravar em cada movimento e compra novos (nunca a que vem do pedido).
+
+    None antes da sql/020 (a coluna moeda ainda não existe: não se envia). Depois da 020 um gatilho
+    na base de dados põe a mesma moeda, mesmo que a API se engane.
+    """
+    conta = assinatura_do_utilizador(user_id)
+    return conta.moeda if conta.com_perfil else None
 
 
 def estado_do_plano(user_id: str) -> EstadoPlano:
@@ -334,7 +434,8 @@ def estado_do_plano(user_id: str) -> EstadoPlano:
     """
     from models import EstadoPlano
 
-    na_tabela, ativo_ate = assinatura_do_utilizador(user_id)
+    conta = assinatura_do_utilizador(user_id)
+    na_tabela, ativo_ate = conta.plano, conta.ativo_ate
     plano = plano_efetivo(na_tabela, ativo_ate, hoje_em_lisboa())
     # Só há "plano terminado" quando se sabe a data (um pago sem data é um erro nos dados).
     terminou_em = ativo_ate if plano != na_tabela else None
@@ -356,6 +457,9 @@ def estado_do_plano(user_id: str) -> EstadoPlano:
         pdf_limite=limite_pdf,
         memoria_mensagens=config_ia_do_plano(plano).memoria_mensagens,
         meses_historico=config_ia_do_plano(plano).meses_historico,
+        pais=conta.pais,
+        paises_bancos=list(conta.paises_bancos),
+        moeda=conta.moeda,
     )
 
 
@@ -448,7 +552,7 @@ def registar_pergunta(user_id: str, funcao: str) -> None:
     plano = plano_do_utilizador(user_id)
     limite, periodo = limite_do_plano(plano), periodo_do_plano(plano)
 
-    registado = registar_pedido_atomico(user_id, inicio_do_periodo(periodo, agora_utc()), limite, funcao)
+    registado = registar_pedido_atomico(user_id, inicio_dos_contadores(periodo, agora_utc()), limite, funcao)
     if registado is None:
         # Aparece nos logs do Render: se continuar a aparecer depois de correr a 015, algo está mal.
         print("AVISO: função registar_pedido_ia não encontrada (sql/015); a usar o contador em dois passos.")
@@ -487,9 +591,9 @@ def registar_pdf(user_id: str) -> None:
     resultado = _chamar_registar_pdf_ia(
         {
             "p_user_id": user_id,
-            "p_desde_pedidos": inicio_do_periodo(periodo, agora).isoformat(),
+            "p_desde_pedidos": inicio_dos_contadores(periodo, agora).isoformat(),
             "p_limite_pedidos": limite,
-            "p_desde_pdf": inicio_do_periodo("mes", agora).isoformat(),
+            "p_desde_pdf": inicio_dos_contadores("mes", agora).isoformat(),
             "p_limite_pdf": limite_pdf,
         }
     )

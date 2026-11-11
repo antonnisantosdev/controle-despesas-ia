@@ -1,6 +1,7 @@
 "use client";
 
 import { CONTACTOS, linkEmail, linkWhatsapp, type Pedido } from "@/lib/planos";
+import { TEXTOS_PEDIR_ACESSO } from "@/lib/textosComuns";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 type Props = {
@@ -34,7 +35,7 @@ export default function BotaoPedirAcesso({ pedido, rotulo, principal = true }: P
         <button type="button" disabled className={ESTILO_DESATIVADO}>
           {rotulo}
         </button>
-        <p className="text-center text-xs text-texto-suave">Contacto ainda não disponível.</p>
+        <p className="text-center text-xs text-texto-suave">{TEXTOS_PEDIR_ACESSO.semContacto}</p>
       </div>
     );
   }
@@ -58,7 +59,7 @@ export default function BotaoPedirAcesso({ pedido, rotulo, principal = true }: P
           href={linkEmail(email, pedido)}
           className={`flex min-h-11 items-center justify-center rounded-md text-center text-xs text-texto-suave hover:text-texto hover:underline ${FOCO}`}
         >
-          ou por email
+          {TEXTOS_PEDIR_ACESSO.porEmail}
         </a>
       )}
     </div>

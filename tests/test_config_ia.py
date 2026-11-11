@@ -56,7 +56,7 @@ def test_primeiro_mes_que_o_plano_ve(plano, hoje, esperado):
 
 def test_um_plano_pago_que_terminou_recebe_a_configuracao_do_free(monkeypatch):
     # O Completo acabou ontem: memória, histórico e tokens passam a ser os do Free.
-    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: ("completo", date(2026, 11, 8)))
+    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: limites.Assinatura("completo", date(2026, 11, 8)))
     monkeypatch.setattr(limites, "agora_utc", lambda: AGORA)
 
     plano, config = limites.plano_e_config_ia("utilizador-teste")
@@ -66,7 +66,7 @@ def test_um_plano_pago_que_terminou_recebe_a_configuracao_do_free(monkeypatch):
 
 
 def test_um_plano_pago_ativo_recebe_a_sua_configuracao(monkeypatch):
-    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: ("completo", date(2026, 12, 31)))
+    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: limites.Assinatura("completo", date(2026, 12, 31)))
     monkeypatch.setattr(limites, "agora_utc", lambda: AGORA)
 
     assert limites.plano_e_config_ia("utilizador-teste") == ("completo", CONFIG_IA_POR_PLANO["completo"])

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import NotaDemo, { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import { apagarToken, pedirApi, SessaoExpirada, type Objetivo } from "@/lib/api";
+import { TEXTOS_RESERVA } from "@/lib/textosReserva";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import CartaoObjetivo from "./CartaoObjetivo";
@@ -31,7 +32,7 @@ export default function PaginaReserva() {
       .then(setObjetivos)
       .catch((e) => {
         if (e instanceof SessaoExpirada) tratarSessao(e);
-        else setErro("Não foi possível carregar os objetivos. Confirma que a API está a correr.");
+        else setErro(TEXTOS_RESERVA.erroCarregar);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -57,8 +58,8 @@ export default function PaginaReserva() {
       <div className="mx-auto max-w-4xl space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-destaque">Objetivos de poupança</p>
-            <h1 className="text-2xl font-semibold text-texto">Minha reserva</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-destaque">{TEXTOS_RESERVA.etiquetaTopo}</p>
+            <h1 className="text-2xl font-semibold text-texto">{TEXTOS_RESERVA.titulo}</h1>
           </div>
           <button
             type="button"
@@ -67,7 +68,7 @@ export default function PaginaReserva() {
             aria-describedby={demo ? ID_NOTA_DEMO : undefined}
             className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            + Novo objetivo
+            {TEXTOS_RESERVA.novoObjetivo}
           </button>
         </header>
 
@@ -77,10 +78,10 @@ export default function PaginaReserva() {
 
         {aCriar && !demo && <FormNovoObjetivo onCriado={criado} onFechar={() => setACriar(false)} onSessaoExpirada={tratarSessao} />}
 
-        {objetivos === null && !erro && <p className="text-sm text-texto-suave">A carregar...</p>}
+        {objetivos === null && !erro && <p className="text-sm text-texto-suave">{TEXTOS_RESERVA.aCarregar}</p>}
         {objetivos?.length === 0 && !aCriar && (
           <p className="rounded-xl border border-borda bg-cartao p-6 text-sm text-texto-suave">
-            Ainda não tens objetivos. Cria o primeiro, por exemplo as férias do próximo verão.
+            {TEXTOS_RESERVA.vazio}
           </p>
         )}
 

@@ -22,3 +22,32 @@ export const TEXTOS_TERMOS = {
   privacidade: "Política de Privacidade",
   fim: ".",
 };
+
+// Página de login (email e palavra-passe). Os textos do Google e da demo estão em TEXTOS_GOOGLE e TEXTOS_DEMO.
+export const TEXTOS_LOGIN = {
+  erroCredenciais: "Email ou palavra-passe inválidas.",
+  entrar: "Entrar",
+  aEntrar: "A entrar...",
+  semConta: "Ainda não tens conta?",
+  criarConta: "Cria uma grátis",
+} as const;
+
+// Página de registo. {pedidos}: "30 pedidos à IA por mês" (textoDosPedidos, planos.ts).
+export const TEXTOS_REGISTO = {
+  introducao: "Cria a tua conta grátis. O plano Free inclui {pedidos} e importação de extratos em CSV.",
+  palavraPasse: "Palavra-passe (mínimo 8 caracteres)",
+  repetir: "Repetir a palavra-passe",
+  erroCurta: "A palavra-passe tem de ter pelo menos 8 caracteres.",
+  erroDiferentes: "As palavras-passe não coincidem.",
+  erroEmail: "Confirma que o email está bem escrito.",
+  erroCriar: "Não foi possível criar a conta.",
+  criar: "Criar conta",
+  aCriar: "A criar a conta...",
+  jaTensConta: "Já tens conta?",
+  entra: "Entra",
+  // Depois de criar a conta (a mensagem principal vem da API; "criada" só se a API não a mandar).
+  criada: "Conta criada. Confirma o email para entrar.",
+  quaseLa: "Quase lá!",
+  spam: "Não chegou? Vê na pasta de spam.",
+  irLogin: "Ir para o login",
+} as const;

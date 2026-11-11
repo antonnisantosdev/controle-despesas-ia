@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { corDaBarra } from "@/app/(app)/CartaoPlano";
 import BotaoPedirAcesso from "@/components/BotaoPedirAcesso";
 import { apagarToken, emailDaSessao, pedirEstadoPlano, SessaoExpirada, type EstadoPlano } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
 import {
   dataPorExtenso,
   deveAvisarRenovar,
@@ -45,7 +46,7 @@ export default function PaginaPlano() {
           apagarToken();
           router.replace("/login");
         } else {
-          setErro("Não foi possível carregar o teu plano. Confirma que a API está a correr.");
+          setErro(TEXTOS_MEU_PLANO.erroCarregar);
         }
       });
   }, [router]);
@@ -60,7 +61,7 @@ export default function PaginaPlano() {
         {erro && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
         {!estado && !erro && !demo && (
           <p role="status" className="rounded-xl border border-borda bg-cartao p-4 text-sm text-texto-suave sm:p-6">
-            A carregar...
+            {TEXTOS_MEU_PLANO.aCarregar}
           </p>
         )}
 
@@ -91,6 +92,7 @@ export default function PaginaPlano() {
 }
 
 function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta: string | null }) {
+  const f = useFormatos();
   const nome = nomeDoPlano(estado.plano) ?? TEXTOS_MEU_PLANO.nomeSemPlano;
   const usadas = Math.min(estado.usadas, estado.limite);
   // O Free conta os pedidos por mês; os pagos, por dia.
@@ -110,7 +112,7 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
           <p className="text-sm text-amber-900 dark:text-amber-200">
             {preencher(TEXTOS_MEU_PLANO.avisoTerminou, {
               plano: NOMES_PLANOS[terminado],
-              data: dataPorExtenso(estado.terminou_em),
+              data: dataPorExtenso(estado.terminou_em, f),
             })}
           </p>
           <div className="sm:max-w-xs">
@@ -159,7 +161,7 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
         <div className="space-y-1 border-t border-borda pt-4 text-sm">
           <p className="text-texto">
             {estado.ativo_ate
-              ? preencher(TEXTOS_MEU_PLANO.ativoAte, { data: dataPorExtenso(estado.ativo_ate) })
+              ? preencher(TEXTOS_MEU_PLANO.ativoAte, { data: dataPorExtenso(estado.ativo_ate, f) })
               : TEXTOS_MEU_PLANO.semDataFim}
           </p>
           <p className="text-texto-suave">
@@ -171,7 +173,7 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
       {avisar && plano && estado.ativo_ate && (
         <section className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
           <p className="text-sm text-amber-900 dark:text-amber-200">
-            {preencher(TEXTOS_MEU_PLANO.avisoRenovar, { data: dataPorExtenso(estado.ativo_ate), plano: NOMES_PLANOS[plano] })}
+            {preencher(TEXTOS_MEU_PLANO.avisoRenovar, { data: dataPorExtenso(estado.ativo_ate, f), plano: NOMES_PLANOS[plano] })}
           </p>
           <div className="sm:max-w-xs">
             <BotaoPedirAcesso pedido={{ plano, renovar: true, emailConta }} rotulo={TEXTOS_MEU_PLANO.botaoRenovar} />

@@ -19,11 +19,12 @@ import {
   type SugestaoCategoria,
   type SugestaoOrcamento,
 } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
 import { CATEGORIAS } from "@/lib/opcoes";
 import { mesAtual } from "@/lib/planos";
+import { TEXTOS_PLANEAMENTO } from "@/lib/textosPlaneamento";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
-import { euros, nomeMes } from "../dashboard/formatos";
 import LinhaPlaneamento from "./LinhaPlaneamento";
 import SugestoesIA from "./SugestoesIA";
 
@@ -32,6 +33,7 @@ const CATEGORIAS_DE_GASTO = CATEGORIAS.filter((c) => c !== "rendimento");
 
 export default function PaginaPlaneamento() {
   const router = useRouter();
+  const f = useFormatos();
   const [meses, setMeses] = useState<string[]>([]);
   const [mes, setMes] = useState("");
   const [resultado, setResultado] = useState<{ mes: string; linhas: LinhaOrcamento[] } | null>(null);
@@ -51,7 +53,7 @@ export default function PaginaPlaneamento() {
       apagarToken();
       router.replace("/login");
     } else {
-      setErro("Não foi possível carregar o planeamento. Confirma que a API está a correr.");
+      setErro(TEXTOS_PLANEAMENTO.erroCarregar);
     }
   }
 
@@ -91,7 +93,7 @@ export default function PaginaPlaneamento() {
     } catch (e) {
       if (e instanceof SessaoExpirada) tratarErro(e);
       else if (eBloqueadoNaDemo(e)) return; // 423 da demo: a faixa já explica
-      else setErro("Não foi possível guardar o orçamento. Tenta outra vez.");
+      else setErro(TEXTOS_PLANEAMENTO.erroGuardar);
     }
   }
 
@@ -109,7 +111,7 @@ export default function PaginaPlaneamento() {
       else if (eLimiteDiario(e)) setSemPedidos(true);
       // 503 (IA em baixo) já traz uma explicação da API.
       else if (e instanceof ErroApi && typeof e.detalhe === "string") setErro(e.detalhe);
-      else setErro("Não foi possível pedir a sugestão. Tenta outra vez.");
+      else setErro(TEXTOS_PLANEAMENTO.erroSugestao);
     } finally {
       setAPedirSugestao(false);
     }
@@ -126,19 +128,19 @@ export default function PaginaPlaneamento() {
       <div className="mx-auto max-w-4xl space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-destaque">Orçamento mensal</p>
-            <h1 className="text-2xl font-semibold text-texto">Planeamento</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-destaque">{TEXTOS_PLANEAMENTO.etiquetaTopo}</p>
+            <h1 className="text-2xl font-semibold text-texto">{TEXTOS_PLANEAMENTO.titulo}</h1>
           </div>
           <div className="flex gap-2">
             <select
               value={mes}
               onChange={(e) => setMes(e.target.value)}
-              aria-label="Mês"
+              aria-label={TEXTOS_PLANEAMENTO.rotuloMes}
               className="rounded-lg border border-borda bg-cartao px-3 py-2 text-sm text-texto"
             >
               {meses.map((m) => (
                 <option key={m} value={m}>
-                  {nomeMes(m)}
+                  {f.mesAno(m)}
                 </option>
               ))}
             </select>
@@ -149,7 +151,7 @@ export default function PaginaPlaneamento() {
               aria-describedby={demo ? ID_NOTA_DEMO : undefined}
               className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {aPedirSugestao ? "A IA está a analisar..." : "✨ Sugerir orçamento"}
+              {aPedirSugestao ? TEXTOS_PLANEAMENTO.aSugerir : TEXTOS_PLANEAMENTO.sugerir}
             </button>
           </div>
         </header>
@@ -167,15 +169,18 @@ export default function PaginaPlaneamento() {
 
         {comOrcamento.length > 0 && (
           <div className="rounded-xl border border-borda bg-cartao p-4 text-sm text-texto-suave">
-            Nas categorias com orçamento, gastaste <span className="font-semibold text-texto">{euros(totalGasto)}</span> de{" "}
-            <span className="font-semibold text-texto">{euros(totalLimite)}</span> previstos.
+            {TEXTOS_PLANEAMENTO.totalAntes}
+            <span className="font-semibold text-texto">{f.dinheiro(totalGasto)}</span>
+            {TEXTOS_PLANEAMENTO.totalMeio}
+            <span className="font-semibold text-texto">{f.dinheiro(totalLimite)}</span>
+            {TEXTOS_PLANEAMENTO.totalFim}
           </div>
         )}
 
         <section className="divide-y divide-borda rounded-xl border border-borda bg-cartao">
-          {aCarregar && <p className="p-6 text-sm text-texto-suave">A carregar...</p>}
+          {aCarregar && <p className="p-6 text-sm text-texto-suave">{TEXTOS_PLANEAMENTO.aCarregar}</p>}
           {!aCarregar && linhas.length === 0 && (
-            <p className="p-6 text-sm text-texto-suave">Sem gastos nem orçamentos neste mês.</p>
+            <p className="p-6 text-sm text-texto-suave">{TEXTOS_PLANEAMENTO.vazio}</p>
           )}
           {linhas.map((linha) => (
             <LinhaPlaneamento key={linha.categoria} linha={linha} onGuardar={guardar} desligado={demo} />
@@ -187,10 +192,10 @@ export default function PaginaPlaneamento() {
             <select
               value={novaCategoria}
               onChange={(e) => setNovaCategoria(e.target.value)}
-              aria-label="Categoria para novo orçamento"
+              aria-label={TEXTOS_PLANEAMENTO.rotuloNovaCategoria}
               className="rounded-lg border border-borda bg-cartao px-3 py-2 text-sm capitalize text-texto"
             >
-              <option value="">+ Adicionar orçamento para...</option>
+              <option value="">{TEXTOS_PLANEAMENTO.adicionar}</option>
               {semLinha.map((c) => (
                 <option key={c} value={c}>
                   {c}

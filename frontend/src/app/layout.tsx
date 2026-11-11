@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import GuardarOrigem from "@/components/GuardarOrigem";
+import { TEXTOS_APP } from "@/lib/textosComuns";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,11 +23,11 @@ const SCRIPT_TEMA = `try {
 } catch (e) {}`;
 
 export const metadata: Metadata = {
-  title: "Control Prices",
-  description: "Controlo financeiro pessoal com IA",
+  title: TEXTOS_APP.nome,
+  description: TEXTOS_APP.descricao,
   // iPhone: o Safari não lê tudo do manifesto, por isso diz-se aqui que a app abre em ecrã inteiro.
   // O ícone do ecrã inicial vem do apple-icon.png (o Next.js encontra-o sozinho).
-  appleWebApp: { capable: true, title: "Control Prices", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: TEXTOS_APP.nome, statusBarStyle: "default" },
 };
 
 // A cor da barra de estado do telemóvel, igual ao fundo do menu em cada tema (globals.css).

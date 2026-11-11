@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { EVENTO_A_ACORDAR } from "@/lib/api";
+import { TEXTOS_SERVIDOR } from "@/lib/textosComuns";
 
 // Faixa no fundo do ecrã enquanto a API está a acordar (o api.ts avisa com um evento).
 // Fica fora das páginas para funcionar em todas, sem cada uma ter de tratar disto.
@@ -24,7 +25,7 @@ export default function AvisoServidor() {
       role="status"
       className="fixed print:hidden inset-x-4 bottom-4 z-50 mx-auto max-w-md rounded-lg border border-borda bg-cartao p-3 text-center text-sm text-texto shadow-lg"
     >
-      A acordar o servidor, pode demorar até um minuto...
+      {TEXTOS_SERVIDOR.aAcordar}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 // As regras a sério (limites, quem tem acesso) estão no backend (limites.py, auth.py); isto é só para mostrar.
 
 import type { EstadoPlano, Periodo } from "./api";
+import type { Formatos } from "./formatos";
 import { FRASE_EMAIL, TEXTOS_AVISO_QUOTA, TEXTOS_CARTOES, TEXTOS_MENSAGEM, TEXTOS_PRECOS } from "./textosPlanos";
 
 export type IdPlano = "free" | "essencial" | "completo";
@@ -181,9 +182,9 @@ export function linkEmail(email: string, pedido: Pedido): string {
 
 // --- Datas ---
 
-// "2026-12-31" -> "31 de dezembro de 2026"
-export function dataPorExtenso(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" });
+// "2026-12-31" -> "31 de dezembro de 2026". f: os formatos da conta (useFormatos(); FORMATOS_PADRAO fora da app).
+export function dataPorExtenso(iso: string, f: Formatos): string {
+  return f.data(iso, { day: "numeric", month: "long", year: "numeric" });
 }
 
 // Dias que faltam até ao último dia do plano (0 = acaba hoje; negativo = já acabou).

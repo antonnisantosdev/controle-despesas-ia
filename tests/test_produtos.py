@@ -535,9 +535,9 @@ def test_nome_generico_comprido_e_cortado_e_unidade_invalida_recusada(cliente, m
     gravacoes = []
     monkeypatch.setattr(compras, "supabase", BaseDadosFalsa())
 
-    def gravar(user_id, nova):
+    def gravar(user_id, nova, moeda=None):
         gravacoes.append(nova)
-        return compras.gravar_compra(user_id, nova)
+        return compras.gravar_compra(user_id, nova, moeda)
 
     monkeypatch.setattr(main, "gravar_compra", gravar)
     corpo = {

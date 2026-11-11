@@ -1,21 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-import { pedirEstadoPlano } from "@/lib/api";
+import { useEstadoPlano } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
 import { TEXTOS_LIMITE_PDF } from "@/lib/textosPlanos";
 
 // O aviso do 429 do limite de extratos PDF do mês. Mesmo aspeto do AvisoLimite.
-// O número vem do /plano (pdf_limite); enquanto não chega (ou se falhar), o texto sai sem ele.
+// O número vem do /plano (pdf_limite, do ProvedorConta no layout da app); enquanto não chega (ou se falhar), o texto sai sem ele.
 export default function AvisoLimitePdf() {
-  const [limite, setLimite] = useState<number | null>(null);
-
-  useEffect(() => {
-    pedirEstadoPlano()
-      .then((estado) => setLimite(estado.pdf_limite > 0 ? estado.pdf_limite : null))
-      .catch(() => setLimite(null));
-  }, []);
+  const estado = useEstadoPlano();
+  const limite = estado && estado.pdf_limite > 0 ? estado.pdf_limite : null;
 
   const texto =
     limite !== null ? preencher(TEXTOS_LIMITE_PDF.texto, { limite }) : TEXTOS_LIMITE_PDF.texto.replace(" {limite}", "");

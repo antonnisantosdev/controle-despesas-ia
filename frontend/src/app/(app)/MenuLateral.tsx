@@ -6,16 +6,17 @@ import { usePathname, useRouter } from "next/navigation";
 import Logo from "@/components/Logo";
 import RodapeLegal from "@/components/RodapeLegal";
 import { apagarToken } from "@/lib/api";
+import { TEXTOS_MENU } from "@/lib/textosComuns";
 import { TEXTOS_RELATORIO } from "@/lib/textosRelatorio";
 
 import CartaoPlano from "./CartaoPlano";
 
 const LIGACOES = [
-  { href: "/dashboard", nome: "Visão geral", icone: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
-  { href: "/movimentacoes", nome: "Movimentações", icone: "M4 6h16M4 12h16M4 18h10" },
-  { href: "/planeamento", nome: "Planeamento", icone: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
-  { href: "/compras", nome: "Minhas compras", icone: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3" },
-  { href: "/reserva", nome: "Minha reserva", icone: "M5 21V4h13l-3 4 3 4H5" },
+  { href: "/dashboard", nome: TEXTOS_MENU.visaoGeral, icone: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
+  { href: "/movimentacoes", nome: TEXTOS_MENU.movimentacoes, icone: "M4 6h16M4 12h16M4 18h10" },
+  { href: "/planeamento", nome: TEXTOS_MENU.planeamento, icone: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+  { href: "/compras", nome: TEXTOS_MENU.compras, icone: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3" },
+  { href: "/reserva", nome: TEXTOS_MENU.reserva, icone: "M5 21V4h13l-3 4 3 4H5" },
   { href: "/relatorio", nome: TEXTOS_RELATORIO.menu, icone: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4M8 13h3M8 16h6" },
 ];
 
@@ -52,10 +53,10 @@ export default function MenuLateral() {
       <div className="flex items-center justify-between px-1 py-1">
         <Logo altura={36} />
         <div className="flex gap-1 md:hidden">
-          <button type="button" onClick={alternarTema} aria-label="Mudar tema" title="Mudar tema" className={estiloIcone}>
+          <button type="button" onClick={alternarTema} aria-label={TEXTOS_MENU.mudarTema} title={TEXTOS_MENU.mudarTema} className={estiloIcone}>
             <Icone caminho="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" />
           </button>
-          <button type="button" onClick={sair} aria-label="Sair da conta" title="Sair da conta" className={estiloIcone}>
+          <button type="button" onClick={sair} aria-label={TEXTOS_MENU.sair} title={TEXTOS_MENU.sair} className={estiloIcone}>
             <Icone caminho="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11" />
           </button>
         </div>
@@ -94,11 +95,11 @@ export default function MenuLateral() {
       <div className="hidden gap-1 md:flex md:flex-col">
         <button type="button" onClick={alternarTema} className={estiloBotao}>
           <Icone caminho="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" />
-          Mudar tema
+          {TEXTOS_MENU.mudarTema}
         </button>
         <button type="button" onClick={sair} className={estiloBotao}>
           <Icone caminho="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11" />
-          Sair da conta
+          {TEXTOS_MENU.sair}
         </button>
         <RodapeLegal className="justify-start" />
       </div>

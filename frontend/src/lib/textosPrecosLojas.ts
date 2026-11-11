@@ -79,7 +79,7 @@ export const TEXTOS_PRECOS_LOJAS = {
   soPlanosPagos: "Comparar preços entre as lojas onde compraste está disponível nos planos Essencial e Completo.",
 };
 
-// "€/un", "€/kg", "€/l"
+// "1,09 €/kg": o sufixo vai a seguir ao preço já formatado (precoUnitario em compras/formatosPrecos.ts).
 export const SUFIXO_UNIDADE: Record<string, string> = { un: "/un", kg: "/kg", l: "/l" };
 
 // Para o título de cada unidade: "Preço por unidade", "Preço por kg", "Preço por litro".

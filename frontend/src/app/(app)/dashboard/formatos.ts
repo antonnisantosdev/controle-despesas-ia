@@ -1,13 +1,5 @@
-// Formatação partilhada pelos cartões e gráficos do dashboard.
-
-export function euros(valor: number) {
-  return valor.toLocaleString("pt-PT", { style: "currency", currency: "EUR" });
-}
-
-// "2026-10" -> "out. 2026"
-export function nomeMes(mes: string) {
-  return new Date(`${mes}-01T00:00:00`).toLocaleDateString("pt-PT", { month: "short", year: "numeric" });
-}
+// Estilo partilhado pelos gráficos da app.
+// O dinheiro e as datas formatam-se com useFormatos() (lib/conta.tsx), conforme o país e a moeda da conta.
 
 // Caixa que aparece ao passar o rato, com as cores do tema.
 export const ESTILO_TOOLTIP = {

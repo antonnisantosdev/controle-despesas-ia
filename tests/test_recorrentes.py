@@ -149,7 +149,7 @@ def test_a_rota_nao_gasta_pedidos_a_ia(cliente, limite, monkeypatch):
     lidos = []
     transacoes = [despesa(f"2026-{mes:02d}-05", "SPOTIFY", -7.99) for mes in (9, 10, 11)]
     monkeypatch.setattr(recorrentes, "ler_todas", lambda nova_consulta: lidos.append(1) or transacoes)
-    monkeypatch.setattr(main, "hoje_em_lisboa", lambda: HOJE)
+    monkeypatch.setattr(main, "hoje_do_utilizador", lambda user_id: HOJE)
 
     resposta = cliente.get("/recorrentes")
 
@@ -284,7 +284,7 @@ def leituras(monkeypatch):
 
     monkeypatch.setattr(recorrentes, "ler_todas", ler_todas)
     monkeypatch.setattr(recorrentes, "_agora", lambda: contador["agora"])
-    monkeypatch.setattr(main, "hoje_em_lisboa", lambda: HOJE)
+    monkeypatch.setattr(main, "hoje_do_utilizador", lambda user_id: HOJE)
     return contador
 
 

@@ -55,6 +55,7 @@ from limite_ip import (
     LIMITE_LOGIN_POR_EMAIL,
     LIMITE_REGISTO,
     ip_do_pedido,
+    registar_mudanca_de_perfil,
 )
 from lista_espera import inscrever
 from limites import (
@@ -63,7 +64,8 @@ from limites import (
     estado_do_plano,
     exigir_espaco_na_conta,
     exigir_funcao,
-    hoje_em_lisboa,
+    hoje_do_utilizador,
+    moeda_da_conta,
     plano_e_config_ia,
     planos_disponiveis,
     pode_usar_ia,
@@ -79,6 +81,7 @@ from objetivos import (
     obter_objetivo,
 )
 from produtos import chave_do_produto, juncoes_do_utilizador, juntar_produtos, precos_do_utilizador, produtos_do_utilizador, separar_produtos
+from perfil import atualizar_perfil, guardar_perfil_inicial
 from orcamento import alertas_de_orcamento, guardar_limite, historico_para_sugestao, planeamento_do_mes
 from models import (
     AlertasOrcamento,
@@ -100,6 +103,8 @@ from models import (
     NovoLimite,
     NovoObjetivo,
     Objetivo,
+    PerfilConta,
+    PerfilGuardado,
     PerguntaChat,
     PlanoDisponivel,
     PlanoPoupanca,
@@ -259,9 +264,11 @@ def login_google_troca(troca: TrocaGoogle):
         # Qualquer outra falha (ex.: erro de rede do httpx): 503 genérico, nunca um 500 com detalhes.
         print(f"AVISO: troca do código do Google falhou ({type(erro).__name__}).")
         raise HTTPException(status_code=503, detail=MENSAGEM_ERRO_GOOGLE)
-    # Origem do registo: só no primeiro login (a conta Google acabou de ser criada) e só se ainda estiver vazia.
+    # Origem e perfil do registo: só no primeiro login (a conta Google acabou de ser criada).
+    # A origem só se escreve se ainda estiver vazia; o perfil (país, bancos, moeda) só se vier no pedido.
     if sessao.conta_nova:
         guardar_origem(sessao.user_id, troca.origem)
+        guardar_perfil_inicial(sessao.user_id, troca.perfil_pedido())
     return {"access_token": sessao.token, "token_type": "bearer"}
 
 
@@ -296,6 +303,9 @@ def registo(conta: NovaConta):
         raise HTTPException(status_code=503, detail="Não foi possível criar a conta agora. Tenta mais tarde.")
     # O canal de onde a pessoa veio (utm_source). Se falhar, o registo segue (só um aviso no log).
     guardar_origem(user_id, conta.origem)
+    # O perfil escolhido no registo (país, países dos bancos, moeda). Só em conta acabada de criar (o user_id
+    # vem None nas outras, ver fazer_registo). Se falhar, a conta fica PT/EUR e muda-se nas definições.
+    guardar_perfil_inicial(user_id, conta.perfil_pedido())
     # A mesma resposta exista ou não uma conta com este email: assim ninguém usa o registo
     # para descobrir quem tem conta na app.
     return {"mensagem": "Enviámos um email de confirmação. Abre o link para ativar a conta."}
@@ -355,6 +365,16 @@ def apagar_conta(
     esquecer_resumos(user_id)
 
 
+# Muda o perfil da conta: país onde vive e países dos cartões e contas (livremente) e a moeda principal
+# (só com a conta sem dados: 409). Só os campos enviados mudam. Na demo: 423 (fora de PERMISSOES_DEMO).
+# Até 10 pedidos por hora por conta (429 acima disso, antes de ler a base de dados): ver limite_ip.py.
+@app.put("/conta/perfil")
+def mudar_perfil(pedido: PerfilConta, user_id: str = Depends(obter_utilizador_atual)) -> PerfilGuardado:
+    registar_mudanca_de_perfil(user_id)
+    perfil = atualizar_perfil(user_id, pedido.pais, pedido.paises_bancos, pedido.moeda)
+    return PerfilGuardado(pais=perfil.pais, paises_bancos=list(perfil.paises_bancos), moeda=perfil.moeda)
+
+
 # A API usa a chave secreta (ignora o RLS), por isso cada rota filtra pelo user_id do token.
 # Lista as transações, das mais recentes para as mais antigas. Com ?mes=2026-10, só as desse mês.
 @app.get("/transacoes")
@@ -372,6 +392,16 @@ def listar_transacoes(
         return consulta.order("data", desc=True).order("id", desc=True)
 
     return ler_todas(nova_consulta)
+
+
+def campos_de_moeda(user_id: str) -> dict[str, str]:
+    """{"moeda": ...} com a moeda principal da conta, para juntar a cada movimento ou compra novos.
+
+    Nunca vem do pedido. Vazio antes da sql/020 (a coluna ainda não existe). Depois da 020, um gatilho
+    na base de dados põe a mesma moeda de qualquer forma.
+    """
+    moeda = moeda_da_conta(user_id)
+    return {"moeda": moeda} if moeda else {}
 
 
 def contar_transacoes(user_id: str) -> int:
@@ -419,8 +449,8 @@ def criar_transacao(nova: NovaMovimentacao, user_id: str = Depends(obter_utiliza
             print(erro)
 
     # mode="json" converte a date em texto ("2026-09-20"), que é o que o Supabase aceita.
-    # O dono vem sempre do token, nunca do corpo do pedido.
-    dados = nova.model_dump(mode="json") | {"categoria": categoria, "user_id": user_id}
+    # O dono vem sempre do token, nunca do corpo do pedido; a moeda é sempre a principal da conta.
+    dados = nova.model_dump(mode="json") | {"categoria": categoria, "user_id": user_id} | campos_de_moeda(user_id)
     resposta = supabase.table("transacoes").insert(dados).execute()
     # As movimentações mudaram: os pagamentos que se repetem voltam a ser calculados.
     esquecer_recorrentes(user_id)
@@ -635,7 +665,8 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
         # Ficam com categoria vazia (NULL): o POST /transacoes/categorizar trata-as mais tarde.
         aviso = AVISO_IMPORTACAO_SEM_IA
 
-    dados = [nova.model_dump(mode="json") | {"user_id": user_id} for nova in novas]
+    moeda = campos_de_moeda(user_id)
+    dados = [nova.model_dump(mode="json") | {"user_id": user_id} | moeda for nova in novas]
     # upsert com ignore_duplicates: as linhas cuja impressão digital já existe são saltadas
     # (ON CONFLICT DO NOTHING), e a resposta traz só as que entraram mesmo.
     resposta = (
@@ -674,15 +705,23 @@ def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -
     registar_pergunta(user_id, "chat")
     # O plano vem do servidor: decide a memória, o histórico das ferramentas, o esforço e os tokens.
     plano, config = plano_e_config_ia(user_id)
+    # O "hoje" do país onde a pessoa vive: vai nas instruções da IA e decide os meses que as ferramentas veem.
+    hoje = hoje_do_utilizador(user_id)
 
-    # Closure: uma função que "lembra" o user_id e o plano deste pedido. A IA só lhe passa o nome e os argumentos.
+    # Closure: uma função que "lembra" o user_id, o plano e o dia deste pedido. A IA só lhe passa o nome e os argumentos.
     def executar(nome: str, argumentos: dict) -> str:
-        return executar_ferramenta(nome, argumentos, user_id, plano)
+        return executar_ferramenta(nome, argumentos, user_id, plano, hoje)
 
     try:
         # O histórico vem do browser: o conversar() corta-o para a memória do plano (0 no Free).
         resposta = conversar(
-            pedido.pergunta, FERRAMENTAS, executar, user_id=user_id, config=config, historico=pedido.historico
+            pedido.pergunta,
+            FERRAMENTAS,
+            executar,
+            user_id=user_id,
+            config=config,
+            historico=pedido.historico,
+            hoje=hoje,
         )
     except ErroIA as erro:
         print(erro)
@@ -726,12 +765,12 @@ def listar_orcamentos(
     return planeamento_do_mes(user_id, mes)
 
 
-# Alertas de orçamento do mês atual (de Lisboa): categorias com 90% ou mais do orçamento gasto.
+# Alertas de orçamento do mês atual (no país onde a pessoa vive): categorias com 90% ou mais do orçamento gasto.
 # Só contas, sem IA: não gasta pedidos. O Planeamento e o dashboard mostram-nos.
 @app.get("/orcamentos/alertas")
 def alertas_orcamento(user_id: str = Depends(obter_utilizador_atual)) -> AlertasOrcamento:
     # O mês vai na resposta: o frontend só mostra os alertas quando o mês escolhido é este.
-    mes_atual = hoje_em_lisboa().strftime("%Y-%m")
+    mes_atual = hoje_do_utilizador(user_id).strftime("%Y-%m")
     return AlertasOrcamento(mes=mes_atual, alertas=alertas_de_orcamento(planeamento_do_mes(user_id, mes_atual)))
 
 
@@ -765,7 +804,7 @@ def sugestao_orcamento(
 # não gasta pedidos e é de todos os planos. O Planeamento e o dashboard mostram-nos.
 @app.get("/recorrentes")
 def pagamentos_recorrentes(user_id: str = Depends(obter_utilizador_atual)) -> list[Recorrente]:
-    return recorrentes_do_utilizador(user_id, hoje_em_lisboa())
+    return recorrentes_do_utilizador(user_id, hoje_do_utilizador(user_id))
 
 
 # Os formatos de imagem que a IA aceita, e o tamanho máximo de cada imagem na API (5 MB).
@@ -822,7 +861,7 @@ def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual))
 def criar_compra(nova: NovaCompra, user_id: str = Depends(obter_utilizador_atual)) -> Compra:
     # Guardar um talão cria uma transação: conta para o teto de movimentações da conta.
     exigir_espaco_na_conta(contar_transacoes(user_id), 1)
-    compra = gravar_compra(user_id, nova)
+    compra = gravar_compra(user_id, nova, moeda_da_conta(user_id))
     esquecer_recorrentes(user_id)
     return compra
 
@@ -916,7 +955,7 @@ def plano_do_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_
     objetivo = obter_objetivo(user_id, objetivo_id)
     if objetivo is None:
         raise HTTPException(status_code=404, detail="Objetivo não encontrado")
-    dados = dados_do_plano(user_id, objetivo, hoje_em_lisboa())
+    dados = dados_do_plano(user_id, objetivo, hoje_do_utilizador(user_id))
 
     # Casos em que a resposta é sempre a mesma: não vale a pena pagar uma chamada à IA.
     if dados["falta"] == 0:
@@ -956,8 +995,8 @@ def simulador(
 
 
 def relatorio_pedido(ano: int, user_id: str) -> RelatorioAnual:
-    """O relatório do ano para este utilizador, ou 422 se o ano não for de 2000 até ao ano atual (de Lisboa)."""
-    hoje = hoje_em_lisboa()
+    """O relatório do ano para este utilizador, ou 422 se o ano não for de 2000 até ao ano atual (no seu país)."""
+    hoje = hoje_do_utilizador(user_id)
     if not ano_valido(ano, hoje):
         raise HTTPException(status_code=422, detail=f"Ano inválido. Escolhe um ano entre 2000 e {hoje.year}.")
     return relatorio_do_ano(user_id, ano, hoje)

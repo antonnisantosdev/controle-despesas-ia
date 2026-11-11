@@ -12,12 +12,12 @@ import {
   type JuncaoProdutos,
   type ProdutoResumo,
 } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
 import { TEXTOS_PRECOS_LOJAS as T } from "@/lib/textosPrecosLojas";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import {
-  dataCurta,
   ESTILO_BOTAO,
   ESTILO_BOTAO_PRINCIPAL,
   ESTILO_CAMPO,
@@ -45,6 +45,7 @@ type Mensagem = { tipo: "sucesso" | "erro"; texto: string } | null;
 export default function JuntarProdutos(props: Props) {
   const { chave, nome, juncoes, onMudou, onPlanoPago, onSessaoExpirada } = props;
   const demo = useSessaoDemo();
+  const f = useFormatos();
   const [aberto, setAberto] = useState(false);
   const [termo, setTermo] = useState("");
   const termoAtrasado = useComAtraso(termo.trim());
@@ -186,7 +187,7 @@ export default function JuntarProdutos(props: Props) {
                       <span className="min-w-0">
                         <span className="block break-words text-sm font-medium text-texto">{produto.nome}</span>
                         <span className="block text-xs text-texto-suave">
-                          {textoLojas(produto.n_lojas)} · {preencher(T.ultimaCompra, { data: dataCurta(produto.ultima_data) })}
+                          {textoLojas(produto.n_lojas)} · {preencher(T.ultimaCompra, { data: f.data(produto.ultima_data) })}
                         </span>
                       </span>
                     </label>

@@ -223,7 +223,7 @@ def test_csv_que_nao_e_utf8_da_422_e_nao_500(cliente, ia, limite):
 def test_guardar_talao_com_a_conta_cheia_e_recusado(cliente, base_dados, monkeypatch):
     base_dados.contagem = MAX_TRANSACOES_POR_CONTA
     gravacoes = []
-    monkeypatch.setattr(main, "gravar_compra", lambda user_id, nova: gravacoes.append(nova))
+    monkeypatch.setattr(main, "gravar_compra", lambda user_id, nova, moeda=None: gravacoes.append(nova))
 
     resposta = cliente.post(
         "/compras",
@@ -244,7 +244,7 @@ def test_guardar_talao_com_a_conta_cheia_e_recusado(cliente, base_dados, monkeyp
 
 def test_guardar_talao_com_produtos_a_mais_e_recusado(cliente, monkeypatch):
     gravacoes = []
-    monkeypatch.setattr(main, "gravar_compra", lambda user_id, nova: gravacoes.append(nova))
+    monkeypatch.setattr(main, "gravar_compra", lambda user_id, nova, moeda=None: gravacoes.append(nova))
     itens = [{"descricao": "PAO", "quantidade": 1, "preco": 0.1}] * 201
 
     resposta = cliente.post(
@@ -265,7 +265,7 @@ def test_guardar_talao_com_produtos_a_mais_e_recusado(cliente, monkeypatch):
 
 def test_guardar_talao_com_descricao_enorme_e_recusado(cliente, monkeypatch):
     gravacoes = []
-    monkeypatch.setattr(main, "gravar_compra", lambda user_id, nova: gravacoes.append(nova))
+    monkeypatch.setattr(main, "gravar_compra", lambda user_id, nova, moeda=None: gravacoes.append(nova))
 
     resposta = cliente.post(
         "/compras",

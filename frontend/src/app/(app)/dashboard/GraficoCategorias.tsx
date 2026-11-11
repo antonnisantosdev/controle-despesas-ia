@@ -3,8 +3,10 @@
 import { Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import type { GastoCategoria } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
+import { TEXTOS_GRAFICOS } from "@/lib/textosDashboard";
 
-import { ESTILO_TOOLTIP, euros } from "./formatos";
+import { ESTILO_TOOLTIP } from "./formatos";
 
 const CORES = ["var(--serie-1)", "var(--serie-2)", "var(--serie-3)", "var(--serie-4)", "var(--serie-5)"];
 const MAX_FATIAS = 5;
@@ -21,8 +23,9 @@ function agrupar(dados: GastoCategoria[]): Fatia[] {
 }
 
 export default function GraficoCategorias({ dados }: { dados: GastoCategoria[] }) {
+  const formatos = useFormatos();
   if (dados.length === 0) {
-    return <p className="text-sm text-texto-suave">Sem despesas neste mês.</p>;
+    return <p className="text-sm text-texto-suave">{TEXTOS_GRAFICOS.semDespesas}</p>;
   }
 
   const fatias = agrupar(dados);
@@ -45,12 +48,12 @@ export default function GraficoCategorias({ dados }: { dados: GastoCategoria[] }
               stroke="var(--cartao)"
               strokeWidth={2}
             />
-            <Tooltip contentStyle={ESTILO_TOOLTIP} formatter={(valor) => euros(Number(valor))} />
+            <Tooltip contentStyle={ESTILO_TOOLTIP} formatter={(valor) => formatos.dinheiro(Number(valor))} />
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xs text-texto-suave">Total</span>
-          <span className="font-semibold text-texto">{euros(total)}</span>
+          <span className="text-xs text-texto-suave">{TEXTOS_GRAFICOS.total}</span>
+          <span className="font-semibold text-texto">{formatos.dinheiro(total)}</span>
         </div>
       </div>
 
@@ -61,7 +64,7 @@ export default function GraficoCategorias({ dados }: { dados: GastoCategoria[] }
           <li key={f.categoria} className="flex items-center gap-3 text-sm">
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: f.fill }} />
             <span className="min-w-0 flex-1 truncate capitalize text-texto">{f.categoria}</span>
-            <span className="shrink-0 tabular-nums text-texto">{euros(f.total)}</span>
+            <span className="shrink-0 tabular-nums text-texto">{formatos.dinheiro(f.total)}</span>
             <span className="w-9 shrink-0 text-right text-xs tabular-nums text-texto-suave">
               {Math.round((f.total / total) * 100)}%
             </span>

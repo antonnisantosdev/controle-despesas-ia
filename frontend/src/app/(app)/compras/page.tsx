@@ -19,13 +19,14 @@ import {
   type Compra,
   type Talao,
 } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
 import { reduzirImagem } from "@/lib/imagem";
-import { temFuncoesPagas } from "@/lib/planos";
+import { preencher, temFuncoesPagas } from "@/lib/planos";
+import { TEXTOS_COMPRAS } from "@/lib/textosCompras";
 import { TEXTOS_ENVIO_IA, TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
 import { TEXTOS_PRECOS_LOJAS } from "@/lib/textosPrecosLojas";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
-import { euros } from "../dashboard/formatos";
 import PrecosPorLoja from "./PrecosPorLoja";
 import RevisaoTalao from "./RevisaoTalao";
 
@@ -35,13 +36,9 @@ const SEPARADORES: { id: Separador; nome: string }[] = [
   { id: "precos", nome: TEXTOS_PRECOS_LOJAS.separadorPrecos },
 ];
 
-// "2026-10-28" -> "28/10/2026"
-function dataCurta(data: string) {
-  return new Date(`${data}T00:00:00`).toLocaleDateString("pt-PT");
-}
-
 export default function PaginaCompras() {
   const router = useRouter();
+  const f = useFormatos();
   const entradaFoto = useRef<HTMLInputElement>(null);
   const [compras, setCompras] = useState<Compra[] | null>(null); // null = ainda a carregar
   const [talao, setTalao] = useState<Talao | null>(null); // o que a IA leu, à espera de revisão
@@ -88,7 +85,7 @@ export default function PaginaCompras() {
       .catch((e) => {
         // Sessão expirada: vai para o login sem mostrar erro (senão a mensagem fica lá ao voltar à página).
         if (e instanceof SessaoExpirada) tratarSessao(e);
-        else setErro("Não foi possível carregar as compras. Confirma que a API está a correr.");
+        else setErro(TEXTOS_COMPRAS.erroCarregar);
       });
     // Avisa logo no Free, sem esperar que a leitura falhe. Se o /plano falhar, o botão fica:
     // a API responde 402 na mesma, e o aviso aparece nessa altura.
@@ -120,7 +117,7 @@ export default function PaginaCompras() {
       else if (eSoPlanosPagos(e)) setSoPlanosPagos(typeof e.detalhe === "string" ? e.detalhe : TEXTOS_PLANO_PAGO.talao);
       // 413/415/422 (foto inválida) e 503 (IA em baixo) trazem uma explicação da API.
       else if (e instanceof ErroApi && typeof e.detalhe === "string") setErro(e.detalhe);
-      else setErro("Não foi possível ler a fotografia. Tenta outra vez.");
+      else setErro(TEXTOS_COMPRAS.erroLer);
     } finally {
       setALer(false);
       if (entradaFoto.current) entradaFoto.current.value = "";
@@ -131,7 +128,7 @@ export default function PaginaCompras() {
     setTalao(null);
     // A nova compra entra no topo da lista, sem voltar a pedir tudo à API.
     setCompras((anteriores) => [compra, ...(anteriores ?? [])]);
-    setAviso(`Compra gravada: ${compra.loja}, ${euros(compra.total)}. Já aparece nas Movimentações.`);
+    setAviso(preencher(TEXTOS_COMPRAS.gravada, { loja: compra.loja, total: f.dinheiro(compra.total) }));
   }
 
   return (
@@ -139,8 +136,8 @@ export default function PaginaCompras() {
       <div className="mx-auto max-w-4xl space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-destaque">Talões lidos pela IA</p>
-            <h1 className="text-2xl font-semibold text-texto">Minhas compras</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-destaque">{TEXTOS_COMPRAS.etiquetaTopo}</p>
+            <h1 className="text-2xl font-semibold text-texto">{TEXTOS_COMPRAS.titulo}</h1>
           </div>
           {/* capture="environment": no telemóvel, abre logo a câmara traseira. No computador, escolhe-se um ficheiro. */}
           <input
@@ -162,7 +159,7 @@ export default function PaginaCompras() {
               onClick={() => entradaFoto.current?.click()}
               className="rounded-lg bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {aLer ? "A IA está a ler o talão..." : "📷 Fotografar talão"}
+              {aLer ? TEXTOS_COMPRAS.aLer : TEXTOS_COMPRAS.fotografar}
             </button>
           )}
         </header>
@@ -221,10 +218,10 @@ export default function PaginaCompras() {
           )}
 
           <section className="divide-y divide-borda rounded-xl border border-borda bg-cartao">
-            {compras === null && !erro && <p className="p-6 text-sm text-texto-suave">A carregar...</p>}
+            {compras === null && !erro && <p className="p-6 text-sm text-texto-suave">{TEXTOS_COMPRAS.aCarregar}</p>}
             {compras?.length === 0 && (
               <p className="p-6 text-sm text-texto-suave">
-                {soPlanosPagos ? "Ainda não tens compras." : "Ainda não tens compras. Fotografa um talão para começar."}
+                {soPlanosPagos ? TEXTOS_COMPRAS.vazioSemTaloes : TEXTOS_COMPRAS.vazio}
               </p>
             )}
             {compras?.map((compra) => (
@@ -234,19 +231,23 @@ export default function PaginaCompras() {
                   <div>
                     <p className="font-medium text-texto">{compra.loja}</p>
                     <p className="text-xs text-texto-suave">
-                      {dataCurta(compra.data)} · {compra.itens.length} produtos
+                      {preencher(TEXTOS_COMPRAS.resumoCompra, { data: f.data(compra.data), n: compra.itens.length })}
                     </p>
                   </div>
-                  <span className="font-semibold text-texto">{euros(compra.total)}</span>
+                  <span className="font-semibold text-texto">{f.dinheiro(compra.total)}</span>
                 </summary>
                 <ul className="mt-3 space-y-1 border-t border-borda pt-3 text-sm">
                   {compra.itens.map((item, i) => (
                     <li key={i} className="flex justify-between gap-4 text-texto-suave">
                       <span>
                         {item.descricao}
-                        {item.quantidade !== 1 && <span className="text-xs"> × {item.quantidade.toLocaleString("pt-PT")}</span>}
+                        {item.quantidade !== 1 && (
+                          <span className="text-xs">
+                            {preencher(TEXTOS_COMPRAS.quantidade, { quantidade: f.numero(item.quantidade) })}
+                          </span>
+                        )}
                       </span>
-                      <span className="text-texto">{euros(item.preco)}</span>
+                      <span className="text-texto">{f.dinheiro(item.preco)}</span>
                     </li>
                   ))}
                 </ul>

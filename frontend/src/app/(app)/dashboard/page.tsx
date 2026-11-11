@@ -14,11 +14,13 @@ import {
   type GastoCategoria,
   type ResumoMensal,
 } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
+import { preencher } from "@/lib/planos";
+import { TEXTOS_DASHBOARD } from "@/lib/textosDashboard";
 import { TEXTOS_SEM_DADOS } from "@/lib/textosPlanos";
 
 import CartaoResumo from "./CartaoResumo";
 import Chat from "./Chat";
-import { nomeMes } from "./formatos";
 import GraficoCategorias from "./GraficoCategorias";
 import GraficoMensal from "./GraficoMensal";
 import ResumoCartao from "./ResumoCartao";
@@ -32,12 +34,13 @@ function tratarErro(erro: unknown, router: Router, setErro: (mensagem: string) =
     apagarToken();
     router.replace("/login");
   } else {
-    setErro("Não foi possível carregar os dados. Confirma que a API está a correr.");
+    setErro(TEXTOS_DASHBOARD.erroCarregar);
   }
 }
 
 export default function PaginaDashboard() {
   const router = useRouter();
+  const f = useFormatos();
   const [mensal, setMensal] = useState<ResumoMensal[]>([]);
   const [mes, setMes] = useState("");
   const [categorias, setCategorias] = useState<GastoCategoria[]>([]);
@@ -75,29 +78,29 @@ export default function PaginaDashboard() {
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-destaque">Resumo financeiro</p>
-            <h1 className="text-2xl font-semibold text-texto">Visão geral</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-destaque">{TEXTOS_DASHBOARD.etiquetaTopo}</p>
+            <h1 className="text-2xl font-semibold text-texto">{TEXTOS_DASHBOARD.titulo}</h1>
           </div>
           {/* O mês escolhido aqui muda os cartões, as categorias e o resumo da IA. */}
           <select
             value={mes}
             onChange={(e) => setMes(e.target.value)}
-            aria-label="Mês"
+            aria-label={TEXTOS_DASHBOARD.rotuloMes}
             className="rounded-lg border border-borda bg-cartao px-3 py-2 text-sm text-texto"
           >
             {mensal.map((m) => (
               <option key={m.mes} value={m.mes}>
-                {nomeMes(m.mes)}
+                {f.mesAno(m.mes)}
               </option>
             ))}
           </select>
         </header>
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <CartaoResumo titulo="Saldo do mês" valor={totais.saldoMes} descricao="Entradas menos despesas" icone="M3 7h18v12H3zM3 7l3-3h12l3 3M16 13h2" corIcone="var(--destaque)" />
-          <CartaoResumo titulo="Entradas do mês" valor={totais.entradas} descricao="Dinheiro que entrou" icone="M7 17L17 7M7 7v10h10" corIcone="var(--cor-receitas)" />
-          <CartaoResumo titulo="Despesas do mês" valor={totais.despesas} descricao="Dinheiro que saiu" icone="M7 7l10 10M17 7v10H7" corIcone="var(--cor-despesas)" />
-          <CartaoResumo titulo="Saldo acumulado" valor={totais.saldoTotal} descricao="Desde o primeiro extrato" icone="M4 19h16M6 15v-4M10 15V7M14 15v-6M18 15V5" corIcone="var(--texto-suave)" />
+          <CartaoResumo titulo={TEXTOS_DASHBOARD.saldoMes} valor={totais.saldoMes} descricao={TEXTOS_DASHBOARD.saldoMesDescricao} icone="M3 7h18v12H3zM3 7l3-3h12l3 3M16 13h2" corIcone="var(--destaque)" />
+          <CartaoResumo titulo={TEXTOS_DASHBOARD.entradasMes} valor={totais.entradas} descricao={TEXTOS_DASHBOARD.entradasMesDescricao} icone="M7 17L17 7M7 7v10h10" corIcone="var(--cor-receitas)" />
+          <CartaoResumo titulo={TEXTOS_DASHBOARD.despesasMes} valor={totais.despesas} descricao={TEXTOS_DASHBOARD.despesasMesDescricao} icone="M7 7l10 10M17 7v10H7" corIcone="var(--cor-despesas)" />
+          <CartaoResumo titulo={TEXTOS_DASHBOARD.saldoAcumulado} valor={totais.saldoTotal} descricao={TEXTOS_DASHBOARD.saldoAcumuladoDescricao} icone="M4 19h16M6 15v-4M10 15V7M14 15v-6M18 15V5" corIcone="var(--texto-suave)" />
         </div>
 
         {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
@@ -123,8 +126,8 @@ export default function PaginaDashboard() {
 
         <div className="grid gap-6 lg:grid-cols-3">
           <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6 lg:col-span-2">
-            <h2 className="font-medium text-texto">Movimentação financeira</h2>
-            <p className="mb-4 text-xs text-texto-suave">Entradas e despesas de cada mês</p>
+            <h2 className="font-medium text-texto">{TEXTOS_DASHBOARD.evolucaoTitulo}</h2>
+            <p className="mb-4 text-xs text-texto-suave">{TEXTOS_DASHBOARD.evolucaoTexto}</p>
             <GraficoMensal dados={mensal} />
           </section>
           {/* Sem mês (conta nova) não há nada para a IA resumir. */}
@@ -133,8 +136,10 @@ export default function PaginaDashboard() {
 
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
-            <h2 className="font-medium text-texto">Gastos por categoria</h2>
-            <p className="mb-4 text-xs text-texto-suave">Para onde foi o dinheiro em {mes ? nomeMes(mes) : "..."}</p>
+            <h2 className="font-medium text-texto">{TEXTOS_DASHBOARD.categoriasTitulo}</h2>
+            <p className="mb-4 text-xs text-texto-suave">
+              {preencher(TEXTOS_DASHBOARD.categoriasTexto, { mes: mes ? f.mesAno(mes) : TEXTOS_DASHBOARD.semMes })}
+            </p>
             <GraficoCategorias dados={categorias} />
           </section>
           <Chat />

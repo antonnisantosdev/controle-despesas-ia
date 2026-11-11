@@ -4,8 +4,9 @@ import { useState, type FormEvent } from "react";
 
 import { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import type { LinhaOrcamento } from "@/lib/api";
-
-import { euros } from "../dashboard/formatos";
+import { useFormatos } from "@/lib/conta";
+import { preencher } from "@/lib/planos";
+import { TEXTOS_LINHA_ORCAMENTO } from "@/lib/textosPlaneamento";
 
 // desligado: demo (só leitura), o campo e o botão Guardar ficam desligados.
 type Props = {
@@ -24,6 +25,7 @@ function corDaBarra(percentagem: number) {
 }
 
 export default function LinhaPlaneamento({ linha, onGuardar, compacta = false, desligado = false }: Props) {
+  const f = useFormatos();
   const [valor, setValor] = useState(linha.limite?.toString().replace(".", ",") ?? "");
 
   function submeter(evento: FormEvent<HTMLFormElement>) {
@@ -39,8 +41,8 @@ export default function LinhaPlaneamento({ linha, onGuardar, compacta = false, d
         value={valor}
         onChange={(e) => setValor(e.target.value)}
         disabled={desligado}
-        placeholder="Limite €"
-        aria-label={`Orçamento mensal de ${linha.categoria}`}
+        placeholder={preencher(TEXTOS_LINHA_ORCAMENTO.marcador, { simbolo: f.simbolo })}
+        aria-label={preencher(TEXTOS_LINHA_ORCAMENTO.rotuloCampo, { categoria: linha.categoria })}
         className="w-24 rounded-md border border-borda bg-cartao px-2 py-1 text-right text-sm text-texto"
       />
       <button
@@ -49,7 +51,7 @@ export default function LinhaPlaneamento({ linha, onGuardar, compacta = false, d
         aria-describedby={desligado ? ID_NOTA_DEMO : undefined}
         className="rounded-md bg-destaque px-3 py-1 text-xs font-medium text-white hover:bg-destaque-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Guardar
+        {TEXTOS_LINHA_ORCAMENTO.guardar}
       </button>
     </form>
   );
@@ -65,10 +67,18 @@ export default function LinhaPlaneamento({ linha, onGuardar, compacta = false, d
           <p className="font-medium capitalize text-texto">{linha.categoria}</p>
           <p className="text-xs text-texto-suave">
             {linha.limite === null
-              ? `Gastaste ${euros(linha.gasto)} · sem orçamento`
+              ? preencher(TEXTOS_LINHA_ORCAMENTO.semOrcamento, { gasto: f.dinheiro(linha.gasto) })
               : percentagem > 100
-                ? `${euros(linha.gasto)} de ${euros(linha.limite)} · passaste ${euros(linha.gasto - linha.limite)}`
-                : `${euros(linha.gasto)} de ${euros(linha.limite)} · faltam ${euros(linha.limite - linha.gasto)}`}
+                ? preencher(TEXTOS_LINHA_ORCAMENTO.passaste, {
+                    gasto: f.dinheiro(linha.gasto),
+                    limite: f.dinheiro(linha.limite),
+                    diferenca: f.dinheiro(linha.gasto - linha.limite),
+                  })
+                : preencher(TEXTOS_LINHA_ORCAMENTO.faltam, {
+                    gasto: f.dinheiro(linha.gasto),
+                    limite: f.dinheiro(linha.limite),
+                    diferenca: f.dinheiro(linha.limite - linha.gasto),
+                  })}
           </p>
         </div>
         {/* Não dá para pôr orçamento em "sem categoria": primeiro categoriza-se a transação. */}

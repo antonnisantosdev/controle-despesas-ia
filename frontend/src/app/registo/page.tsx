@@ -10,7 +10,9 @@ import Logo from "@/components/Logo";
 import RodapeLegal from "@/components/RodapeLegal";
 import { API_URL, fetchComTentativas } from "@/lib/api";
 import { lerOrigem } from "@/lib/origem";
-import { LIMITES_RESERVA, textoDosPedidos } from "@/lib/planos";
+import { LIMITES_RESERVA, preencher, textoDosPedidos } from "@/lib/planos";
+import { TEXTOS_GERAIS } from "@/lib/textosComuns";
+import { TEXTOS_REGISTO } from "@/lib/textosLogin";
 import CampoPalavraPasse from "@/components/CampoPalavraPasse";
 
 const ESTILO_CAMPO = "mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto";
@@ -18,8 +20,8 @@ const ESTILO_CAMPO = "mt-1 w-full rounded-md border border-borda bg-cartao px-3 
 // Verifica o formulário antes de o enviar: devolve a mensagem de erro, ou "" se estiver tudo bem.
 // É só para ajudar quem escreve. As regras a sério (email válido, 8+ caracteres) estão na API (NovaConta).
 function erroDoFormulario(password: string, repetir: string): string {
-  if (password.length < 8) return "A palavra-passe tem de ter pelo menos 8 caracteres.";
-  if (password !== repetir) return "As palavras-passe não coincidem.";
+  if (password.length < 8) return TEXTOS_REGISTO.erroCurta;
+  if (password !== repetir) return TEXTOS_REGISTO.erroDiferentes;
   return "";
 }
 
@@ -53,15 +55,15 @@ export default function PaginaRegisto() {
       const corpo = await resposta.json().catch(() => null);
 
       if (resposta.ok) {
-        setMensagem(corpo?.mensagem ?? "Conta criada. Confirma o email para entrar.");
+        setMensagem(corpo?.mensagem ?? TEXTOS_REGISTO.criada);
       } else if (resposta.status === 422) {
         // O Pydantic recusou os dados: na prática, um email mal escrito.
-        setErro("Confirma que o email está bem escrito.");
+        setErro(TEXTOS_REGISTO.erroEmail);
       } else {
-        setErro(typeof corpo?.detail === "string" ? corpo.detail : "Não foi possível criar a conta.");
+        setErro(typeof corpo?.detail === "string" ? corpo.detail : TEXTOS_REGISTO.erroCriar);
       }
     } catch {
-      setErro("Não foi possível ligar ao servidor. Tenta outra vez daqui a um minuto.");
+      setErro(TEXTOS_GERAIS.semLigacao);
     } finally {
       setACriar(false);
     }
@@ -77,17 +79,17 @@ export default function PaginaRegisto() {
         {mensagem ? (
           // Depois de criar a conta, o formulário dá lugar ao aviso do email.
           <div className="space-y-4 text-center">
-            <p className="font-medium text-texto">Quase lá!</p>
+            <p className="font-medium text-texto">{TEXTOS_REGISTO.quaseLa}</p>
             <p className="text-sm text-texto-suave">{mensagem}</p>
-            <p className="text-xs text-texto-suave">Não chegou? Vê na pasta de spam.</p>
+            <p className="text-xs text-texto-suave">{TEXTOS_REGISTO.spam}</p>
             <Link href="/login" className="block text-sm font-medium text-destaque hover:underline">
-              Ir para o login
+              {TEXTOS_REGISTO.irLogin}
             </Link>
           </div>
         ) : (
           <form onSubmit={criarConta} className="space-y-4">
             <p className="text-center text-sm text-texto-suave">
-              Cria a tua conta grátis. O plano Free inclui {textoDosPedidos(LIMITES_RESERVA.free)} e importação de extratos em CSV.
+              {preencher(TEXTOS_REGISTO.introducao, { pedidos: textoDosPedidos(LIMITES_RESERVA.free) })}
             </p>
             {/* Antes das duas formas de criar conta (Google e email), para valer para as duas. */}
             <AvisoTermos />
@@ -96,7 +98,7 @@ export default function PaginaRegisto() {
             <BotaoGoogle />
 
             <label className="block">
-              <span className="text-sm text-texto-suave">Email</span>
+              <span className="text-sm text-texto-suave">{TEXTOS_GERAIS.email}</span>
               <input
                 type="email"
                 required
@@ -108,7 +110,7 @@ export default function PaginaRegisto() {
             </label>
 
             <label className="block">
-              <span className="text-sm text-texto-suave">Palavra-passe (mínimo 8 caracteres)</span>
+              <span className="text-sm text-texto-suave">{TEXTOS_REGISTO.palavraPasse}</span>
               <CampoPalavraPasse
                 autoComplete="new-password"
                 value={password}
@@ -118,7 +120,7 @@ export default function PaginaRegisto() {
             </label>
 
             <label className="block">
-              <span className="text-sm text-texto-suave">Repetir a palavra-passe</span>
+              <span className="text-sm text-texto-suave">{TEXTOS_REGISTO.repetir}</span>
               <CampoPalavraPasse
                 autoComplete="new-password"
                 value={repetir}
@@ -134,13 +136,13 @@ export default function PaginaRegisto() {
               disabled={aCriar}
               className="w-full rounded-md bg-destaque py-2 font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
             >
-              {aCriar ? "A criar a conta..." : "Criar conta"}
+              {aCriar ? TEXTOS_REGISTO.aCriar : TEXTOS_REGISTO.criar}
             </button>
 
             <p className="text-center text-sm text-texto-suave">
-              Já tens conta?{" "}
+              {TEXTOS_REGISTO.jaTensConta}{" "}
               <Link href="/login" className="font-medium text-destaque hover:underline">
-                Entra
+                {TEXTOS_REGISTO.entra}
               </Link>
             </p>
             <p className="-mt-2 text-center text-xs">
@@ -148,7 +150,7 @@ export default function PaginaRegisto() {
                 href="/precos"
                 className="inline-flex min-h-11 items-center rounded-md px-2 text-texto-suave hover:text-texto hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque"
               >
-                Ver planos
+                {TEXTOS_GERAIS.verPlanos}
               </Link>
             </p>
           </form>

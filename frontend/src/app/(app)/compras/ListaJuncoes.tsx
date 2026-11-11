@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import { eBloqueadoNaDemo, ErroApi, eSoPlanosPagos, pedirApi, SessaoExpirada, type JuncaoProdutos } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
 import { TEXTOS_PRECOS_LOJAS as T } from "@/lib/textosPrecosLojas";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
@@ -23,6 +24,7 @@ type Mensagem = { tipo: "sucesso" | "erro"; texto: string } | null;
 // Na demo o botão fica desligado (a API responderia 423) e a NotaDemo do topo explica porquê.
 export default function ListaJuncoes({ juncoes, onMudou, onPlanoPago, onSessaoExpirada }: Props) {
   const demo = useSessaoDemo();
+  const f = useFormatos();
   const [aConfirmar, setAConfirmar] = useState<string | null>(null); // chave_origem
   const [aEnviar, setAEnviar] = useState(false);
   const [mensagem, setMensagem] = useState<Mensagem>(null);
@@ -66,7 +68,7 @@ export default function ListaJuncoes({ juncoes, onMudou, onPlanoPago, onSessaoEx
                     {j.nome_origem} <span className="text-texto-suave">→</span> {j.nome_destino}
                   </span>
                   <span className="block text-xs text-texto-suave">
-                    {preencher(T.juntadoEm, { data: new Date(j.criado_em).toLocaleDateString("pt-PT") })}
+                    {preencher(T.juntadoEm, { data: f.data(j.criado_em) })}
                   </span>
                 </p>
                 {aConfirmar !== j.chave_origem && (

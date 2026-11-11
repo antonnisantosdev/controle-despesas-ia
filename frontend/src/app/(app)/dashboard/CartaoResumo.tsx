@@ -1,10 +1,13 @@
-// Um cartão de resumo: ícone, título, valor em euros e uma linha de explicação.
+"use client";
+
+// Um cartão de resumo: ícone, título, valor na moeda da conta e uma linha de explicação.
 // O valor fica sempre na cor do texto; a cor do ícone só identifica o tipo de cartão.
-import { euros } from "./formatos";
+import { useFormatos } from "@/lib/conta";
 
 type Props = { titulo: string; valor: number; descricao: string; icone: string; corIcone: string };
 
 export default function CartaoResumo({ titulo, valor, descricao, icone, corIcone }: Props) {
+  const f = useFormatos();
   return (
     <div className="rounded-xl border border-borda bg-cartao p-4">
       <span
@@ -16,7 +19,7 @@ export default function CartaoResumo({ titulo, valor, descricao, icone, corIcone
         </svg>
       </span>
       <p className="text-xs text-texto-suave">{titulo}</p>
-      <p className="mt-1 text-xl font-semibold text-texto">{euros(valor)}</p>
+      <p className="mt-1 text-xl font-semibold text-texto">{f.dinheiro(valor)}</p>
       <p className="mt-1 text-xs text-texto-suave">{descricao}</p>
     </div>
   );

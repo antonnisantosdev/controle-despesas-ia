@@ -14,6 +14,9 @@ import {
   type MensagemHistorico,
   type RespostaChat,
 } from "@/lib/api";
+import { preencher } from "@/lib/planos";
+import { TEXTOS_GERAIS } from "@/lib/textosComuns";
+import { TEXTOS_CHAT } from "@/lib/textosDashboard";
 import { TEXTOS_DEMO } from "@/lib/textosDemo";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
@@ -54,17 +57,11 @@ function historicoParaEnviar(mensagens: Mensagem[], maximo: number): MensagemHis
   ]);
 }
 
-const EXEMPLOS = [
-  "Em que gastei mais este mês?",
-  "Quanto transferi para a Rita este mês?",
-  "Quanto gastei em combustível nos últimos 3 meses?",
-];
-
 // "a", "b" ou "c": vírgulas entre os exemplos e "ou" só antes do último.
-function juntarExemplos(exemplos: string[]): string {
+function juntarExemplos(exemplos: readonly string[]): string {
   const comAspas = exemplos.map((e) => `"${e}"`);
   if (comAspas.length < 2) return comAspas.join("");
-  return `${comAspas.slice(0, -1).join(", ")} ou ${comAspas[comAspas.length - 1]}`;
+  return `${comAspas.slice(0, -1).join(", ")} ${TEXTOS_CHAT.ou} ${comAspas[comAspas.length - 1]}`;
 }
 
 export default function Chat() {
@@ -104,14 +101,14 @@ export default function Chat() {
       setMensagens((m) => [...m, { autor: "ia", texto: resposta.resposta }]);
     } catch (e) {
       if (e instanceof SessaoExpirada) {
-        setErro("A tua sessão expirou. Faz login de novo.");
+        setErro(TEXTOS_GERAIS.sessaoExpirou);
       } else if (eLimiteDiario(e)) {
         // Limite diário: o AvisoLimite explica e leva ao "O meu plano". Na demo mostra o texto da API.
         setDetalheLimite(e instanceof ErroApi && typeof e.detalhe === "string" ? e.detalhe : undefined);
         setSemPedidos(true);
       } else {
         console.error(e);
-        setErro("O chat falhou. Tenta mais tarde.");
+        setErro(TEXTOS_CHAT.erro);
       }
     } finally {
       setAPensar(false);
@@ -121,7 +118,7 @@ export default function Chat() {
 
   return (
     <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
-      <h2 className="mb-4 font-medium text-texto">Pergunta às tuas finanças</h2>
+      <h2 className="mb-4 font-medium text-texto">{TEXTOS_CHAT.titulo}</h2>
 
       {demo && <p className="mb-4 text-sm text-texto-suave">{TEXTOS_DEMO.notaChat}</p>}
 
@@ -134,7 +131,9 @@ export default function Chat() {
 
       <div className="mb-4 max-h-80 space-y-3 overflow-y-auto">
         {mensagens.length === 0 && (
-          <p className="text-sm text-texto-suave">Experimenta: {juntarExemplos(EXEMPLOS)}</p>
+          <p className="text-sm text-texto-suave">
+            {preencher(TEXTOS_CHAT.experimenta, { exemplos: juntarExemplos(TEXTOS_CHAT.exemplos) })}
+          </p>
         )}
         {mensagens.map((m, i) => (
           <div key={i} className={m.autor === "tu" ? "flex justify-end" : "flex justify-start"}>
@@ -149,7 +148,7 @@ export default function Chat() {
             </p>
           </div>
         ))}
-        {aPensar && <p className="text-sm text-texto-suave">A consultar os teus dados...</p>}
+        {aPensar && <p className="text-sm text-texto-suave">{TEXTOS_CHAT.aPensar}</p>}
       </div>
 
       {erro && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{erro}</p>}
@@ -164,7 +163,7 @@ export default function Chat() {
           value={pergunta}
           onChange={(e) => setPergunta(e.target.value)}
           maxLength={500}
-          placeholder="Escreve uma pergunta..."
+          placeholder={TEXTOS_CHAT.marcador}
           className="flex-1 rounded-md border border-borda bg-cartao px-3 py-2 text-sm text-texto"
         />
         <button
@@ -172,7 +171,7 @@ export default function Chat() {
           disabled={aPensar}
           className="rounded-md bg-destaque px-4 py-2 text-sm font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
         >
-          Enviar
+          {TEXTOS_CHAT.enviar}
         </button>
       </form>
     </section>

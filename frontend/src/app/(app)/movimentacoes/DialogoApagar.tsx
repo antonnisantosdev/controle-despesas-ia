@@ -3,10 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import { eBloqueadoNaDemo, ErroApi, pedirApi, SessaoExpirada, type Compra, type Transacao } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
 import { TEXTOS_APAGAR_MOVIMENTO } from "@/lib/textosPlanos";
-
-import { euros } from "../dashboard/formatos";
 
 type Props = {
   transacao: Transacao;
@@ -19,7 +18,7 @@ type Props = {
 // "desconhecido" se esse pedido falhar (mostra-se o aviso na mesma, por precaução).
 type EstadoTalao = "a-verificar" | "sim" | "nao" | "desconhecido";
 
-// "2026-10-05" -> "05/10/2026"
+// "2026-10-05" -> "05/10/2026" (igual em PT e no BR)
 function dataCurta(data: string) {
   const [ano, mes, dia] = data.split("-");
   return `${dia}/${mes}/${ano}`;
@@ -28,6 +27,7 @@ function dataCurta(data: string) {
 // Confirmação antes de DELETE /transacoes/{id}. <dialog> nativo com showModal(): prende o foco lá dentro,
 // fecha com Esc e devolve o foco ao botão que o abriu.
 export default function DialogoApagar({ transacao, onApagada, onFechar, onSessaoExpirada }: Props) {
+  const f = useFormatos();
   const dialogo = useRef<HTMLDialogElement>(null);
   const [talao, setTalao] = useState<EstadoTalao>("a-verificar");
   const [aApagar, setAApagar] = useState(false);
@@ -90,7 +90,7 @@ export default function DialogoApagar({ transacao, onApagada, onFechar, onSessao
       <p id="texto-apagar-movimento" className="mt-2 break-words text-sm text-texto-suave">
         {preencher(TEXTOS_APAGAR_MOVIMENTO.texto, {
           descricao: transacao.descricao,
-          valor: euros(transacao.valor),
+          valor: f.dinheiro(transacao.valor),
           data: dataCurta(transacao.data),
         })}
       </p>

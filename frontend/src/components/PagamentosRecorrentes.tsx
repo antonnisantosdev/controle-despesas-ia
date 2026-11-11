@@ -4,24 +4,21 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { pedirApi, type Recorrente } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
+import type { Formatos } from "@/lib/formatos";
 import { preencher } from "@/lib/planos";
 import { TEXTOS_RECORRENTES } from "@/lib/textosRecorrentes";
 
-// Os valores em euros, à portuguesa: 12.99 -> "12,99 €".
-function euros(valor: number): string {
-  return valor.toLocaleString("pt-PT", { style: "currency", currency: "EUR" });
-}
-
-// "2026-11-05" -> "5 nov."
-function dataCurta(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("pt-PT", { day: "numeric", month: "short" });
+// "2026-11-05" -> "5 nov." (f: os formatos da conta, useFormatos())
+function dataCurta(iso: string, f: Formatos): string {
+  return f.data(iso, { day: "numeric", month: "short" });
 }
 
 // "Subiu de 10,99 € para 12,99 €" (ou "Desceu..."), ou null se o preço não mudou.
-function mudancaDePreco(r: Recorrente): string | null {
+function mudancaDePreco(r: Recorrente, f: Formatos): string | null {
   if (r.valor_anterior == null) return null;
   const modelo = r.valor_mensal > r.valor_anterior ? TEXTOS_RECORRENTES.subiu : TEXTOS_RECORRENTES.desceu;
-  return preencher(modelo, { antes: euros(r.valor_anterior), depois: euros(r.valor_mensal) });
+  return preencher(modelo, { antes: f.dinheiro(r.valor_anterior), depois: f.dinheiro(r.valor_mensal) });
 }
 
 // Quantos se mostram no cartão do dashboard (a lista completa está no Planeamento).
@@ -30,6 +27,7 @@ const MAXIMO_NO_CARTAO = 3;
 // Pagamentos que se repetem todos os meses (GET /recorrentes). Só contas na API, sem IA: não gasta pedidos.
 // compacto: o cartão pequeno do dashboard (só aparece se houver algum). Sem compacto: a secção do Planeamento.
 export default function PagamentosRecorrentes({ compacto = false }: { compacto?: boolean }) {
+  const f = useFormatos();
   const [lista, setLista] = useState<Recorrente[] | null>(null);
   const [erro, setErro] = useState(false);
 
@@ -55,8 +53,8 @@ export default function PagamentosRecorrentes({ compacto = false }: { compacto?:
     if (!lista || lista.length === 0) return null;
     const resumo =
       lista.length === 1
-        ? preencher(TEXTOS_RECORRENTES.resumoCurtoUm, { total: euros(total) })
-        : preencher(TEXTOS_RECORRENTES.resumoCurto, { quantos: lista.length, total: euros(total) });
+        ? preencher(TEXTOS_RECORRENTES.resumoCurtoUm, { total: f.dinheiro(total) })
+        : preencher(TEXTOS_RECORRENTES.resumoCurto, { quantos: lista.length, total: f.dinheiro(total) });
     return (
       <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -71,7 +69,7 @@ export default function PagamentosRecorrentes({ compacto = false }: { compacto?:
             <li key={`${r.descricao}-${r.ultimo_pagamento}`} className="flex justify-between gap-3">
               <span className="min-w-0 truncate text-texto">{r.descricao}</span>
               <span className="shrink-0 font-medium text-texto">
-                {preencher(TEXTOS_RECORRENTES.porMes, { valor: euros(r.valor_mensal) })}
+                {preencher(TEXTOS_RECORRENTES.porMes, { valor: f.dinheiro(r.valor_mensal) })}
               </span>
             </li>
           ))}
@@ -89,7 +87,7 @@ export default function PagamentosRecorrentes({ compacto = false }: { compacto?:
           </h2>
           {lista && lista.length > 0 && (
             <p className="text-sm font-semibold text-texto">
-              {preencher(TEXTOS_RECORRENTES.totalPorMes, { total: euros(total) })}
+              {preencher(TEXTOS_RECORRENTES.totalPorMes, { total: f.dinheiro(total) })}
             </p>
           )}
         </div>
@@ -110,15 +108,15 @@ export default function PagamentosRecorrentes({ compacto = false }: { compacto?:
                   {r.categoria && <span className="capitalize">{r.categoria} · </span>}
                   {preencher(TEXTOS_RECORRENTES.detalhe, {
                     meses: r.meses_seguidos,
-                    data: dataCurta(r.ultimo_pagamento),
+                    data: dataCurta(r.ultimo_pagamento, f),
                   })}
                 </p>
-                {mudancaDePreco(r) && (
-                  <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{mudancaDePreco(r)}</p>
+                {mudancaDePreco(r, f) && (
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{mudancaDePreco(r, f)}</p>
                 )}
               </div>
               <p className="shrink-0 text-sm font-semibold text-texto">
-                {preencher(TEXTOS_RECORRENTES.porMes, { valor: euros(r.valor_mensal) })}
+                {preencher(TEXTOS_RECORRENTES.porMes, { valor: f.dinheiro(r.valor_mensal) })}
               </p>
             </li>
           ))}

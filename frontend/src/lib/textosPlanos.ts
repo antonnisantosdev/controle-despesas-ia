@@ -12,6 +12,9 @@ export const TEXTOS_PRECOS = {
   porMes: "/mês",
   precoAnual: "ou {anual}/ano (2 meses grátis)",
   notaLancamento: "Preço de lançamento.",
+  // Botão no topo da página: com sessão ativa abre a app, sem sessão vai para o login.
+  abrirApp: "Abrir a app",
+  entrar: "Entrar",
   pedidosPorDia: "{limite} pedidos à IA por dia",
   pedidosPorMes: "{limite} pedidos à IA por mês", // TEXTO NOVO
   // Nos cartões pagos, no lugar de "Importar extratos em PDF". O número vem de GET /planos (limite_pdf).
@@ -123,6 +126,8 @@ export const TEXTOS_CARTOES = {
 
 export const TEXTOS_MEU_PLANO = {
   titulo: "O meu plano",
+  aCarregar: "A carregar...",
+  erroCarregar: "Não foi possível carregar o teu plano. Confirma que a API está a correr.",
   planoAtual: "Plano atual",
   nomeSemPlano: "Sem plano",
   pedidosHoje: "Pedidos à IA hoje: {usadas} de {limite}",
@@ -198,7 +203,7 @@ export const TEXTOS_AVISO_QUOTA = {
   avisoCurtoUm: "Falta 1 pedido à IA", // TEXTO NOVO (singular)
 };
 
-// Alertas de orçamento do mês atual (GET /orcamentos/alertas, sem IA). Os valores vão em € (pt-PT).
+// Alertas de orçamento do mês atual (GET /orcamentos/alertas, sem IA). Os valores vão na moeda da conta (useFormatos).
 export const TEXTOS_ALERTA_ORCAMENTO = {
   perto: "{categoria}: já gastaste {gasto} de {orcamento}. Estás perto do orçamento do mês.",
   atingido: "{categoria}: chegaste ao orçamento do mês. Gastaste {gasto} de {orcamento}.",

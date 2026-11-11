@@ -11,11 +11,11 @@ import {
   type PrecosDoProduto,
   type PrecosPorUnidade,
 } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
 import { NOME_UNIDADE, TEXTOS_PRECOS_LOJAS as T } from "@/lib/textosPrecosLojas";
 
 import {
-  dataCurta,
   ESTILO_BOTAO,
   ESTILO_ERRO,
   precoUnitario,
@@ -134,6 +134,7 @@ export default function DetalheProduto(props: Props) {
 }
 
 function PrecosDeUmaUnidade({ grupo, comTitulo }: { grupo: PrecosPorUnidade; comTitulo: boolean }) {
+  const f = useFormatos();
   const { unidade, lojas, historico } = grupo;
   if (lojas.length === 0) return null;
   const maisBarata = lojas[0]; // a API já as ordena da mais barata agora para a mais cara
@@ -152,11 +153,11 @@ function PrecosDeUmaUnidade({ grupo, comTitulo }: { grupo: PrecosPorUnidade; com
       <div className="rounded-lg border-2 border-destaque bg-fundo p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-destaque-hover">{T.maisBaratoAgora}</p>
         <p className="mt-1 text-3xl font-semibold tabular-nums text-texto">
-          {precoUnitario(maisBarata.preco_recente, unidade)}
+          {precoUnitario(maisBarata.preco_recente, unidade, f)}
         </p>
         <p className="mt-1 break-words text-sm text-texto">
           {preencher(T.maisBaratoEm, { loja: maisBarata.loja })}
-          <span className="text-texto-suave"> · {preencher(T.pagoA, { data: dataCurta(maisBarata.data_recente) })}</span>
+          <span className="text-texto-suave"> · {preencher(T.pagoA, { data: f.data(maisBarata.data_recente) })}</span>
         </p>
       </div>
       {lojas.length === 1 && <p className="text-sm text-texto-suave">{T.soUmaLoja}</p>}
@@ -186,21 +187,21 @@ function PrecosDeUmaUnidade({ grupo, comTitulo }: { grupo: PrecosPorUnidade; com
                     </div>
                     <p className="ml-auto text-right">
                       <span className="block text-lg font-semibold tabular-nums text-texto">
-                        {precoUnitario(loja.preco_recente, unidade)}
+                        {precoUnitario(loja.preco_recente, unidade, f)}
                       </span>
                       <span className="block text-xs text-texto-suave">
-                        {T.agora} · {dataCurta(loja.data_recente)}
+                        {T.agora} · {f.data(loja.data_recente)}
                       </span>
                     </p>
                   </div>
                   <dl className="mt-2 grid grid-cols-3 gap-2 border-t border-borda pt-2 text-xs">
                     <div>
                       <dt className="text-texto-suave">{T.minimo}</dt>
-                      <dd className="tabular-nums text-texto">{precoUnitario(loja.preco_minimo, unidade)}</dd>
+                      <dd className="tabular-nums text-texto">{precoUnitario(loja.preco_minimo, unidade, f)}</dd>
                     </div>
                     <div>
                       <dt className="text-texto-suave">{T.medio}</dt>
-                      <dd className="tabular-nums text-texto">{precoUnitario(loja.preco_medio, unidade)}</dd>
+                      <dd className="tabular-nums text-texto">{precoUnitario(loja.preco_medio, unidade, f)}</dd>
                     </div>
                     <div>
                       <dt className="text-texto-suave">{T.nCompras}</dt>
@@ -233,14 +234,15 @@ function PrecosDeUmaUnidade({ grupo, comTitulo }: { grupo: PrecosPorUnidade; com
 }
 
 function ListaHistorico({ itens, unidade }: { itens: PrecosPorUnidade["historico"]; unidade: string }) {
+  const f = useFormatos();
   return (
     <ol className="divide-y divide-borda text-sm">
       {itens.map((item, i) => (
         <li key={i} className="flex items-baseline justify-between gap-3 py-2">
           <span className="min-w-0 text-texto-suave">
-            <span className="tabular-nums">{dataCurta(item.data)}</span> · <span className="break-words">{item.loja}</span>
+            <span className="tabular-nums">{f.data(item.data)}</span> · <span className="break-words">{item.loja}</span>
           </span>
-          <span className="shrink-0 tabular-nums text-texto">{precoUnitario(item.preco_unitario, unidade)}</span>
+          <span className="shrink-0 tabular-nums text-texto">{precoUnitario(item.preco_unitario, unidade, f)}</span>
         </li>
       ))}
     </ol>

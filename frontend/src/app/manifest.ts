@@ -1,12 +1,14 @@
 import type { MetadataRoute } from "next";
 
+import { TEXTOS_APP } from "@/lib/textosComuns";
+
 // O manifesto da PWA: o que o telemóvel lê para "instalar" o site como uma app.
 // O Next.js serve-o em /manifest.webmanifest e põe a ligação no <head> de todas as páginas.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Control Prices",
-    short_name: "Control Prices", // 14 letras: cabe debaixo do ícone na maioria dos telemóveis
-    description: "Controlo financeiro pessoal com IA",
+    name: TEXTOS_APP.nome,
+    short_name: TEXTOS_APP.nome, // 14 letras: cabe debaixo do ícone na maioria dos telemóveis
+    description: TEXTOS_APP.descricao,
     // Abre direto no resumo. Com a sessão expirada, a página manda para o login sozinha.
     // ("/" mandava sempre para o login, mesmo a quem já tinha sessão.)
     start_url: "/dashboard",

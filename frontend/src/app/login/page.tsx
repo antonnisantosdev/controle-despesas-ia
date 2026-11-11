@@ -10,6 +10,8 @@ import BotaoGoogle from "@/components/BotaoGoogle";
 import BotaoDemo from "@/components/BotaoDemo";
 import RodapeLegal from "@/components/RodapeLegal";
 import { API_URL, contaApagada, EVENTO_SESSAO, fetchComTentativas, guardarToken } from "@/lib/api";
+import { TEXTOS_GERAIS } from "@/lib/textosComuns";
+import { TEXTOS_LOGIN } from "@/lib/textosLogin";
 import { TEXTOS_APAGAR_CONTA } from "@/lib/textosPlanos";
 import CampoPalavraPasse from "@/components/CampoPalavraPasse";
 
@@ -56,11 +58,11 @@ export default function PaginaLogin() {
       } else {
         // A API explica o problema no "detail" (palavra-passe errada, email por confirmar...).
         const corpo = await resposta.json().catch(() => null);
-        setErro(typeof corpo?.detail === "string" ? corpo.detail : "Email ou palavra-passe inválidas.");
+        setErro(typeof corpo?.detail === "string" ? corpo.detail : TEXTOS_LOGIN.erroCredenciais);
       }
     } catch {
       // O fetch só lança erro quando nem consegue falar com a API (desligada, CORS...).
-      setErro("Não foi possível ligar ao servidor. Tenta outra vez daqui a um minuto.");
+      setErro(TEXTOS_GERAIS.semLigacao);
     } finally {
       setAEntrar(false);
     }
@@ -83,7 +85,7 @@ export default function PaginaLogin() {
 
         <form onSubmit={entrar} className="space-y-4">
           <label className="block">
-            <span className="text-sm text-texto-suave">Email</span>
+            <span className="text-sm text-texto-suave">{TEXTOS_GERAIS.email}</span>
             <input
               type="email"
               required
@@ -94,7 +96,7 @@ export default function PaginaLogin() {
           </label>
 
           <label className="block">
-            <span className="text-sm text-texto-suave">Palavra-passe</span>
+            <span className="text-sm text-texto-suave">{TEXTOS_GERAIS.palavraPasse}</span>
             <CampoPalavraPasse
               value={password}
               onChange={setPassword}
@@ -110,7 +112,7 @@ export default function PaginaLogin() {
             disabled={aEntrar}
             className="w-full rounded-md bg-destaque py-2 font-medium text-white hover:bg-destaque-hover disabled:opacity-50"
           >
-            {aEntrar ? "A entrar..." : "Entrar"}
+            {aEntrar ? TEXTOS_LOGIN.aEntrar : TEXTOS_LOGIN.entrar}
           </button>
         </form>
 
@@ -120,9 +122,9 @@ export default function PaginaLogin() {
         </div>
 
         <p className="text-center text-sm text-texto-suave">
-          Ainda não tens conta?{" "}
+          {TEXTOS_LOGIN.semConta}{" "}
           <Link href="/registo" className="font-medium text-destaque hover:underline">
-            Cria uma grátis
+            {TEXTOS_LOGIN.criarConta}
           </Link>
         </p>
         <p className="-mt-2 text-center text-xs">
@@ -130,7 +132,7 @@ export default function PaginaLogin() {
             href="/precos"
             className="inline-flex min-h-11 items-center rounded-md px-2 text-texto-suave hover:text-texto hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque"
           >
-            Ver planos
+            {TEXTOS_GERAIS.verPlanos}
           </Link>
         </p>
         <RodapeLegal className="-mt-2" />

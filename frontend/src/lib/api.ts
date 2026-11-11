@@ -1,3 +1,4 @@
+import { ePais, eMoeda, type Moeda, type Pais } from "./formatos";
 import { TEXTOS_DEMO } from "./textosDemo";
 
 // Endereço da API em FastAPI, lido do .env.local.
@@ -208,6 +209,7 @@ export type Periodo = "dia" | "mes";
 // plano_terminado e terminou_em: o plano pago que chegou ao fim (a conta está no Free), ou null.
 // pdf_usados e pdf_limite: extratos PDF deste mês (pdf_limite 0 no Free).
 // memoria_mensagens: mensagens anteriores que o chat recebe (0 no Free). meses_historico: meses que o chat vê (null = todos).
+// pais: onde a pessoa vive (língua e formatos). paises_bancos: países dos cartões e contas. moeda: a moeda principal.
 export type EstadoPlano = {
   plano: string | null;
   limite: number;
@@ -220,6 +222,9 @@ export type EstadoPlano = {
   pdf_limite: number;
   memoria_mensagens: number;
   meses_historico: number | null;
+  pais: Pais;
+  paises_bancos: Pais[];
+  moeda: Moeda;
 };
 // O que GET /plano devolve. Uma API antiga (durante o deploy) só traz usadas_hoje e não traz periodo,
 // nem os campos do plano terminado e dos PDF.
@@ -233,6 +238,9 @@ type EstadoPlanoDaApi = Pick<EstadoPlano, "plano" | "limite" | "ativo_ate"> & {
   pdf_limite?: number;
   memoria_mensagens?: number;
   meses_historico?: number | null;
+  pais?: string;
+  paises_bancos?: string[];
+  moeda?: string;
 };
 
 // Põe o estado sempre na forma nova, para nenhum ecrã fazer contas com undefined (NaN).
@@ -251,7 +259,17 @@ export function normalizarEstadoPlano(bruto: EstadoPlanoDaApi): EstadoPlano {
     // Uma API antiga não envia a memória: sem ela, o chat não manda mensagens anteriores.
     memoria_mensagens: bruto.memoria_mensagens ?? 0,
     meses_historico: bruto.meses_historico ?? null,
+    // Uma API antiga (ou um valor desconhecido) fica em Portugal e euros, como a app era antes.
+    pais: ePais(bruto.pais) ? bruto.pais : "PT",
+    paises_bancos: paisesDosBancos(bruto.paises_bancos),
+    moeda: eMoeda(bruto.moeda) ? bruto.moeda : "EUR",
   };
+}
+
+// Só os países conhecidos, sem repetidos; vazio ou em falta -> ["PT"].
+function paisesDosBancos(bruto: string[] | undefined): Pais[] {
+  const paises = [...new Set((bruto ?? []).filter(ePais))];
+  return paises.length > 0 ? paises : ["PT"];
 }
 
 // GET /plano, já normalizado. Usar sempre esta em vez de pedirApi("/plano").

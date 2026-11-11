@@ -18,6 +18,7 @@ import {
   type IdPlano,
   type LimitePlano,
 } from "@/lib/planos";
+import { TEXTOS_APP } from "@/lib/textosComuns";
 import { TEXTOS_CARTOES, TEXTOS_MEU_PLANO, TEXTOS_PRECOS } from "@/lib/textosPlanos";
 import { useLimitesPlanos } from "@/lib/useLimitesPlanos";
 
@@ -87,14 +88,14 @@ export default function PaginaPrecos() {
   return (
     <main className="flex-1 bg-fundo">
       <header className="mx-auto flex max-w-5xl items-center justify-between p-4">
-        <Link href={destinoTopo} aria-label="Control Prices" className={`rounded-md ${FOCO}`}>
+        <Link href={destinoTopo} aria-label={TEXTOS_APP.nome} className={`rounded-md ${FOCO}`}>
           <Logo altura={36} />
         </Link>
         <Link
           href={destinoTopo}
           className={`inline-flex min-h-11 items-center rounded-md border border-borda bg-cartao px-4 text-sm font-medium text-texto hover:border-destaque ${FOCO}`}
         >
-          {sessao.podeAbrirApp ? "Abrir a app" : "Entrar"}
+          {sessao.podeAbrirApp ? TEXTOS_PRECOS.abrirApp : TEXTOS_PRECOS.entrar}
         </Link>
       </header>
 

@@ -452,15 +452,16 @@ def test_planos_sem_pdf_mandam_limite_de_pdf_zero(rpc, plano, limite_pedidos, de
     [
         # Inverno (Lisboa = UTC): 23h30 UTC do último dia do mês ainda é esse dia em Lisboa.
         (datetime(2026, 11, 30, 23, 30, tzinfo=UTC), "2026-11-30T00:00:00+00:00", "2026-11-01T00:00:00+00:00"),
-        # Verão (Lisboa = UTC+1): 23h30 UTC de 31 de agosto já é 1 de setembro em Lisboa.
-        (datetime(2026, 8, 31, 23, 30, tzinfo=UTC), "2026-08-31T23:00:00+00:00", "2026-08-31T23:00:00+00:00"),
+        # Verão: 23h30 UTC de 31 de agosto já é 1 de setembro em Lisboa, mas em São Paulo ainda é dia 31
+        # (20h30). Conta o início mais antigo: o dia e o mês de São Paulo (mudar de país não dá pedidos a mais).
+        (datetime(2026, 8, 31, 23, 30, tzinfo=UTC), "2026-08-31T03:00:00+00:00", "2026-08-01T03:00:00+00:00"),
         # Verão, a meio do mês: a meia-noite de Lisboa é às 23h00 UTC do dia anterior.
         (datetime(2026, 7, 15, 12, 0, tzinfo=UTC), "2026-07-14T23:00:00+00:00", "2026-06-30T23:00:00+00:00"),
         # Passagem de ano no inverno.
         (datetime(2026, 12, 31, 23, 30, tzinfo=UTC), "2026-12-31T00:00:00+00:00", "2026-12-01T00:00:00+00:00"),
     ],
 )
-def test_os_inicios_do_dia_e_do_mes_sao_os_de_lisboa(rpc, monkeypatch, agora, desde_dia, desde_mes):
+def test_os_inicios_sao_os_mais_antigos_entre_lisboa_e_sao_paulo(rpc, monkeypatch, agora, desde_dia, desde_mes):
     falso = rpc("ok", plano="essencial")
     monkeypatch.setattr(limites, "agora_utc", lambda: agora)
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { ErroApi, eSessaoDemo, pedirApi, type ResumoMes } from "@/lib/api";
+import { TEXTOS_RESUMO_MES } from "@/lib/textosDashboard";
 import { TEXTOS_DEMO } from "@/lib/textosDemo";
 
 // O resultado guarda o mês a que pertence: se o mês escolhido mudou, o que está guardado
@@ -27,7 +28,7 @@ export default function ResumoCartao({ mes }: { mes: string }) {
         // Na demo, o resumo tem um limite por hora (429): diz-se porquê, em vez do erro genérico.
         const limiteDemo = e instanceof ErroApi && e.status === 429 && eSessaoDemo();
         const textoDaApi = limiteDemo && typeof e.detalhe === "string" ? e.detalhe : null;
-        const erro = limiteDemo ? (textoDaApi ?? TEXTOS_DEMO.limiteResumo) : "O resumo não está disponível. Tenta mais tarde.";
+        const erro = limiteDemo ? (textoDaApi ?? TEXTOS_DEMO.limiteResumo) : TEXTOS_RESUMO_MES.erro;
         if (!cancelado) setResultado({ mes, erro });
       });
     return () => {
@@ -37,9 +38,9 @@ export default function ResumoCartao({ mes }: { mes: string }) {
 
   return (
     <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">
-      <h2 className="mb-3 font-medium text-texto">Resumo do mês</h2>
+      <h2 className="mb-3 font-medium text-texto">{TEXTOS_RESUMO_MES.titulo}</h2>
 
-      {aCarregar && <p className="text-sm text-texto-suave">A IA está a analisar o mês...</p>}
+      {aCarregar && <p className="text-sm text-texto-suave">{TEXTOS_RESUMO_MES.aCarregar}</p>}
       {!aCarregar && resultado?.erro && <p className="text-sm text-red-600 dark:text-red-400">{resultado.erro}</p>}
 
       {resumo && (
@@ -57,7 +58,7 @@ export default function ResumoCartao({ mes }: { mes: string }) {
                       : "rounded-md bg-blue-50 p-3 text-sm text-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
                   }
                 >
-                  <strong>{alerta.nivel === "atencao" ? "⚠ Atenção: " : "ℹ Nota: "}</strong>
+                  <strong>{alerta.nivel === "atencao" ? TEXTOS_RESUMO_MES.atencao : TEXTOS_RESUMO_MES.nota}</strong>
                   {alerta.mensagem}
                 </li>
               ))}

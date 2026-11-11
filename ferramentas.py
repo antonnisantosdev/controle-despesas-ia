@@ -8,6 +8,7 @@ O plano também vem do servidor: é ele que diz até que mês as ferramentas pod
 
 import json
 import re
+from datetime import date
 from typing import get_args
 
 from consultas import (
@@ -224,12 +225,15 @@ def _procurar_movimentos(user_id: str, plano: str | None, primeiro: str | None, 
     return resultado | resumir_movimentos(linhas, termos, categoria, tipo)
 
 
-def executar_ferramenta(nome: str, argumentos: dict, user_id: str, plano: str | None) -> str:
+def executar_ferramenta(
+    nome: str, argumentos: dict, user_id: str, plano: str | None, hoje: date | None = None
+) -> str:
     """Corre a ferramenta pedida pela IA e devolve o resultado como texto JSON.
 
     user_id vem sempre do token e plano do servidor (nunca da IA nem do browser).
+    hoje: a data no país onde o utilizador vive (limites.hoje_do_utilizador); sem ela, a de Lisboa.
     """
-    primeiro = primeiro_mes_visivel(config_ia_do_plano(plano), hoje_em_lisboa())
+    primeiro = primeiro_mes_visivel(config_ia_do_plano(plano), hoje or hoje_em_lisboa())
 
     if nome == "gastos_por_categoria":
         mes = _validar_mes(argumentos.get("mes"))

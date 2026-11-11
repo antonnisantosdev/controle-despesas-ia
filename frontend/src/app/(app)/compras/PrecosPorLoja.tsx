@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 
 import AvisoPlanoPago from "@/components/AvisoPlanoPago";
 import { eSoPlanosPagos, pedirApi, SessaoExpirada, type JuncaoProdutos, type ProdutoResumo } from "@/lib/api";
+import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
 import { TEXTOS_PRECOS_LOJAS as T } from "@/lib/textosPrecosLojas";
 
 import DetalheProduto from "./DetalheProduto";
-import { dataCurta, ESTILO_BOTAO, ESTILO_CAMPO, ESTILO_ERRO, textoCompras, textoLojas } from "./formatosPrecos";
+import { ESTILO_BOTAO, ESTILO_CAMPO, ESTILO_ERRO, textoCompras, textoLojas } from "./formatosPrecos";
 import ListaJuncoes from "./ListaJuncoes";
 import { useComAtraso } from "./useComAtraso";
 
@@ -24,6 +25,7 @@ type Props = {
 type Resultado = { pedido: string; produtos: ProdutoResumo[] | null; erro: boolean };
 
 export default function PrecosPorLoja({ eFree, onSessaoExpirada }: Props) {
+  const f = useFormatos();
   const [termo, setTermo] = useState("");
   const termoAtrasado = useComAtraso(termo.trim());
   const [versao, setVersao] = useState(0); // muda para pedir outra vez (tentar outra vez, depois de juntar)
@@ -160,7 +162,7 @@ export default function PrecosPorLoja({ eFree, onSessaoExpirada }: Props) {
                   <span className="block break-words font-medium text-texto">{produto.nome}</span>
                   <span className="block text-xs text-texto-suave">
                     {textoLojas(produto.n_lojas)} · {textoCompras(produto.n_compras)} ·{" "}
-                    {preencher(T.ultimaCompra, { data: dataCurta(produto.ultima_data) })}
+                    {preencher(T.ultimaCompra, { data: f.data(produto.ultima_data) })}
                   </span>
                 </span>
                 <span aria-hidden="true" className="shrink-0 text-texto-suave">
