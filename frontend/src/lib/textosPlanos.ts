@@ -265,7 +265,7 @@ const PT = {
     naoEncontrada: "Esta movimentação já não existe. A lista foi atualizada.",
   },
 
-  // O meu plano: zona para apagar a conta (DELETE /conta). TEXTO NOVO (todos)
+  // Definições: zona para apagar a conta (DELETE /conta). TEXTO NOVO (todos)
   // palavra tem de ser igual a CONFIRMACAO_APAGAR_CONTA em main.py.
   TEXTOS_APAGAR_CONTA: {
     titulo: "Apagar conta",
@@ -556,7 +556,7 @@ const BR: TextosPlanos = {
     naoEncontrada: "Esta movimentação não existe mais. A lista foi atualizada.",
   },
 
-  // O meu plano: zona para apagar a conta (DELETE /conta). TEXTO NOVO (todos)
+  // Definições: zona para apagar a conta (DELETE /conta). TEXTO NOVO (todos)
   // palavra tem de ser igual a CONFIRMACAO_APAGAR_CONTA em main.py.
   TEXTOS_APAGAR_CONTA: {
     titulo: "Apagar conta",

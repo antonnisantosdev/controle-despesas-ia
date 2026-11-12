@@ -1,5 +1,6 @@
 import { ePais, eMoeda, type Moeda, type Pais } from "./formatos";
 import { DICIONARIO_DEMO } from "./textosDemo";
+import type { Motivo, Objetivo as ObjetivoBoasVindas } from "./textosBoasVindas";
 
 // O texto do 423 da demo fica em PT: é igual à resposta da API (demo.py), que ainda só fala PT-PT.
 const { TEXTOS_DEMO } = DICIONARIO_DEMO.PT;
@@ -228,6 +229,8 @@ export type EstadoPlano = {
   pais: Pais;
   paises_bancos: Pais[];
   moeda: Moeda;
+  // Conta nova que ainda não fez o questionário de boas-vindas (sql/021). Sempre false na demo e numa API antiga.
+  boas_vindas_pendente: boolean;
 };
 // O que GET /plano devolve. Uma API antiga (durante o deploy) só traz usadas_hoje e não traz periodo,
 // nem os campos do plano terminado e dos PDF.
@@ -244,6 +247,7 @@ type EstadoPlanoDaApi = Pick<EstadoPlano, "plano" | "limite" | "ativo_ate"> & {
   pais?: string;
   paises_bancos?: string[];
   moeda?: string;
+  boas_vindas_pendente?: boolean;
 };
 
 // Põe o estado sempre na forma nova, para nenhum ecrã fazer contas com undefined (NaN).
@@ -266,6 +270,8 @@ export function normalizarEstadoPlano(bruto: EstadoPlanoDaApi): EstadoPlano {
     pais: ePais(bruto.pais) ? bruto.pais : "PT",
     paises_bancos: paisesDosBancos(bruto.paises_bancos),
     moeda: eMoeda(bruto.moeda) ? bruto.moeda : "EUR",
+    // Só true se a API o disser (uma API antiga não o envia: ninguém vê o questionário).
+    boas_vindas_pendente: bruto.boas_vindas_pendente === true,
   };
 }
 
@@ -279,6 +285,34 @@ function paisesDosBancos(bruto: string[] | undefined): Pais[] {
 export async function pedirEstadoPlano(): Promise<EstadoPlano> {
   return normalizarEstadoPlano(await pedirApi<EstadoPlanoDaApi>("/plano"));
 }
+
+// Questionário de boas-vindas e perfil nas definições (PUT, GET e DELETE /conta/boas-vindas).
+// motivo e objetivos: null = sem resposta (saltou ou apagou).
+export type RespostasBoasVindas = {
+  pais: Pais;
+  paises_bancos: Pais[];
+  moeda: Moeda | null;
+  motivo: Motivo | null;
+  objetivos: ObjetivoBoasVindas[] | null;
+};
+// aviso: só no PUT, quando a moeda não pôde mudar (a conta já tem dados). O resto ficou gravado.
+export type BoasVindasGuardadas = Omit<RespostasBoasVindas, "moeda"> & { moeda: Moeda; aviso: string | null };
+
+// Grava o país, os bancos, a moeda e as respostas, e marca o questionário como feito.
+export async function responderBoasVindas(respostas: RespostasBoasVindas): Promise<BoasVindasGuardadas> {
+  return pedirApi<BoasVindasGuardadas>("/conta/boas-vindas", respostas, "PUT");
+}
+
+// O perfil e as respostas, para a página Definições.
+export async function lerBoasVindas(): Promise<BoasVindasGuardadas> {
+  return pedirApi<BoasVindasGuardadas>("/conta/boas-vindas");
+}
+
+// Apaga o motivo e os objetivos (o perfil fica).
+export async function apagarRespostasBoasVindas(): Promise<void> {
+  return pedirApi<void>("/conta/boas-vindas", undefined, "DELETE");
+}
+
 // Um plano à venda e o seu limite de pedidos à IA no período (GET /planos, público).
 // limite_diario é o nome antigo: no Free é o limite do mês.
 // limite_pdf: extratos PDF por mês (uma API antiga não o envia).

@@ -31,6 +31,7 @@ from demo import (
     MENSAGEM_DEMO_DESLIGADA,
     config_demo,
     criar_token_demo,
+    e_conta_demo,
     garantir_dados_da_semana,
     registar_entrada_demo,
     registar_forma_do_ip,
@@ -86,10 +87,12 @@ from objetivos import (
 )
 from produtos import chave_do_produto, juncoes_do_utilizador, juntar_produtos, precos_do_utilizador, produtos_do_utilizador, separar_produtos
 from perfil import atualizar_perfil, guardar_perfil_inicial
+from boas_vindas import apagar_respostas, guardar_respostas, ler_respostas
 from orcamento import alertas_de_orcamento, guardar_limite, historico_para_sugestao, planeamento_do_mes
 from models import (
     AlertasOrcamento,
     AnoSimulado,
+    BoasVindasGuardadas,
     EstadoPlano,
     Categoria,
     CategoriaAtualizar,
@@ -118,6 +121,7 @@ from models import (
     Recorrente,
     RelatorioAnual,
     RespostaChat,
+    RespostasBoasVindas,
     ResumoAnualIA,
     ResultadoImportacao,
     ResumoMes,
@@ -404,15 +408,42 @@ def apagar_conta(
 # Até 10 pedidos por hora por conta (429 acima disso, antes de ler a base de dados): ver limite_ip.py.
 @app.put("/conta/perfil")
 def mudar_perfil(pedido: PerfilConta, user_id: str = Depends(obter_utilizador_atual)) -> PerfilGuardado:
+    contar_mudanca_de_perfil(user_id, pedido.pais)
+    perfil = atualizar_perfil(user_id, pedido.pais, pedido.paises_bancos, pedido.moeda)
+    return PerfilGuardado(pais=perfil.pais, paises_bancos=list(perfil.paises_bancos), moeda=perfil.moeda)
+
+
+def contar_mudanca_de_perfil(user_id: str, pais: str | None) -> None:
+    """O limite do PUT /conta/perfil (10 por hora por conta), partilhado com as rotas das boas-vindas.
+    O 429 vem antes de ler a base de dados: a língua vem do país pedido, se vier."""
     try:
         registar_mudanca_de_perfil(user_id)
     except HTTPException as erro:
-        # O 429 vem antes de ler a base de dados (é para isso que serve): a língua vem do país pedido, se vier.
-        raise HTTPException(
-            status_code=erro.status_code, detail=msg("perfil_muitas_mudancas", pedido.pais), headers=erro.headers
-        )
-    perfil = atualizar_perfil(user_id, pedido.pais, pedido.paises_bancos, pedido.moeda)
-    return PerfilGuardado(pais=perfil.pais, paises_bancos=list(perfil.paises_bancos), moeda=perfil.moeda)
+        raise HTTPException(status_code=erro.status_code, detail=msg("perfil_muitas_mudancas", pais), headers=erro.headers)
+
+
+# Questionário de boas-vindas (sql/021) e "O teu perfil" nas definições. A IA não usa estas respostas.
+# PUT: grava o país, os bancos e a moeda (como o PUT /conta/perfil; se a moeda não puder mudar, grava o resto
+# e devolve um aviso), o motivo e os objetivos, e marca o questionário como feito.
+# GET: o perfil e as respostas. DELETE: apaga o motivo e os objetivos.
+# O PUT e o DELETE partilham o limite do perfil (10 por hora por conta); o GET só lê e não conta.
+# Na demo: 423 nos três (fora de PERMISSOES_DEMO).
+# Antes da sql/021: 503, sem gravar nada.
+@app.put("/conta/boas-vindas")
+def responder_boas_vindas(pedido: RespostasBoasVindas, user_id: str = Depends(obter_utilizador_atual)) -> BoasVindasGuardadas:
+    contar_mudanca_de_perfil(user_id, pedido.pais)
+    return guardar_respostas(user_id, pedido)
+
+
+@app.get("/conta/boas-vindas")
+def ver_boas_vindas(user_id: str = Depends(obter_utilizador_atual)) -> BoasVindasGuardadas:
+    return ler_respostas(user_id)
+
+
+@app.delete("/conta/boas-vindas", status_code=204)
+def apagar_boas_vindas(user_id: str = Depends(obter_utilizador_atual)) -> None:
+    contar_mudanca_de_perfil(user_id, None)
+    apagar_respostas(user_id)
 
 
 # A API usa a chave secreta (ignora o RLS), por isso cada rota filtra pelo user_id do token.
@@ -1087,7 +1118,11 @@ def relatorio_resumo_ia(ano: int, user_id: str = Depends(obter_utilizador_atual)
 # Só lê: não conta como pergunta.
 @app.get("/plano")
 def plano(user_id: str = Depends(obter_utilizador_atual)) -> EstadoPlano:
-    return estado_do_plano(user_id)
+    estado = estado_do_plano(user_id)
+    # A demo nunca vê o questionário de boas-vindas (a sql/021 já a marca; isto é a segunda barreira).
+    if estado.boas_vindas_pendente and e_conta_demo(user_id):
+        estado = estado.model_copy(update={"boas_vindas_pendente": False})
+    return estado
 
 
 # Os planos à venda e os seus limites (para a página de preços). Público: não precisa de login

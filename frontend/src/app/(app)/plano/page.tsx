@@ -20,17 +20,17 @@ import {
   temFuncoesPagas,
 } from "@/lib/planos";
 import { useTextos } from "@/lib/textos";
+import { DICIONARIO_BOAS_VINDAS } from "@/lib/textosBoasVindas";
 import { DICIONARIO_DEMO } from "@/lib/textosDemo";
 import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import { useLimitesPlanos } from "@/lib/useLimitesPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
-import ApagarConta from "./ApagarConta";
-
 // "O meu plano": o plano atual, os pedidos à IA do período, até quando dura e como mudar ou renovar.
 export default function PaginaPlano() {
   const { TEXTOS_DEMO } = useTextos(DICIONARIO_DEMO);
   const { TEXTOS_EXPIRADA, TEXTOS_MEU_PLANO } = useTextos(DICIONARIO_PLANOS);
+  const { TEXTOS_DEFINICOES } = useTextos(DICIONARIO_BOAS_VINDAS);
   const router = useRouter();
   const [estado, setEstado] = useState<EstadoPlano | null>(null);
   const [emailConta, setEmailConta] = useState<string | null>(null);
@@ -87,8 +87,16 @@ export default function PaginaPlano() {
           </Link>
         )}
 
-        {/* Na demo aparece desligada, com a nota da demo. */}
-        <ApagarConta />
+        {/* O perfil e o "Apagar conta" passaram para as Definições. */}
+        <Link
+          href="/definicoes"
+          className="flex min-h-11 items-center justify-between gap-3 rounded-xl border border-borda bg-cartao p-4 text-sm font-semibold text-texto transition-colors hover:bg-fundo focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque sm:p-6"
+        >
+          <span>{TEXTOS_DEFINICOES.ligacaoPlano}</span>
+          <span aria-hidden className="text-texto-suave">
+            →
+          </span>
+        </Link>
       </div>
     </main>
   );

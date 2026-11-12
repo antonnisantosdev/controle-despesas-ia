@@ -97,6 +97,13 @@ def config_demo() -> ConfigDemo:
     return ConfigDemo(ligada=True, user_id=user_id_valido, email=email, segredo=segredo)
 
 
+
+def e_conta_demo(user_id: str | None) -> bool:
+    """Se o user_id é o da conta de demo (mesmo com a demo desligada, como no DELETE /conta)."""
+    id_demo = config_demo().user_id
+    return id_demo is not None and user_id is not None and str(user_id).lower() == id_demo
+
+
 # --- Token da demo ---
 
 ALGORITMO_TOKEN = "HS256"

@@ -251,7 +251,12 @@ def test_sem_a_020_a_conta_fica_pt_eur_e_a_moeda_nao_se_envia(monkeypatch, capsy
 
     conta = limites.assinatura_do_utilizador("utilizador-teste")
 
-    assert falsa.selects == ["plano, ativo_ate, pais, paises_bancos, moeda", "plano, ativo_ate"]
+    # Primeiro com a coluna da sql/021, depois só com as da 020, e por fim as de sempre.
+    assert falsa.selects == [
+        "plano, ativo_ate, pais, paises_bancos, moeda, boas_vindas_em",
+        "plano, ativo_ate, pais, paises_bancos, moeda",
+        "plano, ativo_ate",
+    ]
     assert (conta.plano, conta.ativo_ate) == ("essencial", date(2026, 12, 31))
     assert (conta.pais, conta.paises_bancos, conta.moeda, conta.com_perfil) == ("PT", ("PT",), "EUR", False)
     assert limites.moeda_da_conta("utilizador-teste") is None

@@ -362,10 +362,19 @@ class Assinatura:
     paises_bancos: tuple[str, ...] = ("PT",)
     moeda: str = "EUR"
     com_perfil: bool = False
+    # Questionário de boas-vindas (sql/021): quando a conta o acabou (None = ainda por fazer).
+    # com_boas_vindas: False se a coluna ainda não existe (ninguém vê o questionário, e as rotas dão 503).
+    boas_vindas_em: datetime | None = None
+    com_boas_vindas: bool = False
 
     @property
     def fuso(self) -> ZoneInfo:
         return fuso_do_pais(self.pais)
+
+    @property
+    def boas_vindas_pendente(self) -> bool:
+        """Se a conta ainda tem o questionário por fazer: só com a sql/021 corrida, linha na tabela e sem data."""
+        return self.com_boas_vindas and self.plano is not None and self.boas_vindas_em is None
 
 
 def _perfil_da_linha(linha: dict) -> dict:
@@ -412,32 +421,57 @@ def assinatura_do_utilizador(user_id: str) -> Assinatura:
     return conta
 
 
-def _ler_assinatura(user_id: str) -> Assinatura:
-    """A assinatura da conta (plano, ativo_ate e perfil), numa só consulta. Sem linha: Assinatura() (plano None).
+# As colunas lidas, da mais completa (com a sql/021) à mais antiga (antes da 020). Se uma coluna ainda não existir,
+# tenta a seguinte: o perfil e o questionário só contam quando as colunas deles existem.
+_COLUNAS_ASSINATURA = (
+    ("plano, ativo_ate, pais, paises_bancos, moeda, boas_vindas_em", True, True),
+    ("plano, ativo_ate, pais, paises_bancos, moeda", True, False),
+    ("plano, ativo_ate", False, False),
+)
 
-    Antes da sql/020 as colunas do perfil não existem: lê só o plano e o ativo_ate, e o perfil fica
-    PT / {PT} / EUR (como todas as contas até aqui), com um aviso nos logs.
+
+def _ler_assinatura(user_id: str) -> Assinatura:
+    """A assinatura da conta (plano, ativo_ate, perfil e questionário), numa só consulta. Sem linha: Assinatura().
+
+    Antes da sql/021 não há boas_vindas_em: ninguém tem o questionário por fazer. Antes da sql/020 lê só o plano
+    e o ativo_ate, e o perfil fica PT / {PT} / EUR (como todas as contas até aqui). Fica um aviso nos logs.
     """
-    try:
-        resposta = (
-            supabase.table("assinaturas")
-            .select("plano, ativo_ate, pais, paises_bancos, moeda")
-            .eq("user_id", user_id)
-            .execute()
-        )
-        com_perfil = True
-    except APIError as erro:
-        if erro.code not in COLUNA_NAO_EXISTE:
-            raise
-        print("AVISO: colunas pais/paises_bancos/moeda não encontradas (sql/020); a conta conta como PT/EUR.")
-        resposta = supabase.table("assinaturas").select("plano, ativo_ate").eq("user_id", user_id).execute()
-        com_perfil = False
+    for posicao, (colunas, com_perfil, com_boas_vindas) in enumerate(_COLUNAS_ASSINATURA):
+        ultima = posicao == len(_COLUNAS_ASSINATURA) - 1
+        try:
+            resposta = supabase.table("assinaturas").select(colunas).eq("user_id", user_id).execute()
+            break
+        except APIError as erro:
+            if ultima or erro.code not in COLUNA_NAO_EXISTE:
+                raise
+            if com_boas_vindas:
+                print("AVISO: coluna boas_vindas_em não encontrada (sql/021); ninguém vê o questionário.")
+            else:
+                print("AVISO: colunas pais/paises_bancos/moeda não encontradas (sql/020); a conta conta como PT/EUR.")
     if not resposta.data:
         return Assinatura()
     linha = resposta.data[0]
     ativo_ate = date.fromisoformat(linha["ativo_ate"]) if linha.get("ativo_ate") else None
     perfil = _perfil_da_linha(linha) if com_perfil else {}
-    return Assinatura(plano=linha["plano"], ativo_ate=ativo_ate, com_perfil=com_perfil, **perfil)
+    return Assinatura(
+        plano=linha["plano"],
+        ativo_ate=ativo_ate,
+        com_perfil=com_perfil,
+        boas_vindas_em=_data_hora(linha.get("boas_vindas_em")) if com_boas_vindas else None,
+        com_boas_vindas=com_boas_vindas,
+        **perfil,
+    )
+
+
+def _data_hora(valor: object) -> datetime | None:
+    """Um TIMESTAMPTZ do Supabase (texto ISO) em datetime. Um valor que não se lê conta como respondido
+    (é melhor não mostrar o questionário a quem já o fez do que mostrá-lo outra vez)."""
+    if valor is None:
+        return None
+    try:
+        return datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def local_do_utilizador(user_id: str) -> Local:
@@ -498,6 +532,7 @@ def estado_do_plano(user_id: str) -> EstadoPlano:
         pais=conta.pais,
         paises_bancos=list(conta.paises_bancos),
         moeda=conta.moeda,
+        boas_vindas_pendente=conta.boas_vindas_pendente,
     )
 
 

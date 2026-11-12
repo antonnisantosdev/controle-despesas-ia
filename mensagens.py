@@ -137,6 +137,11 @@ MENSAGENS: dict[str, dict[str, str]] = {
         "PT": "Mudaste as definições muitas vezes. Tenta daqui a uma hora.",
         "BR": "Você mudou as configurações muitas vezes. Tente de novo daqui a uma hora.",
     },
+    # Questionário de boas-vindas (boas_vindas.py). PT e BR: TEXTO NOVO.
+    "boas_vindas_indisponivel": {
+        "PT": "Não foi possível guardar as respostas agora. Tenta mais tarde.",
+        "BR": "Não foi possível salvar as respostas agora. Tente mais tarde.",
+    },
     # --- Movimentações e importação ---
     "transacao_nao_encontrada": {
         "PT": "Transação não encontrada",

@@ -5,7 +5,7 @@ from pydantic import AfterValidator, BaseModel, EmailStr, Field, StrictBool, Str
 
 from auth import FORMATO_CODE_VERIFIER, FORMATO_CODIGO_GOOGLE
 from limites import MAX_CARACTERES_HISTORICO, MAX_CARACTERES_PERGUNTA_HISTORICO, MAX_CARACTERES_RESPOSTA_HISTORICO
-from perfil import Perfil, perfil_inicial
+from perfil import Perfil, moedas_possiveis, perfil_inicial
 
 # As únicas categorias permitidas, tanto para a IA como para as correções do utilizador.
 # Com Literal, o Pydantic rejeita qualquer outra palavra.
@@ -198,6 +198,50 @@ class PerfilGuardado(BaseModel):
     pais: Pais
     paises_bancos: list[Pais]
     moeda: Moeda
+
+
+# --- Questionário de boas-vindas (sql/021): só opções fechadas, sem texto livre ---
+# As listas têm de ser iguais às do CHECK da sql/021 e às do frontend (lib/textosBoasVindas.ts).
+MotivoBoasVindas = Literal["nao_sei", "fim_mes", "supermercado", "folhas", "poupar", "experimentar", "outro"]
+ObjetivoBoasVindas = Literal["importar", "categorias", "orcamento", "chat", "resumo", "reserva", "taloes"]
+
+
+def objetivos_sem_repetidos(objetivos: list[str]) -> list[str]:
+    if len(set(objetivos)) != len(objetivos):
+        raise ValueError("objetivos repetidos")
+    return objetivos
+
+
+# 0 a 7 objetivos, sem repetidos. Uma lista vazia é o mesmo que saltar (grava-se NULL).
+ObjetivosBoasVindas = Annotated[list[ObjetivoBoasVindas], Field(max_length=7), AfterValidator(objetivos_sem_repetidos)]
+
+
+# Corpo do PUT /conta/boas-vindas (o questionário e as definições). O país e os bancos são obrigatórios;
+# a moeda só é precisa com bancos dos dois países (com um só país, é a desse país).
+# O motivo e os objetivos substituem os que havia: None (ou []) apaga a resposta.
+class RespostasBoasVindas(BaseModel):
+    pais: Pais
+    paises_bancos: PaisesBancos
+    moeda: Moeda | None = None
+    motivo: MotivoBoasVindas | None = None
+    objetivos: ObjetivosBoasVindas | None = None
+
+    @model_validator(mode="after")
+    def moeda_coerente(self) -> "RespostasBoasVindas":
+        if self.moeda is not None and self.moeda not in moedas_possiveis(self.paises_bancos):
+            raise ValueError("a moeda tem de ser a de um dos países das contas")
+        return self
+
+
+# Resposta do GET e do PUT /conta/boas-vindas: o perfil e as respostas como ficaram.
+# aviso: no PUT, se a moeda não pôde mudar (a conta já tem dados): o resto ficou gravado e a moeda ficou a de antes.
+class BoasVindasGuardadas(BaseModel):
+    pais: Pais
+    paises_bancos: list[Pais]
+    moeda: Moeda
+    motivo: MotivoBoasVindas | None = None
+    objetivos: list[ObjetivoBoasVindas] | None = None
+    aviso: str | None = None
 
 
 # Tetos de tamanho antes de falar com o Supabase (e de calcular o HMAC do limite por email): acima, 422.
@@ -489,6 +533,9 @@ class EstadoPlano(BaseModel):
     pais: Pais = "PT"
     paises_bancos: list[Pais] = Field(default_factory=lambda: ["PT"])
     moeda: Moeda = "EUR"
+    # Questionário de boas-vindas (sql/021): true numa conta nova que ainda não o fez (o frontend abre-o).
+    # Sempre false antes da 021, nas contas antigas e na demo.
+    boas_vindas_pendente: bool = False
 
 
 # Um plano à venda e o seu limite de pedidos à IA (GET /planos, público).

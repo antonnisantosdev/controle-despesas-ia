@@ -1,9 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { pedirEstadoPlano, type EstadoPlano } from "./api";
+import { pedirEstadoPlano, type BoasVindasGuardadas, type EstadoPlano } from "./api";
 import { CONTA_PADRAO, criarFormatos, FORMATOS_PADRAO, type Conta, type Formatos } from "./formatos";
 import { useSessaoDemo } from "./useSessaoDemo";
 
@@ -14,6 +14,10 @@ const ContextoFormatos = createContext<Formatos>(FORMATOS_PADRAO);
 // O estado do plano (o cartão do menu usa-o). Contexto à parte: muda a cada página (contador de pedidos)
 // e assim não volta a desenhar os componentes que só querem a moeda.
 const ContextoEstadoPlano = createContext<EstadoPlano | null>(null);
+// Depois de gravar o questionário ou as definições: põe já o país, a moeda e os bancos novos (textos e formatos
+// mudam logo) e tira o "questionário por fazer", sem esperar pelo próximo GET /plano.
+type AplicarPerfil = (perfil: Pick<BoasVindasGuardadas, "pais" | "moeda" | "paises_bancos">) => void;
+const ContextoAplicarPerfil = createContext<AplicarPerfil>(() => {});
 
 function chaveDaConta(conta: Conta): string {
   return `${conta.pais}|${conta.moeda}|${conta.paisesBancos.join(",")}`;
@@ -28,6 +32,8 @@ export function ProvedorConta({ children }: { children: ReactNode }) {
   const [estado, setEstado] = useState<EstadoPlano | null>(null);
   const [conta, setConta] = useState<Conta>(CONTA_PADRAO);
   const jaPediuNaDemo = useRef(false);
+  // O questionário já foi gravado nesta sessão: um GET /plano que saia antes (ou chegue atrasado) não o volta a pedir.
+  const respondido = useRef(false);
 
   useEffect(() => {
     if (demo && jaPediuNaDemo.current) return;
@@ -38,7 +44,7 @@ export function ProvedorConta({ children }: { children: ReactNode }) {
         if (cancelado) return;
         // Só marca na demo quando a resposta chegou: um pedido cancelado ou falhado volta a ser feito.
         jaPediuNaDemo.current = demo;
-        setEstado(novo);
+        setEstado(respondido.current ? { ...novo, boas_vindas_pendente: false } : novo);
         // Só troca a conta se o país, a moeda ou os bancos mudaram: quem formata dinheiro não volta a desenhar.
         const nova: Conta = { pais: novo.pais, moeda: novo.moeda, paisesBancos: novo.paises_bancos };
         setConta((atual) => (chaveDaConta(atual) === chaveDaConta(nova) ? atual : nova));
@@ -54,13 +60,31 @@ export function ProvedorConta({ children }: { children: ReactNode }) {
 
   const formatos = useMemo(() => criarFormatos(conta), [conta]);
 
+  const aplicarPerfil = useCallback<AplicarPerfil>((perfil) => {
+    respondido.current = true;
+    const nova: Conta = { pais: perfil.pais, moeda: perfil.moeda, paisesBancos: perfil.paises_bancos };
+    setConta((atual) => (chaveDaConta(atual) === chaveDaConta(nova) ? atual : nova));
+    setEstado((atual) =>
+      atual
+        ? { ...atual, pais: perfil.pais, moeda: perfil.moeda, paises_bancos: perfil.paises_bancos, boas_vindas_pendente: false }
+        : atual,
+    );
+  }, []);
+
   return (
-    <ContextoConta.Provider value={conta}>
-      <ContextoFormatos.Provider value={formatos}>
-        <ContextoEstadoPlano.Provider value={estado}>{children}</ContextoEstadoPlano.Provider>
-      </ContextoFormatos.Provider>
-    </ContextoConta.Provider>
+    <ContextoAplicarPerfil.Provider value={aplicarPerfil}>
+      <ContextoConta.Provider value={conta}>
+        <ContextoFormatos.Provider value={formatos}>
+          <ContextoEstadoPlano.Provider value={estado}>{children}</ContextoEstadoPlano.Provider>
+        </ContextoFormatos.Provider>
+      </ContextoConta.Provider>
+    </ContextoAplicarPerfil.Provider>
   );
+}
+
+// aplicarPerfil(resposta do PUT /conta/boas-vindas): a app passa logo ao país e à moeda novos.
+export function useAplicarPerfil(): AplicarPerfil {
+  return useContext(ContextoAplicarPerfil);
 }
 
 // { pais, moeda, paisesBancos } da conta (PT/EUR/[PT] enquanto o /plano não chega ou fora da app).

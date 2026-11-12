@@ -1,13 +1,16 @@
-// Termos de Utilização (rascunho v0.1) e Política de Privacidade (rascunho v0.2) do copywriter.
+// Termos de Utilização (rascunho v0.2) e Política de Privacidade (rascunho v0.3) do copywriter.
 // Na v0.2 da política: a secção 15 "Lista de espera do Brasil",
 // a origem do registo nos dados da conta e o canal guardado na sessão do browser.
+// Na v0.3: as respostas ao questionário de boas-vindas (secções 3, 5 e 8), o "Apagar conta" nas definições (secção 11)
+// e, na tabela da secção 4, a linha "País e moeda da conta" (aprovada pelo CEO a 2026-11-12).
+// Na v0.2 dos termos: o "Apagar conta" passou de "O meu plano" para "Definições" (secção 10).
 // Em Markdown simples, desenhado pelo components/DocumentoLegal.tsx (sem dependências novas).
 // Para atualizar: substituir o texto entre as crases pelo Markdown novo (sem crases nem "${").
 
 export const TERMOS_MD = `
 # Termos de Utilização da Control Prices
 
-**Rascunho v0.1 — 10 de novembro de 2026**
+**Rascunho v0.2 — 12 de novembro de 2026**
 
 Estes termos explicam as regras de utilização da Control Prices. Ao criar conta, aceitas estes termos e a [Política de Privacidade](/privacidade). Lê-os com calma: tentámos escrevê-los de forma simples.
 
@@ -85,7 +88,7 @@ A IA lê extratos e talões, escolhe categorias, escreve resumos e responde no c
 ## 10. Os teus dados
 
 - Os dados que importas e escreves são teus. Usamo-los só para te prestar o serviço, como explica a [Política de Privacidade](/privacidade).
-- Podes apagar movimentações uma a uma e apagar a tua conta inteira em "O meu plano", com o botão "Apagar conta". Apagar a conta é irreversível.
+- Podes apagar movimentações uma a uma e apagar a tua conta inteira em "Definições" → "Apagar conta". Apagar a conta é irreversível.
 - A marca Control Prices e a app são de Antonni Santos. [A confirmar pelo jurista: referência à licença do código-fonte, que está num repositório público]
 
 ## 11. Uso aceitável
@@ -136,7 +139,7 @@ Privacidade: [privacidade@antonnisantosdev.com](mailto:privacidade@antonnisantos
 export const PRIVACIDADE_MD = `
 # Política de Privacidade da Control Prices
 
-**Rascunho v0.2 — 11 de novembro de 2026**
+**Rascunho v0.3 — 12 de novembro de 2026**
 
 Esta política explica que dados pessoais a Control Prices trata, para quê, com quem os partilha, durante quanto tempo os guarda e que direitos tens.
 
@@ -160,6 +163,7 @@ Para qualquer assunto de privacidade: **[privacidade@antonnisantosdev.com](mailt
 - Se entrares com o Google: o teu email e, se o Google os enviar, o nome e a fotografia.
 - O plano e a data até quando está ativo.
 - A origem do registo, se chegaste por um link nosso que a indique (só o canal: instagram, youtube, tiktok, linkedin ou outro).
+- As respostas ao questionário de boas-vindas: o país onde vives, os países dos teus cartões e contas, a moeda da conta e, se responderes, porque instalaste a app e o que queres conseguir. Servem para adaptar a app (língua, moeda, formatos) e para estatísticas agregadas que não te identificam. Podes mudá-las nas definições e apagar as respostas opcionais.
 
 **Dados financeiros que importas ou escreves**
 - Movimentações: data, descrição do banco, valor, categoria e método.
@@ -188,6 +192,7 @@ A IA da Control Prices é o modelo Claude Haiku, da Anthropic (EUA). Para cada f
 | Fotografia de talão | A fotografia inteira, para ser lida. Não fica guardada. Só ficam os produtos que gravas depois de os reveres. |
 | Chat | A tua pergunta, as mensagens anteriores da conversa (conforme o plano) e os resultados das consultas aos teus dados (data, descrição, valor e categoria). |
 | Resumos e sugestões | Os totais e as movimentações necessários para o resumo ou a sugestão. |
+| País e moeda da conta | As instruções de cada função levam o país e a moeda da conta, para a IA responder na tua língua e mostrar os valores na moeda certa (na categorização e nos extratos em PDF, vai o país dos bancos, que se tira da moeda). As respostas opcionais do questionário de boas-vindas (porque instalaste a app e o que queres conseguir) não são enviadas à IA. |
 
 - O identificador da tua conta nunca é enviado à Anthropic.
 - A memória do chat existe só enquanto a página está aberta. Não guardamos a conversa.
@@ -202,6 +207,8 @@ A IA da Control Prices é o modelo Claude Haiku, da Anthropic (EUA). Para cada f
 | Segurança e proteção contra abuso (limites por IP) | Interesse legítimo (art. 6.º, n.º 1, al. f)) |
 | Registo técnico dos custos da IA | [A confirmar pelo jurista: execução do contrato ou interesse legítimo] |
 | Saber por que canal chegam as contas novas (origem do registo, só o nome do canal) | Interesse legítimo (art. 6.º, n.º 1, al. f)) [A confirmar pelo jurista] |
+| Adaptar a app ao país onde vives e à moeda das tuas contas (país, países dos cartões e contas, moeda) | Execução do contrato (art. 6.º, n.º 1, al. b)) |
+| Estatísticas agregadas sobre porque instalaste a app e o que queres conseguir (respostas opcionais do questionário de boas-vindas), sem perfis de marketing | Interesse legítimo (art. 6.º, n.º 1, al. f)) [A confirmar pelo jurista] |
 | Avisar quando a app abrir no Brasil (lista de espera) | Consentimento (art. 6.º, n.º 1, al. a)) |
 
 Não usamos os teus dados para publicidade nem para criar perfis de marketing.
@@ -234,6 +241,7 @@ Alguns prestadores (Anthropic, Resend e, em parte, Vercel e Cloudflare) tratam d
 | Dados da conta e dados financeiros | Enquanto a conta existir |
 | Depois de apagares a conta (ou de nos pedires para a apagar) | Apagados em até 30 dias. Com o botão "Apagar conta", o apagamento na app é imediato. |
 | Contadores de pedidos à IA | Enquanto a conta existir. Apagados com a conta. |
+| Respostas ao questionário de boas-vindas | Enquanto a conta existir. Apagadas com a conta. As respostas opcionais podes apagá-las antes, nas definições. |
 | Registo técnico das chamadas à IA (função, tokens, custo, sem texto) | 24 meses. Apagamos os registos mais antigos manualmente, pelo menos uma vez por ano. Quando a conta é apagada, deixa de estar ligado a ela. |
 | Contas Free sem login há 24 meses | Podem ser apagadas, com aviso prévio por email |
 | Dados de pagamento e faturação | 10 anos (obrigação contabilística), nos registos contabilísticos, fora da app. Na app, o plano é apagado com a conta. |
@@ -266,7 +274,7 @@ Nenhum sistema é 100% seguro. Se houver uma violação de dados que te possa af
 Tens direito a:
 - **Acesso:** saber que dados temos sobre ti e receber uma cópia.
 - **Retificação:** corrigir dados errados. As categorias podes corrigi-las tu na app.
-- **Apagamento:** podes apagar movimentações uma a uma e a conta inteira em "O meu plano" → "Apagar conta". Também podes pedi-lo por email.
+- **Apagamento:** podes apagar movimentações uma a uma e a conta inteira em "Definições" → "Apagar conta". Também podes pedi-lo por email.
 - **Portabilidade:** receber os teus dados num formato comum e legível por máquina. Para uma exportação completa, pede-a por email; enviamos em CSV ou PDF.
 - **Oposição:** opor-te ao tratamento baseado em interesse legítimo.
 - **Limitação:** pedir que deixemos de usar os teus dados durante algum tempo (por exemplo, enquanto verificamos uma correção).

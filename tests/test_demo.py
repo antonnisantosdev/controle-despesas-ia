@@ -470,6 +470,10 @@ ROTAS_BLOQUEADAS_NA_DEMO = {
     ("DELETE", "/transacoes/{transacao_id}"),
     ("DELETE", "/conta"),
     ("PUT", "/conta/perfil"),
+    # Questionário de boas-vindas e perfil nas definições: a demo não responde nem vê respostas.
+    ("PUT", "/conta/boas-vindas"),
+    ("GET", "/conta/boas-vindas"),
+    ("DELETE", "/conta/boas-vindas"),
     ("POST", "/transacoes/categorizar"),
     ("POST", "/transacoes/importar"),
     ("PUT", "/orcamentos/{categoria}"),
