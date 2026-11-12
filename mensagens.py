@@ -129,6 +129,11 @@ MENSAGENS: dict[str, dict[str, str]] = {
         "PT": "A moeda principal tem de ser a de um dos países dos teus cartões e contas.",
         "BR": "A moeda principal precisa ser a de um dos países dos seus cartões e contas.",
     },
+    # Interruptor do Brasil (perfil.py). PT e BR: TEXTO NOVO.
+    "perfil_brasil_fechado": {
+        "PT": "A Control Prices ainda não está disponível para quem vive no Brasil. Podes inscrever-te na lista de espera em /brasil.",
+        "BR": "A Control Prices ainda não está disponível para quem mora no Brasil. Você pode entrar na lista de espera em /brasil.",
+    },
     "perfil_indisponivel": {  # BR: TEXTO NOVO
         "PT": "Não foi possível guardar as definições agora. Tenta mais tarde.",
         "BR": "Não foi possível salvar as configurações agora. Tente mais tarde.",

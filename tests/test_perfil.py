@@ -957,3 +957,90 @@ def test_a_020_troca_a_funcao_do_perfil_pela_versao_so_se_padrao():
     funcao = funcao[: funcao.index("$$;")]
     assert "SECURITY INVOKER" in funcao and "SET search_path = ''" in funcao
     assert "SECURITY DEFINER" not in funcao
+
+
+# --- Interruptor do Brasil (decisão do CEO, 2026-11-12): fechado até haver termos e política para a LGPD ---
+
+
+@pytest.fixture
+def brasil_fechado(monkeypatch):
+    monkeypatch.setenv("BRASIL_ABERTO", "false")
+    monkeypatch.setenv("BRASIL_TESTERS", "")
+
+
+def test_brasil_fechado_recusa_viver_no_brasil_sem_mudar_nada(cliente, conta, rpc_perfil, brasil_fechado):
+    conta()
+    falso = rpc_perfil("ok")
+
+    resposta = cliente.put("/conta/perfil", json={"pais": "BR"})
+
+    assert resposta.status_code == 403
+    assert "lista de espera" in resposta.json()["detail"]
+    assert falso.chamadas == []
+
+
+def test_brasil_fechado_deixa_os_testers(cliente, conta, rpc_perfil, brasil_fechado, monkeypatch):
+    monkeypatch.setenv("BRASIL_TESTERS", "outra-conta, UTILIZADOR-TESTE")
+    conta()
+    rpc_perfil("ok")
+
+    assert cliente.put("/conta/perfil", json={"pais": "BR"}).status_code == 200
+
+
+def test_brasil_fechado_nao_mexe_em_quem_ja_vive_no_brasil(cliente, conta, rpc_perfil, brasil_fechado):
+    conta(Assinatura("free", None, pais="BR", paises_bancos=("BR",), moeda="BRL", com_perfil=True))
+    rpc_perfil("ok")
+
+    resposta = cliente.put("/conta/perfil", json={"paises_bancos": ["PT", "BR"]})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["pais"] == "BR"
+
+
+def test_brasil_fechado_deixa_cartoes_do_brasil_a_quem_vive_em_portugal(cliente, conta, rpc_perfil, brasil_fechado):
+    conta()
+    rpc_perfil("ok")
+
+    resposta = cliente.put("/conta/perfil", json={"paises_bancos": ["PT", "BR"]})
+
+    assert resposta.status_code == 200
+
+
+def test_brasil_fechado_no_registo_grava_portugal_com_os_cartoes_escolhidos(api, monkeypatch, rpc_perfil, brasil_fechado):
+    falso = rpc_perfil()
+    monkeypatch.setattr(main, "fazer_registo", lambda email, password: ID_NOVO)
+
+    resposta = api.post("/registo", json={"email": EMAIL, "password": "uma-boa-palavra", "pais": "BR"})
+
+    assert resposta.status_code == 201
+    assert falso.chamadas == [parametros("PT", ["BR"], "BRL")]
+
+
+@pytest.mark.parametrize(
+    ("pais", "testers", "esperado"), [("PT", "", False), ("PT", "utilizador-teste", True), ("BR", "", True)]
+)
+def test_o_plano_diz_se_a_conta_pode_escolher_o_brasil(cliente, monkeypatch, brasil_fechado, pais, testers, esperado):
+    monkeypatch.setenv("BRASIL_TESTERS", testers)
+    assinatura = Assinatura("free", None, pais=pais, com_perfil=True)
+    monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: assinatura)
+    monkeypatch.setattr(limites, "pedidos_no_periodo", lambda user_id, periodo: 0)
+
+    assert cliente.get("/plano").json()["brasil_disponivel"] is esperado
+
+
+def test_brasil_fechado_no_primeiro_login_google_grava_portugal(api, monkeypatch, rpc_perfil, brasil_fechado):
+    falso = rpc_perfil()
+    monkeypatch.setattr(auth, "supabase", SimpleNamespace())
+    sessao = auth.SessaoGoogle("token-inventado", ID_NOVO, conta_nova=True)
+    monkeypatch.setattr(main, "trocar_codigo_google", lambda codigo, verifier: sessao)
+
+    assert trocar(api, pais="BR").status_code == 200
+    assert falso.chamadas == [parametros("PT", ["BR"], "BRL")]
+
+
+def test_sem_as_variaveis_o_brasil_fica_fechado(monkeypatch):
+    monkeypatch.delenv("BRASIL_ABERTO", raising=False)
+    monkeypatch.delenv("BRASIL_TESTERS", raising=False)
+
+    assert perfil.pode_escolher_brasil("qualquer-conta") is False
+    assert perfil.pode_escolher_brasil("qualquer-conta", "BR") is True  # quem já vive no Brasil continua

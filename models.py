@@ -536,6 +536,8 @@ class EstadoPlano(BaseModel):
     # Questionário de boas-vindas (sql/021): true numa conta nova que ainda não o fez (o frontend abre-o).
     # Sempre false antes da 021, nas contas antigas e na demo.
     boas_vindas_pendente: bool = False
+    # Interruptor do Brasil (perfil.pode_escolher_brasil): se a conta pode escolher "vivo no Brasil".
+    brasil_disponivel: bool = False
 
 
 # Um plano à venda e o seu limite de pedidos à IA (GET /planos, público).

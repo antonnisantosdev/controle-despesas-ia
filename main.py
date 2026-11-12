@@ -86,7 +86,7 @@ from objetivos import (
     obter_objetivo,
 )
 from produtos import chave_do_produto, juncoes_do_utilizador, juntar_produtos, precos_do_utilizador, produtos_do_utilizador, separar_produtos
-from perfil import atualizar_perfil, guardar_perfil_inicial
+from perfil import atualizar_perfil, guardar_perfil_inicial, pode_escolher_brasil
 from boas_vindas import apagar_respostas, guardar_respostas, ler_respostas
 from orcamento import alertas_de_orcamento, guardar_limite, historico_para_sugestao, planeamento_do_mes
 from models import (
@@ -1122,7 +1122,8 @@ def plano(user_id: str = Depends(obter_utilizador_atual)) -> EstadoPlano:
     # A demo nunca vê o questionário de boas-vindas (a sql/021 já a marca; isto é a segunda barreira).
     if estado.boas_vindas_pendente and e_conta_demo(user_id):
         estado = estado.model_copy(update={"boas_vindas_pendente": False})
-    return estado
+    # Brasil fechado (perfil.py): o frontend só mostra "vivo no Brasil" a quem o pode escolher.
+    return estado.model_copy(update={"brasil_disponivel": pode_escolher_brasil(user_id, estado.pais)})
 
 
 # Os planos à venda e os seus limites (para a página de preços). Público: não precisa de login

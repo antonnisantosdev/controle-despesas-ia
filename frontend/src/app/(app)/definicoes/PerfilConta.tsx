@@ -17,7 +17,7 @@ import {
   type BoasVindasGuardadas,
 } from "@/lib/api";
 import { bancosDe, moedaDosBancos, paisesDosBancos, type Bancos } from "@/lib/boasVindas";
-import { useAplicarPerfil, useConta } from "@/lib/conta";
+import { useAplicarPerfil, useConta, useEstadoPlano } from "@/lib/conta";
 import type { Moeda, Pais } from "@/lib/formatos";
 import { useTextos } from "@/lib/textos";
 import {
@@ -54,6 +54,7 @@ function formularioDe(dados: Pick<BoasVindasGuardadas, "pais" | "paises_bancos" 
 export default function PerfilConta() {
   const { TEXTOS_DEFINICOES: T, TEXTOS_BOAS_VINDAS } = useTextos(DICIONARIO_BOAS_VINDAS);
   const conta = useConta();
+  const brasilDisponivel = useEstadoPlano()?.brasil_disponivel === true;
   const demo = useSessaoDemo();
   const aplicarPerfil = useAplicarPerfil();
   const router = useRouter();
@@ -191,7 +192,8 @@ export default function PerfilConta() {
               className={ESTILO_CAMPO}
             >
               <option value="PT">{TEXTOS_PAIS.opcaoPortugal}</option>
-              <option value="BR">{TEXTOS_PAIS.opcaoBrasil}</option>
+              {/* Brasil fechado (até haver termos para a LGPD): só para quem o pode escolher ou já o tem. */}
+              {(brasilDisponivel || dados.pais === "BR") && <option value="BR">{TEXTOS_PAIS.opcaoBrasil}</option>}
             </select>
             <p id="ajuda-pais" className={ESTILO_AJUDA}>
               {T.ajudaPais}

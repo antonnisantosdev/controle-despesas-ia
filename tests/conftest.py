@@ -19,6 +19,10 @@ os.environ["ANTHROPIC_API_KEY"] = "chave-falsa"
 os.environ["DEMO_TOKEN_SEGREDO"] = ""
 os.environ["DEMO_USER_ID"] = ""
 os.environ["DEMO_EMAIL"] = ""
+# O Brasil fica aberto por omissão nos testes (os do perfil usam contas BR); os testes do interruptor
+# (fim do test_perfil.py) fecham-no.
+os.environ["BRASIL_ABERTO"] = "true"
+os.environ["BRASIL_TESTERS"] = ""
 
 import pytest  # noqa: E402
 from fastapi import HTTPException  # noqa: E402

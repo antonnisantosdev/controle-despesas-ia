@@ -141,9 +141,12 @@ export default function PaginaBoasVindas() {
           <Opcao tipo="radio" nome="pais" marcada={pais === "PT"} aoMudar={() => setPais("PT")}>
             {TEXTOS_PAIS.opcaoPortugal}
           </Opcao>
-          <Opcao tipo="radio" nome="pais" marcada={pais === "BR"} aoMudar={() => setPais("BR")}>
-            {TEXTOS_PAIS.opcaoBrasil}
-          </Opcao>
+          {/* Brasil fechado (até haver termos para a LGPD): só aparece a quem o pode escolher. */}
+          {estado?.brasil_disponivel && (
+            <Opcao tipo="radio" nome="pais" marcada={pais === "BR"} aoMudar={() => setPais("BR")}>
+              {TEXTOS_PAIS.opcaoBrasil}
+            </Opcao>
+          )}
         </Pergunta>
       )}
 

@@ -231,6 +231,8 @@ export type EstadoPlano = {
   moeda: Moeda;
   // Conta nova que ainda não fez o questionário de boas-vindas (sql/021). Sempre false na demo e numa API antiga.
   boas_vindas_pendente: boolean;
+  // Interruptor do Brasil (perfil.py): se a conta pode escolher "vivo no Brasil".
+  brasil_disponivel: boolean;
 };
 // O que GET /plano devolve. Uma API antiga (durante o deploy) só traz usadas_hoje e não traz periodo,
 // nem os campos do plano terminado e dos PDF.
@@ -248,6 +250,7 @@ type EstadoPlanoDaApi = Pick<EstadoPlano, "plano" | "limite" | "ativo_ate"> & {
   paises_bancos?: string[];
   moeda?: string;
   boas_vindas_pendente?: boolean;
+  brasil_disponivel?: boolean;
 };
 
 // Põe o estado sempre na forma nova, para nenhum ecrã fazer contas com undefined (NaN).
@@ -272,6 +275,7 @@ export function normalizarEstadoPlano(bruto: EstadoPlanoDaApi): EstadoPlano {
     moeda: eMoeda(bruto.moeda) ? bruto.moeda : "EUR",
     // Só true se a API o disser (uma API antiga não o envia: ninguém vê o questionário).
     boas_vindas_pendente: bruto.boas_vindas_pendente === true,
+    brasil_disponivel: bruto.brasil_disponivel === true,
   };
 }
 

@@ -632,6 +632,7 @@ def test_a_rota_plano_mostra_o_limite_o_periodo_e_os_pedidos_usados(cliente, ass
         "moeda": "EUR",
         # Questionário de boas-vindas (sql/021): sem a coluna lida, ninguém o tem por fazer.
         "boas_vindas_pendente": False,
+        "brasil_disponivel": True,  # nos testes o Brasil está aberto (conftest.py)
     }
     assert pdfs_contados == []  # no Free nem se contam os PDF
 

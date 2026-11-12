@@ -10,6 +10,7 @@ As regras puras (sem base de dados) ficam no início: o models.py usa-as para va
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from fastapi import HTTPException
@@ -24,6 +25,27 @@ from mensagens import msg
 MENSAGEM_MOEDA_COM_DADOS = msg("perfil_moeda_com_dados", "PT")
 MENSAGEM_MOEDA_INCOERENTE = msg("perfil_moeda_incoerente", "PT")
 MENSAGEM_PERFIL_INDISPONIVEL = msg("perfil_indisponivel", "PT")
+
+
+# --- Interruptor do Brasil (decisão do CEO, 2026-11-12) ---
+# Até haver termos e política para a LGPD, só escolhe "vivo no Brasil" quem está em BRASIL_TESTERS
+# (ids das contas, separados por vírgulas) ou quem já o tinha. BRASIL_ABERTO=true abre a toda a gente.
+# Sem as variáveis: fechado. Os países dos cartões e a moeda (BRL) não mudam: só o país onde se vive.
+
+
+def brasil_aberto() -> bool:
+    return os.getenv("BRASIL_ABERTO", "").strip().lower() in ("1", "true", "sim")
+
+
+def testers_brasil() -> set[str]:
+    return {parte.strip().lower() for parte in os.getenv("BRASIL_TESTERS", "").split(",") if parte.strip()}
+
+
+def pode_escolher_brasil(user_id: str | None, pais_atual: str = "PT") -> bool:
+    """True se a conta pode ter "vivo no Brasil": aberto a todos, conta de tester, ou a conta já o tinha."""
+    if pais_atual == "BR" or brasil_aberto():
+        return True
+    return user_id is not None and str(user_id).lower() in testers_brasil()
 
 
 @dataclass(frozen=True)
@@ -118,6 +140,10 @@ def guardar_perfil_inicial(user_id: str | None, perfil: Perfil | None) -> None:
     """
     if not user_id or perfil is None:
         return
+    if perfil.pais == "BR" and not pode_escolher_brasil(user_id):
+        # Brasil fechado: a conta fica a viver em Portugal; os cartões e a moeda escolhidos ficam.
+        print("AVISO: perfil do registo com Brasil fechado; gravado com Portugal.")
+        perfil = Perfil("PT", perfil.paises_bancos, perfil.moeda)
     try:
         resultado = _chamar_atualizar_perfil(user_id, perfil, so_se_padrao=True)
     except Exception as erro:
@@ -152,6 +178,8 @@ def atualizar_perfil(user_id: str, pais: str | None, paises_bancos: list[str] | 
         novo = perfil_atualizado(atual, pais, paises_bancos, moeda)
     except PerfilInvalido:
         raise HTTPException(status_code=422, detail=msg("perfil_moeda_incoerente", conta.pais))
+    if novo.pais == "BR" and not pode_escolher_brasil(user_id, conta.pais):
+        raise HTTPException(status_code=403, detail=msg("perfil_brasil_fechado", conta.pais))
 
     try:
         resultado = _chamar_atualizar_perfil(user_id, novo, so_se_padrao=False)
