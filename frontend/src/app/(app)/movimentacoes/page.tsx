@@ -203,6 +203,51 @@ export default function PaginaMovimentacoes() {
     }
   }
 
+  // Usados na tabela (computador) e nos cartões (telemóvel).
+  // Caixa com ar de "pílula": mudar aqui corrige a categoria escolhida pela IA.
+  function seletorCategoria(t: Transacao) {
+    return (
+      <select
+        value={t.categoria ?? ""}
+        onChange={(e) => mudarCategoria(t, e.target.value)}
+        disabled={demo}
+        aria-describedby={demo ? ID_NOTA_DEMO : undefined}
+        aria-label={preencher(TEXTOS_MOVIMENTACOES.rotuloCategoria, { descricao: t.descricao })}
+        className="cursor-pointer rounded-full disabled:cursor-default disabled:hover:border-transparent border border-transparent bg-fundo px-2.5 py-1 text-xs capitalize text-texto-suave hover:border-borda"
+      >
+        {t.categoria === null && (
+          <option value="" disabled>
+            {TEXTOS_MOVIMENTACOES.semCategoria}
+          </option>
+        )}
+        {comValorAtual(categorias, t.categoria).map((c) => (
+          <option key={c} value={c}>
+            {rotuloCategoria(c)}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  function botaoApagar(t: Transacao) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAApagar(t)}
+        disabled={demo}
+        aria-label={preencher(TEXTOS_APAGAR_MOVIMENTO.rotuloBotao, {
+          descricao: t.descricao,
+          data: diaMes(t.data),
+          valor: f.dinheiro(t.valor),
+        })}
+        aria-describedby={demo ? ID_NOTA_DEMO : undefined}
+        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2 text-xs font-medium text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent dark:text-red-300 dark:hover:bg-red-950/40"
+      >
+        {TEXTOS_APAGAR_MOVIMENTO.botao}
+      </button>
+    );
+  }
+
   return (
     <main className="p-4 sm:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -211,7 +256,8 @@ export default function PaginaMovimentacoes() {
             <p className="text-xs font-semibold uppercase tracking-wide text-destaque">{TEXTOS_MOVIMENTACOES.etiquetaTopo}</p>
             <h1 className="text-2xl font-semibold text-texto">{TEXTOS_MOVIMENTACOES.titulo}</h1>
           </div>
-          <div className="flex gap-2">
+          {/* flex-wrap: a 375 px (textos BR) o botão verde passava da margem e a página deslizava. */}
+          <div className="flex flex-wrap gap-2">
             <select
               value={mes}
               onChange={(e) => setMes(e.target.value)}
@@ -346,10 +392,39 @@ export default function PaginaMovimentacoes() {
             <p className="p-6 text-sm text-texto-suave">{TEXTOS_MOVIMENTACOES.vazio}</p>
           )}
 
+          {/* Telemóvel (abaixo de sm): um cartão por movimentação, sem deslizar para o lado. */}
           {transacoes.length > 0 && (
-            // overflow-x-auto: no telemóvel a tabela desliza para o lado em vez de sair do ecrã.
+            <ul className="sm:hidden">
+              {transacoes.map((t) => (
+                <li key={t.id} className="space-y-2 border-b border-borda p-4 last:border-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 break-words text-sm text-texto">{t.descricao}</p>
+                    <p
+                      className={`shrink-0 whitespace-nowrap text-sm font-medium tabular-nums ${
+                        t.valor > 0 ? "text-destaque" : "text-texto"
+                      }`}
+                    >
+                      {t.valor > 0 ? "+" : ""}
+                      {f.dinheiro(t.valor)}
+                    </p>
+                  </div>
+                  <p className="text-xs tabular-nums text-texto-suave">
+                    {diaMes(t.data)}
+                    {t.metodo_pagamento ? ` · ${rotuloMetodo(t.metodo_pagamento)}` : ""}
+                  </p>
+                  <div className="flex items-center justify-between gap-3">
+                    {seletorCategoria(t)}
+                    {botaoApagar(t)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {transacoes.length > 0 && (
+            // Do sm para cima: tabela. overflow-x-auto fica como rede de segurança em ecrãs intermédios.
             // relative: o "Ações" só para leitores de ecrã (sr-only, absolute) fica preso aqui e não alarga a página.
-            <div className="relative overflow-x-auto">
+            <div className="relative hidden overflow-x-auto sm:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-borda text-left text-xs text-texto-suave">
@@ -368,28 +443,7 @@ export default function PaginaMovimentacoes() {
                     <tr key={t.id} className="border-b border-borda last:border-0 hover:bg-fundo">
                       <td className="whitespace-nowrap px-4 py-3 tabular-nums text-texto-suave">{diaMes(t.data)}</td>
                       <td className="px-4 py-3 text-texto">{t.descricao}</td>
-                      <td className="px-4 py-3">
-                        {/* Caixa com ar de "pílula": mudar aqui corrige a categoria escolhida pela IA. */}
-                        <select
-                          value={t.categoria ?? ""}
-                          onChange={(e) => mudarCategoria(t, e.target.value)}
-                          disabled={demo}
-                          aria-describedby={demo ? ID_NOTA_DEMO : undefined}
-                          aria-label={preencher(TEXTOS_MOVIMENTACOES.rotuloCategoria, { descricao: t.descricao })}
-                          className="cursor-pointer rounded-full disabled:cursor-default disabled:hover:border-transparent border border-transparent bg-fundo px-2.5 py-1 text-xs capitalize text-texto-suave hover:border-borda"
-                        >
-                          {t.categoria === null && (
-                            <option value="" disabled>
-                              {TEXTOS_MOVIMENTACOES.semCategoria}
-                            </option>
-                          )}
-                          {comValorAtual(categorias, t.categoria).map((c) => (
-                            <option key={c} value={c}>
-                              {rotuloCategoria(c)}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
+                      <td className="px-4 py-3">{seletorCategoria(t)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-texto-suave">
                         {t.metodo_pagamento ? rotuloMetodo(t.metodo_pagamento) : "—"}
                       </td>
@@ -402,22 +456,7 @@ export default function PaginaMovimentacoes() {
                         {t.valor > 0 ? "+" : ""}
                         {f.dinheiro(t.valor)}
                       </td>
-                      <td className="px-2 py-1 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setAApagar(t)}
-                          disabled={demo}
-                          aria-label={preencher(TEXTOS_APAGAR_MOVIMENTO.rotuloBotao, {
-                            descricao: t.descricao,
-                            data: diaMes(t.data),
-                            valor: f.dinheiro(t.valor),
-                          })}
-                          aria-describedby={demo ? ID_NOTA_DEMO : undefined}
-                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2 text-xs font-medium text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent dark:text-red-300 dark:hover:bg-red-950/40"
-                        >
-                          {TEXTOS_APAGAR_MOVIMENTO.botao}
-                        </button>
-                      </td>
+                      <td className="px-2 py-1 text-right">{botaoApagar(t)}</td>
                     </tr>
                   ))}
                 </tbody>

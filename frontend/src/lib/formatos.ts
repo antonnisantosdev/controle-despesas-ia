@@ -58,12 +58,13 @@ export function dinheiroEixo(valor: number, pais: Pais, moeda: Moeda): string {
   return comSimbolo(numero(valor, pais), moeda);
 }
 
-// Eixo em milhares (simulador): PT/EUR: 12000 -> "12 mil €". BR/BRL: 12000 -> "R$ 12 mil".
-// Em PT o número vai sem separador ("20000 mil €"), como a app sempre mostrou; no BR, "R$ 20.000 mil".
+// Eixo do simulador, em forma curta para caber no eixo com valores grandes (até 10 000/mês durante 40 anos):
+// PT/EUR: 450 -> "450 €", 12000 -> "12 mil €", 18459000 -> "18,5 M €". BR/BRL: "R$ 12 mil", "R$ 18,5 mi".
 export function dinheiroMil(valor: number, pais: Pais, moeda: Moeda): string {
-  const milhares = Math.round(valor / 1000) || 0; // "|| 0": sem "-0" nos valores pequenos
-  const texto = pais === "PT" ? String(milhares) : numero(milhares, pais);
-  return comSimbolo(`${texto} mil`, moeda);
+  const texto = (valor || 0) // "|| 0": sem "-0"
+    .toLocaleString(localeDe(pais), { notation: "compact", maximumFractionDigits: 1 })
+    .replace(/\s/g, " ");
+  return comSimbolo(texto, moeda);
 }
 
 // Números sem moeda: 1.5 -> "1,5" (quantidades, percentagens).

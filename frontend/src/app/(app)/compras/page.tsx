@@ -14,12 +14,11 @@ import {
   ErroApi,
   eSoPlanosPagos,
   pedirApi,
-  pedirEstadoPlano,
   SessaoExpirada,
   type Compra,
   type Talao,
 } from "@/lib/api";
-import { useFormatos } from "@/lib/conta";
+import { useEstadoPlano, useFormatos, usePedidoPlano } from "@/lib/conta";
 import { reduzirImagem } from "@/lib/imagem";
 import { preencher, temFuncoesPagas } from "@/lib/planos";
 import { useTextos } from "@/lib/textos";
@@ -53,10 +52,15 @@ export default function PaginaCompras() {
   const [aviso, setAviso] = useState("");
   const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite de pedidos à IA
   // Ler talões é só dos planos pagos: no Free fica a mensagem do aviso e o botão desaparece.
-  const [soPlanosPagos, setSoPlanosPagos] = useState<string | null>(null);
+  // O plano vem do /plano do ProvedorConta (sem pedido próprio). Se esse pedido falhar, o botão fica:
+  // a API responde 402 na mesma, e o aviso aparece nessa altura (recusaApi).
+  const estadoPlano = useEstadoPlano();
+  const { falhou: planoFalhou } = usePedidoPlano();
+  const [recusaApi, setRecusaApi] = useState<string | null>(null);
   // O botão só aparece depois de o /plano responder (ou falhar): assim o Free não o vê piscar.
-  const [planoVerificado, setPlanoVerificado] = useState(false);
-  const [eFree, setEFree] = useState(false);
+  const planoVerificado = estadoPlano !== null || planoFalhou;
+  const eFree = estadoPlano !== null && !temFuncoesPagas(estadoPlano.plano);
+  const soPlanosPagos = recusaApi ?? (eFree ? TEXTOS_PLANO_PAGO.talao : null);
   const [separador, setSeparador] = useState<Separador>("taloes");
   // O separador Preços só pede à API quando é aberto pela primeira vez; depois fica montado (guarda a pesquisa).
   const [precosAbertos, setPrecosAbertos] = useState(false);
@@ -91,17 +95,6 @@ export default function PaginaCompras() {
         if (e instanceof SessaoExpirada) tratarSessao(e);
         else setErro(TEXTOS_COMPRAS.erroCarregar);
       });
-    // Avisa logo no Free, sem esperar que a leitura falhe. Se o /plano falhar, o botão fica:
-    // a API responde 402 na mesma, e o aviso aparece nessa altura.
-    pedirEstadoPlano()
-      .then((estado) => {
-        if (!temFuncoesPagas(estado.plano)) {
-          setSoPlanosPagos(TEXTOS_PLANO_PAGO.talao);
-          setEFree(true);
-        }
-      })
-      .catch(() => {}) // a sessão expirada já é tratada pelo pedido das compras
-      .finally(() => setPlanoVerificado(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -118,7 +111,7 @@ export default function PaginaCompras() {
       if (e instanceof SessaoExpirada) tratarSessao(e);
       else if (eBloqueadoNaDemo(e)) return; // 423 da demo: a faixa já explica
       else if (eLimiteDiario(e)) setSemPedidos(true);
-      else if (eSoPlanosPagos(e)) setSoPlanosPagos(typeof e.detalhe === "string" ? e.detalhe : TEXTOS_PLANO_PAGO.talao);
+      else if (eSoPlanosPagos(e)) setRecusaApi(typeof e.detalhe === "string" ? e.detalhe : TEXTOS_PLANO_PAGO.talao);
       // 413/415/422 (foto inválida) e 503 (IA em baixo) trazem uma explicação da API.
       else if (e instanceof ErroApi && typeof e.detalhe === "string") setErro(e.detalhe);
       else setErro(TEXTOS_COMPRAS.erroLer);

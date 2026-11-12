@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import AvisoLimite from "@/components/AvisoLimite";
 import AvisoQuota from "@/components/AvisoQuota";
@@ -8,12 +8,11 @@ import {
   eLimiteDiario,
   ErroApi,
   pedirApi,
-  pedirEstadoPlano,
   SessaoExpirada,
-  type EstadoPlano,
   type MensagemHistorico,
   type RespostaChat,
 } from "@/lib/api";
+import { useEstadoPlano, usePedidoPlano } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
 import { useTextos } from "@/lib/textos";
 import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
@@ -75,17 +74,12 @@ export default function Chat() {
   const [erro, setErro] = useState("");
   const [semPedidos, setSemPedidos] = useState(false); // 429: chegou ao limite de pedidos à IA
   const [detalheLimite, setDetalheLimite] = useState<string | undefined>(); // o texto do 429 que a API mandou
-  // Os pedidos à IA já usados, para o aviso dos 80%. Volta a ser pedido depois de cada pergunta.
-  const [estado, setEstado] = useState<EstadoPlano | null>(null);
-  const [perguntasFeitas, setPerguntasFeitas] = useState(0);
+  // Os pedidos à IA já usados, para o aviso dos 80%: o /plano do ProvedorConta (sem pedido próprio),
+  // pedido outra vez depois de cada pergunta. Sem o estado, o aviso não aparece (o chat funciona na mesma).
+  const estado = useEstadoPlano();
+  const { atualizar: atualizarPlano } = usePedidoPlano();
   // Na demo: a nota das 5 perguntas por dia em vez do aviso dos pedidos do plano (que são partilhados).
   const demo = useSessaoDemo();
-
-  useEffect(() => {
-    pedirEstadoPlano()
-      .then(setEstado)
-      .catch(() => setEstado(null)); // sem o estado, o aviso não aparece (o chat funciona na mesma)
-  }, [perguntasFeitas]);
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -116,7 +110,7 @@ export default function Chat() {
       }
     } finally {
       setAPensar(false);
-      setPerguntasFeitas((n) => n + 1);
+      atualizarPlano();
     }
   }
 

@@ -31,29 +31,45 @@ export default function SimuladorPoupanca({ onSessaoExpirada }: Props) {
   const [anos, setAnos] = useState(10);
   const [taxa, setTaxa] = useState(4);
   const [resultado, setResultado] = useState<AnoSimulado[]>([]);
-  const [erro, setErro] = useState("");
+  // O erro guarda os valores a que pertence: com outros valores no campo já não aparece (não pisca o antigo).
+  const [erro, setErro] = useState<{ texto: string; de: string } | null>(null);
+
+  const numero = Number(mensal.replace(",", "."));
+  // Valor vazio ou inválido: não se mostra o resultado (nem o erro) de um valor que já não é o do campo.
+  const valido = numero > 0;
+  const pedidoAtual = `${numero}|${anos}|${taxa}`;
+  const erroAtual = valido && erro?.de === pedidoAtual ? erro.texto : "";
 
   useEffect(() => {
-    const numero = Number(mensal.replace(",", "."));
-    if (!(numero > 0)) return;
+    if (!valido) return;
 
     // Espera um bocadinho depois da última tecla, para não fazer um pedido por cada algarismo.
+    // Uma resposta que chegue depois de o campo mudar já não é a certa: ignora-se.
+    let atual = true;
     const espera = setTimeout(() => {
       pedirApi<AnoSimulado[]>(`/simulador?mensal=${numero}&anos=${anos}&taxa=${taxa}`)
         .then((anosSimulados) => {
+          if (!atual) return;
           setResultado(anosSimulados);
-          setErro("");
+          setErro(null);
         })
         .catch((e) => {
           if (e instanceof SessaoExpirada) onSessaoExpirada(e);
-          else setErro(TEXTOS_SIMULADOR.erro);
+          else if (atual) {
+            // Sem o resultado anterior: ficava à vista por baixo do erro, como se fosse do valor novo.
+            setResultado([]);
+            setErro({ texto: TEXTOS_SIMULADOR.erro, de: pedidoAtual });
+          }
         });
     }, 300);
-    return () => clearTimeout(espera);
+    return () => {
+      atual = false;
+      clearTimeout(espera);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mensal, anos, taxa]);
 
-  const final = resultado.at(-1);
+  const final = valido ? resultado.at(-1) : undefined;
   // "10 000 €" (ou "R$ 10.000"), com espaços normais como o texto sempre teve.
   const maximoMensal = f.comSimbolo(f.numero(MAXIMO_MENSAL).replace(/\s/g, " "));
 
@@ -94,7 +110,7 @@ export default function SimuladorPoupanca({ onSessaoExpirada }: Props) {
         </label>
       </div>
 
-      {erro && <p className="text-sm text-red-600 dark:text-red-400">{preencher(erro, { maximo: maximoMensal })}</p>}
+      {erroAtual && <p className="text-sm text-red-600 dark:text-red-400">{preencher(erroAtual, { maximo: maximoMensal })}</p>}
 
       {final && (
         <>
@@ -128,7 +144,7 @@ export default function SimuladorPoupanca({ onSessaoExpirada }: Props) {
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: COR_DEPOSITADO, fontSize: 12 }}
-                width={64}
+                width={72}
               />
               <Tooltip
                 contentStyle={ESTILO_TOOLTIP}

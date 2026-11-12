@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { pedirEstadoPlano, type BoasVindasGuardadas, type EstadoPlano } from "./api";
+import { pedirEstadoPlano, SessaoExpirada, type BoasVindasGuardadas, type EstadoPlano } from "./api";
 import { CONTA_PADRAO, criarFormatos, FORMATOS_PADRAO, type Conta, type Formatos } from "./formatos";
 import { useSessaoDemo } from "./useSessaoDemo";
 
@@ -18,6 +18,10 @@ const ContextoEstadoPlano = createContext<EstadoPlano | null>(null);
 // mudam logo) e tira o "questionário por fazer", sem esperar pelo próximo GET /plano.
 type AplicarPerfil = (perfil: Pick<BoasVindasGuardadas, "pais" | "moeda" | "paises_bancos">) => void;
 const ContextoAplicarPerfil = createContext<AplicarPerfil>(() => {});
+// Como correu o último GET /plano, e como pedi-lo outra vez (ex. o chat, depois de cada pergunta, para o aviso
+// dos 80%). falhou: o pedido deu erro (sessaoExpirada: foi um 401); quem precisa trata do erro à sua maneira.
+type PedidoPlano = { falhou: boolean; sessaoExpirada: boolean; atualizar: () => void };
+const ContextoPedidoPlano = createContext<PedidoPlano>({ falhou: false, sessaoExpirada: false, atualizar: () => {} });
 
 function chaveDaConta(conta: Conta): string {
   return `${conta.pais}|${conta.moeda}|${conta.paisesBancos.join(",")}`;
@@ -34,6 +38,11 @@ export function ProvedorConta({ children }: { children: ReactNode }) {
   const jaPediuNaDemo = useRef(false);
   // O questionário já foi gravado nesta sessão: um GET /plano que saia antes (ou chegue atrasado) não o volta a pedir.
   const respondido = useRef(false);
+  const [versao, setVersao] = useState(0); // sobe com atualizar(): volta a pedir o /plano
+  // A falha guarda a página e o pedido em que aconteceu: numa página nova (ou depois de atualizar) só conta
+  // quando o pedido novo também falhar, e o erro antigo não aparece enquanto ele não chega.
+  const [falha, setFalha] = useState<{ chave: string; sessaoExpirada: boolean } | null>(null);
+  const chavePedido = `${pagina}|${versao}`;
 
   useEffect(() => {
     if (demo && jaPediuNaDemo.current) return;
@@ -48,15 +57,23 @@ export function ProvedorConta({ children }: { children: ReactNode }) {
         // Só troca a conta se o país, a moeda ou os bancos mudaram: quem formata dinheiro não volta a desenhar.
         const nova: Conta = { pais: novo.pais, moeda: novo.moeda, paisesBancos: novo.paises_bancos };
         setConta((atual) => (chaveDaConta(atual) === chaveDaConta(nova) ? atual : nova));
+        setFalha(null);
       })
-      .catch(() => {
+      .catch((e) => {
         // O cartão do plano simplesmente não aparece (a página trata da sessão).
-        if (!cancelado) setEstado(null);
+        if (cancelado) return;
+        setEstado(null);
+        setFalha({ chave: `${pagina}|${versao}`, sessaoExpirada: e instanceof SessaoExpirada });
       });
     return () => {
       cancelado = true;
     };
-  }, [pagina, demo]);
+  }, [pagina, demo, versao]);
+
+  const atualizar = useCallback(() => setVersao((v) => v + 1), []);
+  const falhou = falha?.chave === chavePedido;
+  const sessaoExpirada = falhou && falha.sessaoExpirada;
+  const pedidoPlano = useMemo(() => ({ falhou, sessaoExpirada, atualizar }), [falhou, sessaoExpirada, atualizar]);
 
   const formatos = useMemo(() => criarFormatos(conta), [conta]);
 
@@ -75,7 +92,9 @@ export function ProvedorConta({ children }: { children: ReactNode }) {
     <ContextoAplicarPerfil.Provider value={aplicarPerfil}>
       <ContextoConta.Provider value={conta}>
         <ContextoFormatos.Provider value={formatos}>
-          <ContextoEstadoPlano.Provider value={estado}>{children}</ContextoEstadoPlano.Provider>
+          <ContextoEstadoPlano.Provider value={estado}>
+            <ContextoPedidoPlano.Provider value={pedidoPlano}>{children}</ContextoPedidoPlano.Provider>
+          </ContextoEstadoPlano.Provider>
         </ContextoFormatos.Provider>
       </ContextoConta.Provider>
     </ContextoAplicarPerfil.Provider>
@@ -100,4 +119,9 @@ export function useFormatos(): Formatos {
 // O último GET /plano do ProvedorConta (null enquanto não chega, se falhar ou fora da app).
 export function useEstadoPlano(): EstadoPlano | null {
   return useContext(ContextoEstadoPlano);
+}
+
+// { falhou, sessaoExpirada, atualizar } do GET /plano do ProvedorConta (fora da app: nada falhou, atualizar não faz nada).
+export function usePedidoPlano(): PedidoPlano {
+  return useContext(ContextoPedidoPlano);
 }

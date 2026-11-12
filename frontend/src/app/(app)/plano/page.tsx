@@ -6,8 +6,8 @@ import { useEffect, useState } from "react";
 
 import { corDaBarra } from "@/app/(app)/CartaoPlano";
 import BotaoPedirAcesso from "@/components/BotaoPedirAcesso";
-import { apagarToken, emailDaSessao, pedirEstadoPlano, SessaoExpirada, type EstadoPlano } from "@/lib/api";
-import { useFormatos } from "@/lib/conta";
+import { apagarToken, emailDaSessao, type EstadoPlano } from "@/lib/api";
+import { useEstadoPlano, useFormatos, usePedidoPlano } from "@/lib/conta";
 import {
   dataPorExtenso,
   deveAvisarRenovar,
@@ -32,30 +32,24 @@ export default function PaginaPlano() {
   const { TEXTOS_EXPIRADA, TEXTOS_MEU_PLANO } = useTextos(DICIONARIO_PLANOS);
   const { TEXTOS_DEFINICOES } = useTextos(DICIONARIO_BOAS_VINDAS);
   const router = useRouter();
-  const [estado, setEstado] = useState<EstadoPlano | null>(null);
-  const [emailConta, setEmailConta] = useState<string | null>(null);
-  const [erro, setErro] = useState(false); // o texto escolhe-se ao desenhar, no país da conta
+  // O /plano do ProvedorConta (pedido a cada página nova): esta página já não faz o seu próprio pedido.
+  const estado = useEstadoPlano();
+  const { falhou, sessaoExpirada } = usePedidoPlano();
+  const erro = falhou && !sessaoExpirada; // o texto escolhe-se ao desenhar, no país da conta
+  // Vai na mensagem do pedido de acesso, para sabermos que conta ativar. Lido só no browser: os cartões
+  // que o usam só aparecem depois de o /plano chegar, por isso não entra no HTML do servidor.
+  const [emailConta] = useState<string | null>(() => (typeof window === "undefined" ? null : emailDaSessao()));
   // Na demo a conta é partilhada: mostra-se só que é uma conta de demonstração (sem contador, data nem pedidos de acesso).
   const demo = useSessaoDemo();
   // Contas do Brasil: sem ligação para /precos (página PT, em euros e com MB Way). Decisão do CEO, 2026-11-12.
-  // O país vem desta mesma resposta do /plano: o link só aparece depois de ela chegar (nunca pisca numa conta BR).
+  // O país vem da mesma resposta do /plano: o link só aparece depois de ela chegar (nunca pisca numa conta BR).
   const mostrarLinkPrecos = !demo && estado !== null && estado.pais !== "BR";
 
   useEffect(() => {
-    pedirEstadoPlano()
-      .then((resposta) => {
-        setEstado(resposta);
-        setEmailConta(emailDaSessao()); // vai na mensagem do pedido, para sabermos que conta ativar
-      })
-      .catch((e) => {
-        if (e instanceof SessaoExpirada) {
-          apagarToken();
-          router.replace("/login");
-        } else {
-          setErro(true);
-        }
-      });
-  }, [router]);
+    if (!sessaoExpirada) return;
+    apagarToken();
+    router.replace("/login");
+  }, [sessaoExpirada, router]);
 
   return (
     <main className="p-4 sm:p-8">
