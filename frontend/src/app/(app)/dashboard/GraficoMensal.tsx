@@ -4,7 +4,8 @@ import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, X
 
 import type { ResumoMensal } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
-import { TEXTOS_GRAFICOS } from "@/lib/textosDashboard";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_DASHBOARD } from "@/lib/textosDashboard";
 
 import { ESTILO_TOOLTIP } from "./formatos";
 
@@ -14,6 +15,7 @@ const COR_EIXO = "var(--texto-suave)";
 
 // Evolução das receitas e despesas: duas linhas com uma área esbatida por baixo.
 export default function GraficoMensal({ dados }: { dados: ResumoMensal[] }) {
+  const { TEXTOS_GRAFICOS } = useTextos(DICIONARIO_DASHBOARD);
   const f = useFormatos();
   return (
     <ResponsiveContainer width="100%" height={260}>

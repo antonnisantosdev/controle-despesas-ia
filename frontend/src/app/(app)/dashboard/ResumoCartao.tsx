@@ -3,18 +3,26 @@
 import { useEffect, useState } from "react";
 
 import { ErroApi, eSessaoDemo, pedirApi, type ResumoMes } from "@/lib/api";
-import { TEXTOS_RESUMO_MES } from "@/lib/textosDashboard";
-import { TEXTOS_DEMO } from "@/lib/textosDemo";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_DASHBOARD } from "@/lib/textosDashboard";
+import { DICIONARIO_DEMO } from "@/lib/textosDemo";
 
 // O resultado guarda o mês a que pertence: se o mês escolhido mudou, o que está guardado
 // já não serve e a página mostra "a carregar" até chegar o novo.
-type Resultado = { mes: string; resumo?: ResumoMes; erro?: string };
+// erro: o texto da API (limite da demo) ou o tipo de erro; o texto nosso escolhe-se ao desenhar, no país da conta.
+type ErroResumo = { texto: string } | "limiteDemo" | "geral";
+type Resultado = { mes: string; resumo?: ResumoMes; erro?: ErroResumo };
 
 // "mes" chega de fora (da página do dashboard), como um atributo de um shortcode.
 export default function ResumoCartao({ mes }: { mes: string }) {
+  const { TEXTOS_RESUMO_MES } = useTextos(DICIONARIO_DASHBOARD);
+  const { TEXTOS_DEMO } = useTextos(DICIONARIO_DEMO);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const aCarregar = resultado?.mes !== mes;
   const resumo = aCarregar ? undefined : resultado?.resumo;
+  const erro = resultado?.erro;
+  const textoDoErro =
+    erro === undefined ? null : erro === "geral" ? TEXTOS_RESUMO_MES.erro : erro === "limiteDemo" ? TEXTOS_DEMO.limiteResumo : erro.texto;
 
   useEffect(() => {
     if (!mes) return;
@@ -28,7 +36,7 @@ export default function ResumoCartao({ mes }: { mes: string }) {
         // Na demo, o resumo tem um limite por hora (429): diz-se porquê, em vez do erro genérico.
         const limiteDemo = e instanceof ErroApi && e.status === 429 && eSessaoDemo();
         const textoDaApi = limiteDemo && typeof e.detalhe === "string" ? e.detalhe : null;
-        const erro = limiteDemo ? (textoDaApi ?? TEXTOS_DEMO.limiteResumo) : TEXTOS_RESUMO_MES.erro;
+        const erro: ErroResumo = limiteDemo ? (textoDaApi ? { texto: textoDaApi } : "limiteDemo") : "geral";
         if (!cancelado) setResultado({ mes, erro });
       });
     return () => {
@@ -41,7 +49,7 @@ export default function ResumoCartao({ mes }: { mes: string }) {
       <h2 className="mb-3 font-medium text-texto">{TEXTOS_RESUMO_MES.titulo}</h2>
 
       {aCarregar && <p className="text-sm text-texto-suave">{TEXTOS_RESUMO_MES.aCarregar}</p>}
-      {!aCarregar && resultado?.erro && <p className="text-sm text-red-600 dark:text-red-400">{resultado.erro}</p>}
+      {!aCarregar && textoDoErro && <p className="text-sm text-red-600 dark:text-red-400">{textoDoErro}</p>}
 
       {resumo && (
         <>

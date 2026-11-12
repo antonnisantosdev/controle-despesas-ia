@@ -11,9 +11,13 @@ import RodapeLegal from "@/components/RodapeLegal";
 import { API_URL, fetchComTentativas } from "@/lib/api";
 import { lerOrigem } from "@/lib/origem";
 import { LIMITES_RESERVA, preencher, textoDosPedidos } from "@/lib/planos";
-import { TEXTOS_GERAIS } from "@/lib/textosComuns";
+import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
 import { TEXTOS_REGISTO } from "@/lib/textosLogin";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import CampoPalavraPasse from "@/components/CampoPalavraPasse";
+
+// Página pública: sempre em PT-PT (decisão do CEO), seja qual for o país da conta.
+const { TEXTOS_GERAIS } = DICIONARIO_COMUNS.PT;
 
 const ESTILO_CAMPO = "mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto";
 
@@ -89,7 +93,7 @@ export default function PaginaRegisto() {
         ) : (
           <form onSubmit={criarConta} className="space-y-4">
             <p className="text-center text-sm text-texto-suave">
-              {preencher(TEXTOS_REGISTO.introducao, { pedidos: textoDosPedidos(LIMITES_RESERVA.free) })}
+              {preencher(TEXTOS_REGISTO.introducao, { pedidos: textoDosPedidos(LIMITES_RESERVA.free, DICIONARIO_PLANOS.PT) })}
             </p>
             {/* Antes das duas formas de criar conta (Google e email), para valer para as duas. */}
             <AvisoTermos />

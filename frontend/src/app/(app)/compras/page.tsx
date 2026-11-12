@@ -22,21 +22,25 @@ import {
 import { useFormatos } from "@/lib/conta";
 import { reduzirImagem } from "@/lib/imagem";
 import { preencher, temFuncoesPagas } from "@/lib/planos";
-import { TEXTOS_COMPRAS } from "@/lib/textosCompras";
-import { TEXTOS_ENVIO_IA, TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
-import { TEXTOS_PRECOS_LOJAS } from "@/lib/textosPrecosLojas";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_COMPRAS } from "@/lib/textosCompras";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
+import { DICIONARIO_PRECOS_LOJAS } from "@/lib/textosPrecosLojas";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import PrecosPorLoja from "./PrecosPorLoja";
 import RevisaoTalao from "./RevisaoTalao";
 
 type Separador = "taloes" | "precos";
-const SEPARADORES: { id: Separador; nome: string }[] = [
-  { id: "taloes", nome: TEXTOS_PRECOS_LOJAS.separadorTaloes },
-  { id: "precos", nome: TEXTOS_PRECOS_LOJAS.separadorPrecos },
-];
 
 export default function PaginaCompras() {
+  const { TEXTOS_COMPRAS } = useTextos(DICIONARIO_COMPRAS);
+  const { TEXTOS_ENVIO_IA, TEXTOS_PLANO_PAGO } = useTextos(DICIONARIO_PLANOS);
+  const { TEXTOS_PRECOS_LOJAS } = useTextos(DICIONARIO_PRECOS_LOJAS);
+  const SEPARADORES: { id: Separador; nome: string }[] = [
+    { id: "taloes", nome: TEXTOS_PRECOS_LOJAS.separadorTaloes },
+    { id: "precos", nome: TEXTOS_PRECOS_LOJAS.separadorPrecos },
+  ];
   const router = useRouter();
   const f = useFormatos();
   const entradaFoto = useRef<HTMLInputElement>(null);

@@ -1,19 +1,20 @@
 import type { Formatos } from "@/lib/formatos";
-import { SUFIXO_UNIDADE, TEXTOS_PRECOS_LOJAS as T } from "@/lib/textosPrecosLojas";
+import type { TextosPrecosLojas } from "@/lib/textosPrecosLojas";
 import { preencher } from "@/lib/planos";
 
 // As datas ("2026-10-28" -> "28/10/2026") formatam-se com useFormatos().data.
 
 // 1.09 + "kg" -> "1,09 €/kg" (ou "R$ 1,09/kg"). f: os formatos da conta (useFormatos()).
-export function precoUnitario(valor: number, unidade: string, f: Formatos) {
-  return `${f.dinheiro(valor)}${SUFIXO_UNIDADE[unidade] ?? ""}`;
+// textos: useTextos(DICIONARIO_PRECOS_LOJAS), do país da conta (aqui e nas funções a seguir).
+export function precoUnitario(valor: number, unidade: string, f: Formatos, textos: TextosPrecosLojas) {
+  return `${f.dinheiro(valor)}${textos.SUFIXO_UNIDADE[unidade] ?? ""}`;
 }
 
-export function textoLojas(n: number) {
+export function textoLojas(n: number, { TEXTOS_PRECOS_LOJAS: T }: TextosPrecosLojas) {
   return n === 1 ? T.lojas1 : preencher(T.lojasN, { n });
 }
 
-export function textoCompras(n: number) {
+export function textoCompras(n: number, { TEXTOS_PRECOS_LOJAS: T }: TextosPrecosLojas) {
   return n === 1 ? T.compras1 : preencher(T.comprasN, { n });
 }
 

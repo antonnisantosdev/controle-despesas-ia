@@ -4,7 +4,8 @@ import { Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import type { GastoCategoria } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
-import { TEXTOS_GRAFICOS } from "@/lib/textosDashboard";
+import { useOpcoes, useTextos } from "@/lib/textos";
+import { DICIONARIO_DASHBOARD } from "@/lib/textosDashboard";
 
 import { ESTILO_TOOLTIP } from "./formatos";
 
@@ -23,12 +24,15 @@ function agrupar(dados: GastoCategoria[]): Fatia[] {
 }
 
 export default function GraficoCategorias({ dados }: { dados: GastoCategoria[] }) {
+  const { TEXTOS_GRAFICOS } = useTextos(DICIONARIO_DASHBOARD);
   const formatos = useFormatos();
+  const { rotuloCategoria } = useOpcoes();
   if (dados.length === 0) {
     return <p className="text-sm text-texto-suave">{TEXTOS_GRAFICOS.semDespesas}</p>;
   }
 
-  const fatias = agrupar(dados);
+  // rotulo: o nome mostrado (legenda e tooltip), do país da conta; a chave da categoria não muda.
+  const fatias = agrupar(dados).map((fatia) => ({ ...fatia, rotulo: rotuloCategoria(fatia.categoria) }));
   const total = fatias.reduce((soma, f) => soma + f.total, 0);
 
   return (
@@ -40,7 +44,7 @@ export default function GraficoCategorias({ dados }: { dados: GastoCategoria[] }
             <Pie
               data={fatias}
               dataKey="total"
-              nameKey="categoria"
+              nameKey="rotulo"
               innerRadius="68%"
               outerRadius="100%"
               paddingAngle={2}
@@ -63,7 +67,7 @@ export default function GraficoCategorias({ dados }: { dados: GastoCategoria[] }
         {fatias.map((f) => (
           <li key={f.categoria} className="flex items-center gap-3 text-sm">
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: f.fill }} />
-            <span className="min-w-0 flex-1 truncate capitalize text-texto">{f.categoria}</span>
+            <span className="min-w-0 flex-1 truncate capitalize text-texto">{f.rotulo}</span>
             <span className="shrink-0 tabular-nums text-texto">{formatos.dinheiro(f.total)}</span>
             <span className="w-9 shrink-0 text-right text-xs tabular-nums text-texto-suave">
               {Math.round((f.total / total) * 100)}%

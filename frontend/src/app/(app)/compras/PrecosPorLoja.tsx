@@ -6,7 +6,8 @@ import AvisoPlanoPago from "@/components/AvisoPlanoPago";
 import { eSoPlanosPagos, pedirApi, SessaoExpirada, type JuncaoProdutos, type ProdutoResumo } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_PRECOS_LOJAS as T } from "@/lib/textosPrecosLojas";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_PRECOS_LOJAS } from "@/lib/textosPrecosLojas";
 
 import DetalheProduto from "./DetalheProduto";
 import { ESTILO_BOTAO, ESTILO_CAMPO, ESTILO_ERRO, textoCompras, textoLojas } from "./formatosPrecos";
@@ -25,6 +26,8 @@ type Props = {
 type Resultado = { pedido: string; produtos: ProdutoResumo[] | null; erro: boolean };
 
 export default function PrecosPorLoja({ eFree, onSessaoExpirada }: Props) {
+  const textosLojas = useTextos(DICIONARIO_PRECOS_LOJAS);
+  const { TEXTOS_PRECOS_LOJAS: T } = textosLojas;
   const f = useFormatos();
   const [termo, setTermo] = useState("");
   const termoAtrasado = useComAtraso(termo.trim());
@@ -161,7 +164,7 @@ export default function PrecosPorLoja({ eFree, onSessaoExpirada }: Props) {
                 <span className="min-w-0">
                   <span className="block break-words font-medium text-texto">{produto.nome}</span>
                   <span className="block text-xs text-texto-suave">
-                    {textoLojas(produto.n_lojas)} · {textoCompras(produto.n_compras)} ·{" "}
+                    {textoLojas(produto.n_lojas, textosLojas)} · {textoCompras(produto.n_compras, textosLojas)} ·{" "}
                     {preencher(T.ultimaCompra, { data: f.data(produto.ultima_data) })}
                   </span>
                 </span>

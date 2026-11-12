@@ -20,18 +20,17 @@ import {
   type SugestaoOrcamento,
 } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
-import { CATEGORIAS } from "@/lib/opcoes";
 import { mesAtual } from "@/lib/planos";
-import { TEXTOS_PLANEAMENTO } from "@/lib/textosPlaneamento";
+import { useOpcoes, useTextos } from "@/lib/textos";
+import { DICIONARIO_PLANEAMENTO } from "@/lib/textosPlaneamento";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import LinhaPlaneamento from "./LinhaPlaneamento";
 import SugestoesIA from "./SugestoesIA";
 
-// "Rendimento" não é um gasto, por isso não faz sentido ter orçamento.
-const CATEGORIAS_DE_GASTO = CATEGORIAS.filter((c) => c !== "rendimento");
-
 export default function PaginaPlaneamento() {
+  const { TEXTOS_PLANEAMENTO } = useTextos(DICIONARIO_PLANEAMENTO);
+  const { categorias, rotuloCategoria } = useOpcoes();
   const router = useRouter();
   const f = useFormatos();
   const [meses, setMeses] = useState<string[]>([]);
@@ -121,7 +120,8 @@ export default function PaginaPlaneamento() {
   const totalLimite = comOrcamento.reduce((soma, l) => soma + (l.limite ?? 0), 0);
   const totalGasto = comOrcamento.reduce((soma, l) => soma + l.gasto, 0);
   // Categorias que ainda não aparecem na lista, para o "+ Adicionar orçamento".
-  const semLinha = CATEGORIAS_DE_GASTO.filter((c) => !linhas.some((l) => l.categoria === c));
+  // "Rendimento" não é um gasto, por isso não faz sentido ter orçamento.
+  const semLinha = categorias.filter((c) => c !== "rendimento" && !linhas.some((l) => l.categoria === c));
 
   return (
     <main className="p-4 sm:p-8">
@@ -198,7 +198,7 @@ export default function PaginaPlaneamento() {
               <option value="">{TEXTOS_PLANEAMENTO.adicionar}</option>
               {semLinha.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {rotuloCategoria(c)}
                 </option>
               ))}
             </select>

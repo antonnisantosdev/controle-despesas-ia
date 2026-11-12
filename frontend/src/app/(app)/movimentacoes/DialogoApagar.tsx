@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { eBloqueadoNaDemo, ErroApi, pedirApi, SessaoExpirada, type Compra, type Transacao } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_APAGAR_MOVIMENTO } from "@/lib/textosPlanos";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 
 type Props = {
   transacao: Transacao;
@@ -27,6 +28,7 @@ function dataCurta(data: string) {
 // Confirmação antes de DELETE /transacoes/{id}. <dialog> nativo com showModal(): prende o foco lá dentro,
 // fecha com Esc e devolve o foco ao botão que o abriu.
 export default function DialogoApagar({ transacao, onApagada, onFechar, onSessaoExpirada }: Props) {
+  const { TEXTOS_APAGAR_MOVIMENTO } = useTextos(DICIONARIO_PLANOS);
   const f = useFormatos();
   const dialogo = useRef<HTMLDialogElement>(null);
   const [talao, setTalao] = useState<EstadoTalao>("a-verificar");

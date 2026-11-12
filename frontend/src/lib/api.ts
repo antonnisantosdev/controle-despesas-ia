@@ -1,5 +1,8 @@
 import { ePais, eMoeda, type Moeda, type Pais } from "./formatos";
-import { TEXTOS_DEMO } from "./textosDemo";
+import { DICIONARIO_DEMO } from "./textosDemo";
+
+// O texto do 423 da demo fica em PT: é igual à resposta da API (demo.py), que ainda só fala PT-PT.
+const { TEXTOS_DEMO } = DICIONARIO_DEMO.PT;
 
 // Endereço da API em FastAPI, lido do .env.local.
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";

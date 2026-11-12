@@ -6,19 +6,23 @@ import { usePathname, useRouter } from "next/navigation";
 import Logo from "@/components/Logo";
 import RodapeLegal from "@/components/RodapeLegal";
 import { apagarToken } from "@/lib/api";
-import { TEXTOS_MENU } from "@/lib/textosComuns";
-import { TEXTOS_RELATORIO } from "@/lib/textosRelatorio";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_COMUNS, type TextosComuns } from "@/lib/textosComuns";
+import { DICIONARIO_RELATORIO } from "@/lib/textosRelatorio";
 
 import CartaoPlano from "./CartaoPlano";
 
-const LIGACOES = [
-  { href: "/dashboard", nome: TEXTOS_MENU.visaoGeral, icone: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
-  { href: "/movimentacoes", nome: TEXTOS_MENU.movimentacoes, icone: "M4 6h16M4 12h16M4 18h10" },
-  { href: "/planeamento", nome: TEXTOS_MENU.planeamento, icone: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
-  { href: "/compras", nome: TEXTOS_MENU.compras, icone: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3" },
-  { href: "/reserva", nome: TEXTOS_MENU.reserva, icone: "M5 21V4h13l-3 4 3 4H5" },
-  { href: "/relatorio", nome: TEXTOS_RELATORIO.menu, icone: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4M8 13h3M8 16h6" },
-];
+// Os nomes vêm do país da conta (useTextos no MenuLateral).
+function ligacoes(menu: TextosComuns["TEXTOS_MENU"], resumoAnual: string) {
+  return [
+    { href: "/dashboard", nome: menu.visaoGeral, icone: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
+    { href: "/movimentacoes", nome: menu.movimentacoes, icone: "M4 6h16M4 12h16M4 18h10" },
+    { href: "/planeamento", nome: menu.planeamento, icone: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+    { href: "/compras", nome: menu.compras, icone: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3" },
+    { href: "/reserva", nome: menu.reserva, icone: "M5 21V4h13l-3 4 3 4H5" },
+    { href: "/relatorio", nome: resumoAnual, icone: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4M8 13h3M8 16h6" },
+  ];
+}
 
 function Icone({ caminho }: { caminho: string }) {
   return (
@@ -29,6 +33,9 @@ function Icone({ caminho }: { caminho: string }) {
 }
 
 export default function MenuLateral() {
+  const { TEXTOS_MENU } = useTextos(DICIONARIO_COMUNS);
+  const { TEXTOS_RELATORIO } = useTextos(DICIONARIO_RELATORIO);
+  const LIGACOES = ligacoes(TEXTOS_MENU, TEXTOS_RELATORIO.menu);
   const pagina = usePathname();
   const router = useRouter();
 

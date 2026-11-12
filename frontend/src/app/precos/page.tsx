@@ -19,8 +19,11 @@ import {
   type LimitePlano,
 } from "@/lib/planos";
 import { TEXTOS_APP } from "@/lib/textosComuns";
-import { TEXTOS_CARTOES, TEXTOS_MEU_PLANO, TEXTOS_PRECOS } from "@/lib/textosPlanos";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import { useLimitesPlanos } from "@/lib/useLimitesPlanos";
+
+// Página pública: sempre em PT-PT (decisão do CEO), seja qual for o país da conta.
+const { TEXTOS_CARTOES, TEXTOS_MEU_PLANO, TEXTOS_PRECOS } = DICIONARIO_PLANOS.PT;
 
 // Foco visível ao navegar com o teclado.
 const FOCO = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque";
@@ -179,7 +182,7 @@ type PropsCartao = {
 function CartaoDePreco({ id, limite, atual, temConta, emailConta }: PropsCartao) {
   const textos = TEXTOS_CARTOES[id];
   // Pedidos à IA, a importação (PDF nos pagos, CSV no Free), o que o chat vê e guarda e os outros pontos do cartão.
-  const pontos = pontosDoCartao(id, limite);
+  const pontos = pontosDoCartao(id, limite, DICIONARIO_PLANOS.PT);
 
   // A partir do ecrã médio, cada cartão ocupa 4 linhas da grelha da secção (subgrid): nome e frase, preço,
   // pontos e botão. As linhas são partilhadas pelos três cartões, por isso o preço fica à mesma altura

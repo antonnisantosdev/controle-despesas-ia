@@ -6,15 +6,23 @@ import { pedirApi, type AlertasOrcamento as RespostaAlertas } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
 import type { Formatos } from "@/lib/formatos";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_ALERTAS_ORCAMENTO } from "@/lib/textosComuns";
-import { TEXTOS_ALERTA_ORCAMENTO } from "@/lib/textosPlanos";
+import { useOpcoes, useTextos } from "@/lib/textos";
+import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
+import { DICIONARIO_PLANOS, type TextosPlanos } from "@/lib/textosPlanos";
 
 // Uma frase por categoria: "perto" (>= 90%) ou "atingido" (>= 100%). A regra dos 90% está na API (orcamento.py).
-// f: os formatos da conta (useFormatos()): em PT, 1234.5 -> "1234,50 €".
-export function textoDoAlerta(alerta: RespostaAlertas["alertas"][number], f: Formatos): string {
-  const modelo = alerta.nivel === "atingido" ? TEXTOS_ALERTA_ORCAMENTO.atingido : TEXTOS_ALERTA_ORCAMENTO.perto;
-  // A categoria vem em minúsculas da base de dados ("restaurantes"): começa com maiúscula no início da frase.
-  const categoria = alerta.categoria.charAt(0).toUpperCase() + alerta.categoria.slice(1);
+// f: os formatos da conta (useFormatos()): em PT, 1234.5 -> "1234,50 €". modelos e rotuloCategoria: do país da conta
+// (useTextos(DICIONARIO_PLANOS) e useOpcoes()).
+export function textoDoAlerta(
+  alerta: RespostaAlertas["alertas"][number],
+  f: Formatos,
+  modelos: TextosPlanos["TEXTOS_ALERTA_ORCAMENTO"],
+  rotuloCategoria: (chave: string) => string,
+): string {
+  const modelo = alerta.nivel === "atingido" ? modelos.atingido : modelos.perto;
+  // O rótulo vem em minúsculas ("restaurantes"): começa com maiúscula no início da frase.
+  const rotulo = rotuloCategoria(alerta.categoria);
+  const categoria = rotulo.charAt(0).toUpperCase() + rotulo.slice(1);
   return preencher(modelo, { categoria, gasto: f.dinheiro(alerta.gasto), orcamento: f.dinheiro(alerta.limite) });
 }
 
@@ -22,6 +30,9 @@ export function textoDoAlerta(alerta: RespostaAlertas["alertas"][number], f: For
 // mes: o mês escolhido na página. Só aparecem quando é o mês atual de Lisboa (a API diz qual é).
 // versao: muda quando um orçamento é guardado, para os alertas acompanharem.
 export default function AlertasOrcamento({ mes, versao = 0 }: { mes: string; versao?: number }) {
+  const { TEXTOS_ALERTAS_ORCAMENTO } = useTextos(DICIONARIO_COMUNS);
+  const { TEXTOS_ALERTA_ORCAMENTO } = useTextos(DICIONARIO_PLANOS);
+  const { rotuloCategoria } = useOpcoes();
   const f = useFormatos();
   const [resposta, setResposta] = useState<RespostaAlertas | null>(null);
 
@@ -53,7 +64,7 @@ export default function AlertasOrcamento({ mes, versao = 0 }: { mes: string; ver
             key={alerta.categoria}
             className={alerta.nivel === "atingido" ? "font-medium text-red-700 dark:text-red-300" : "text-amber-900 dark:text-amber-200"}
           >
-            {textoDoAlerta(alerta, f)}
+            {textoDoAlerta(alerta, f, TEXTOS_ALERTA_ORCAMENTO, rotuloCategoria)}
           </li>
         ))}
       </ul>

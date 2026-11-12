@@ -4,10 +4,10 @@ import { useState, type FormEvent } from "react";
 
 import { eBloqueadoNaDemo, mensagemDaApi, pedirApi, SessaoExpirada, type Transacao } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
-import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_GERAIS } from "@/lib/textosComuns";
-import { TEXTOS_NOVA_MOVIMENTACAO } from "@/lib/textosMovimentacoes";
+import { comValorAtual, useOpcoes, useTextos } from "@/lib/textos";
+import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
+import { DICIONARIO_MOVIMENTACOES } from "@/lib/textosMovimentacoes";
 
 // Data de hoje no formato do <input type="date"> (AAAA-MM-DD), na hora local.
 function hoje() {
@@ -22,6 +22,9 @@ const ESTILO_CAMPO = "mt-1 w-full rounded-md border border-borda bg-cartao px-3 
 type Props = { onCriada: (transacao: Transacao) => void; onFechar: () => void };
 
 export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
+  const { TEXTOS_GERAIS } = useTextos(DICIONARIO_COMUNS);
+  const { TEXTOS_NOVA_MOVIMENTACAO } = useTextos(DICIONARIO_MOVIMENTACOES);
+  const { categorias, rotuloCategoria, metodos, rotuloMetodo } = useOpcoes();
   const f = useFormatos();
   const [tipo, setTipo] = useState<"despesa" | "entrada">("despesa");
   const [descricao, setDescricao] = useState("");
@@ -122,9 +125,9 @@ export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
         <label className="block">
           <span className="text-sm text-texto-suave">{TEXTOS_NOVA_MOVIMENTACAO.metodo}</span>
           <select value={metodo} onChange={(e) => setMetodo(e.target.value)} className={ESTILO_CAMPO}>
-            {Object.entries(METODOS_PAGAMENTO).map(([codigo, nome]) => (
+            {comValorAtual(metodos, metodo).map((codigo) => (
               <option key={codigo} value={codigo}>
-                {nome}
+                {rotuloMetodo(codigo)}
               </option>
             ))}
           </select>
@@ -134,9 +137,9 @@ export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
           <span className="text-sm text-texto-suave">{TEXTOS_NOVA_MOVIMENTACAO.categoria}</span>
           <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className={`${ESTILO_CAMPO} capitalize`}>
             <option value="">{TEXTOS_NOVA_MOVIMENTACAO.iaEscolhe}</option>
-            {CATEGORIAS.map((c) => (
+            {comValorAtual(categorias, categoria).map((c) => (
               <option key={c} value={c}>
-                {c}
+                {rotuloCategoria(c)}
               </option>
             ))}
           </select>

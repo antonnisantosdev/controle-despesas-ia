@@ -3,7 +3,9 @@
 
 import type { EstadoPlano, Periodo } from "./api";
 import type { Formatos } from "./formatos";
-import { FRASE_EMAIL, TEXTOS_AVISO_QUOTA, TEXTOS_CARTOES, TEXTOS_MENSAGEM, TEXTOS_PRECOS } from "./textosPlanos";
+// Os textos chegam por argumento (t): nos componentes da app, useTextos(DICIONARIO_PLANOS); nas páginas públicas,
+// DICIONARIO_PLANOS.PT.
+import type { TextosPlanos } from "./textosPlanos";
 
 export type IdPlano = "free" | "essencial" | "completo";
 
@@ -32,35 +34,35 @@ export const LIMITES_RESERVA: Record<IdPlano, LimitePlano> = {
 };
 
 // "30 pedidos à IA por mês" / "20 pedidos à IA por dia".
-export function textoDosPedidos({ limite, periodo }: LimitePlano): string {
-  return preencher(periodo === "mes" ? TEXTOS_PRECOS.pedidosPorMes : TEXTOS_PRECOS.pedidosPorDia, { limite });
+export function textoDosPedidos({ limite, periodo }: LimitePlano, t: TextosPlanos): string {
+  return preencher(periodo === "mes" ? t.TEXTOS_PRECOS.pedidosPorMes : t.TEXTOS_PRECOS.pedidosPorDia, { limite });
 }
 
 // "O chat vê o mês atual e os 2 anteriores" / "O chat vê todo o teu histórico".
-export function textoDoHistorico(mesesHistorico: number | null): string {
-  if (mesesHistorico === null) return TEXTOS_PRECOS.chatTodoHistorico;
-  return preencher(TEXTOS_PRECOS.chatMeses, { anteriores: Math.max(mesesHistorico - 1, 0) });
+export function textoDoHistorico(mesesHistorico: number | null, t: TextosPlanos): string {
+  if (mesesHistorico === null) return t.TEXTOS_PRECOS.chatTodoHistorico;
+  return preencher(t.TEXTOS_PRECOS.chatMeses, { anteriores: Math.max(mesesHistorico - 1, 0) });
 }
 
 // "O chat responde a cada pergunta à parte" / "O chat segue a conversa: lembra-se das últimas 4 mensagens".
-export function textoDaMemoria(memoriaMensagens: number): string {
-  if (memoriaMensagens <= 0) return TEXTOS_PRECOS.chatSemMemoria;
-  return preencher(TEXTOS_PRECOS.chatMemoria, { n: memoriaMensagens });
+export function textoDaMemoria(memoriaMensagens: number, t: TextosPlanos): string {
+  if (memoriaMensagens <= 0) return t.TEXTOS_PRECOS.chatSemMemoria;
+  return preencher(t.TEXTOS_PRECOS.chatMemoria, { n: memoriaMensagens });
 }
 
 // Os pontos de um cartão de plano: os pedidos à IA, a importação (PDF nos pagos, CSV no Free), o que o chat
 // vê e guarda (e, no Completo, a análise mais cuidada) e os pontos fixos do cartão.
-export function pontosDoCartao(id: IdPlano, limite: LimitePlano): string[] {
+export function pontosDoCartao(id: IdPlano, limite: LimitePlano, t: TextosPlanos): string[] {
   const importacao =
-    limite.limitePdf > 0 ? preencher(TEXTOS_PRECOS.pdfPorMes, { limitePdf: limite.limitePdf }) : TEXTOS_PRECOS.importarCsv;
-  const analise = id === "completo" ? [TEXTOS_PRECOS.analiseCuidada] : [];
+    limite.limitePdf > 0 ? preencher(t.TEXTOS_PRECOS.pdfPorMes, { limitePdf: limite.limitePdf }) : t.TEXTOS_PRECOS.importarCsv;
+  const analise = id === "completo" ? [t.TEXTOS_PRECOS.analiseCuidada] : [];
   return [
-    textoDosPedidos(limite),
+    textoDosPedidos(limite, t),
     importacao,
-    textoDoHistorico(limite.mesesHistorico),
-    textoDaMemoria(limite.memoriaMensagens),
+    textoDoHistorico(limite.mesesHistorico, t),
+    textoDaMemoria(limite.memoriaMensagens, t),
     ...analise,
-    ...TEXTOS_CARTOES[id].pontos,
+    ...t.TEXTOS_CARTOES[id].pontos,
   ];
 }
 
@@ -75,22 +77,22 @@ export function deveAvisarQuota({ usadas, limite }: Pick<EstadoPlano, "usadas" |
 }
 
 // O texto completo do aviso (topo do chat) e se leva o link "Mudar de plano" (no Completo não há plano maior).
-export function avisoDeQuota(estado: EstadoPlano): { texto: string; mostrarLink: boolean } | null {
+export function avisoDeQuota(estado: EstadoPlano, t: TextosPlanos): { texto: string; mostrarLink: boolean } | null {
   if (!deveAvisarQuota(estado)) return null;
   const valores = { usadas: estado.usadas, limite: estado.limite };
   if (estado.plano === "completo") {
-    return { texto: preencher(TEXTOS_AVISO_QUOTA.avisoCompleto, valores), mostrarLink: false };
+    return { texto: preencher(t.TEXTOS_AVISO_QUOTA.avisoCompleto, valores), mostrarLink: false };
   }
-  const modelo = estado.periodo === "mes" ? TEXTOS_AVISO_QUOTA.avisoMes : TEXTOS_AVISO_QUOTA.avisoDia;
+  const modelo = estado.periodo === "mes" ? t.TEXTOS_AVISO_QUOTA.avisoMes : t.TEXTOS_AVISO_QUOTA.avisoDia;
   return { texto: preencher(modelo, valores), mostrarLink: true };
 }
 
 // O texto curto, para o cartão do menu lateral: "Faltam 4 pedidos à IA".
-export function avisoCurtoDeQuota(estado: EstadoPlano): string | null {
+export function avisoCurtoDeQuota(estado: EstadoPlano, t: TextosPlanos): string | null {
   if (!deveAvisarQuota(estado)) return null;
   const restantes = estado.limite - estado.usadas;
-  if (restantes === 1) return TEXTOS_AVISO_QUOTA.avisoCurtoUm;
-  return preencher(TEXTOS_AVISO_QUOTA.avisoCurto, { restantes });
+  if (restantes === 1) return t.TEXTOS_AVISO_QUOTA.avisoCurtoUm;
+  return preencher(t.TEXTOS_AVISO_QUOTA.avisoCurto, { restantes });
 }
 
 // Importar PDF e ler talões são só dos planos pagos (FUNCOES_PAGAS em limites.py). Isto só decide o que se
@@ -159,24 +161,24 @@ export const CONTACTOS = lerContactos();
 export type Pedido = { plano: IdPlano; renovar: boolean; emailConta: string | null };
 
 // A mensagem pré-preenchida. Sem email da conta (página pública sem sessão), a frase do email sai.
-export function mensagemDoPedido({ plano, renovar, emailConta }: Pedido): string {
-  const modelo = renovar ? TEXTOS_MENSAGEM.mensagemRenovar : TEXTOS_MENSAGEM.mensagem;
-  const semEmail = emailConta ? modelo : modelo.replace(FRASE_EMAIL, "");
+export function mensagemDoPedido({ plano, renovar, emailConta }: Pedido, t: TextosPlanos): string {
+  const modelo = renovar ? t.TEXTOS_MENSAGEM.mensagemRenovar : t.TEXTOS_MENSAGEM.mensagem;
+  const semEmail = emailConta ? modelo : modelo.replace(t.FRASE_EMAIL, "");
   return preencher(semEmail, { plano: NOMES_PLANOS[plano], email: emailConta ?? "" });
 }
 
-export function assuntoDoPedido({ plano, renovar }: Pedido): string {
-  const modelo = renovar ? TEXTOS_MENSAGEM.emailAssuntoRenovar : TEXTOS_MENSAGEM.emailAssunto;
+export function assuntoDoPedido({ plano, renovar }: Pedido, t: TextosPlanos): string {
+  const modelo = renovar ? t.TEXTOS_MENSAGEM.emailAssuntoRenovar : t.TEXTOS_MENSAGEM.emailAssunto;
   return preencher(modelo, { plano: NOMES_PLANOS[plano] });
 }
 
-export function linkWhatsapp(numero: string, pedido: Pedido): string {
-  return `https://wa.me/${numero}?text=${encodeURIComponent(mensagemDoPedido(pedido))}`;
+export function linkWhatsapp(numero: string, pedido: Pedido, t: TextosPlanos): string {
+  return `https://wa.me/${numero}?text=${encodeURIComponent(mensagemDoPedido(pedido, t))}`;
 }
 
-export function linkEmail(email: string, pedido: Pedido): string {
-  const assunto = encodeURIComponent(assuntoDoPedido(pedido));
-  const corpo = encodeURIComponent(mensagemDoPedido(pedido));
+export function linkEmail(email: string, pedido: Pedido, t: TextosPlanos): string {
+  const assunto = encodeURIComponent(assuntoDoPedido(pedido, t));
+  const corpo = encodeURIComponent(mensagemDoPedido(pedido, t));
   return `mailto:${email}?subject=${assunto}&body=${corpo}`;
 }
 

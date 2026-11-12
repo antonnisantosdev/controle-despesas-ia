@@ -17,10 +17,10 @@ import {
   type Transacao,
 } from "@/lib/api";
 import { useEstadoPlano, useFormatos } from "@/lib/conta";
-import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
 import { mesAtual, preencher, temFuncoesPagas } from "@/lib/planos";
-import { TEXTOS_MOVIMENTACOES } from "@/lib/textosMovimentacoes";
-import { TEXTOS_APAGAR_MOVIMENTO, TEXTOS_CATEGORIZAR, TEXTOS_ENVIO_IA, TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
+import { comValorAtual, useOpcoes, useTextos } from "@/lib/textos";
+import { DICIONARIO_MOVIMENTACOES } from "@/lib/textosMovimentacoes";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import BotaoCategorizar from "./BotaoCategorizar";
@@ -35,6 +35,9 @@ function diaMes(data: string) {
 }
 
 export default function PaginaMovimentacoes() {
+  const { TEXTOS_MOVIMENTACOES } = useTextos(DICIONARIO_MOVIMENTACOES);
+  const { categorias, rotuloCategoria, rotuloMetodo } = useOpcoes();
+  const { TEXTOS_APAGAR_MOVIMENTO, TEXTOS_CATEGORIZAR, TEXTOS_ENVIO_IA, TEXTOS_PLANO_PAGO } = useTextos(DICIONARIO_PLANOS);
   const router = useRouter();
   const f = useFormatos();
   const [meses, setMeses] = useState<string[]>([]);
@@ -380,15 +383,15 @@ export default function PaginaMovimentacoes() {
                               {TEXTOS_MOVIMENTACOES.semCategoria}
                             </option>
                           )}
-                          {CATEGORIAS.map((c) => (
+                          {comValorAtual(categorias, t.categoria).map((c) => (
                             <option key={c} value={c}>
-                              {c}
+                              {rotuloCategoria(c)}
                             </option>
                           ))}
                         </select>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-texto-suave">
-                        {t.metodo_pagamento ? METODOS_PAGAMENTO[t.metodo_pagamento] ?? t.metodo_pagamento : "—"}
+                        {t.metodo_pagamento ? rotuloMetodo(t.metodo_pagamento) : "—"}
                       </td>
                       {/* Entradas com "+" e a verde; o sinal garante que a cor não é a única pista. */}
                       <td

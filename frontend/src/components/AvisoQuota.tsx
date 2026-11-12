@@ -1,14 +1,19 @@
+"use client";
+
 import Link from "next/link";
 
 import type { EstadoPlano } from "@/lib/api";
 import { avisoDeQuota } from "@/lib/planos";
-import { TEXTOS_AVISO_QUOTA } from "@/lib/textosPlanos";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 
 // Faixa discreta quando já se usou 80% (ou mais) dos pedidos à IA do período, antes de chegar ao limite.
 // Abaixo dos 80% e no limite (aí aparece o AvisoLimite) não mostra nada.
 // role="status" e não "alert": é uma informação, não um erro, e não deve interromper o leitor de ecrã.
 export default function AvisoQuota({ estado }: { estado: EstadoPlano | null }) {
-  const aviso = estado ? avisoDeQuota(estado) : null;
+  const textosPlanos = useTextos(DICIONARIO_PLANOS);
+  const { TEXTOS_AVISO_QUOTA } = textosPlanos;
+  const aviso = estado ? avisoDeQuota(estado, textosPlanos) : null;
   if (!aviso) return null;
 
   return (

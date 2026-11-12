@@ -6,15 +6,13 @@ import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, X
 import { pedirApi, SessaoExpirada, type AnoSimulado } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_SIMULADOR } from "@/lib/textosReserva";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_RESERVA } from "@/lib/textosReserva";
 
 import { ESTILO_TOOLTIP } from "../dashboard/formatos";
 
 const COR_VALOR = "var(--destaque)";
 const COR_DEPOSITADO = "var(--texto-suave)";
-
-// Taxas de exemplo para comparar cenários. Não são produtos nem recomendações.
-const TAXAS = TEXTOS_SIMULADOR.taxas;
 
 // O máximo por mês que a API aceita (GET /simulador, le=10_000 em main.py); entra na mensagem de erro.
 const MAXIMO_MENSAL = 10_000;
@@ -25,6 +23,9 @@ type Props = { onSessaoExpirada: (e: unknown) => void };
 
 // Quanto junta quem poupa um valor fixo por mês. As contas são feitas no backend (simulador.py).
 export default function SimuladorPoupanca({ onSessaoExpirada }: Props) {
+  const { TEXTOS_SIMULADOR } = useTextos(DICIONARIO_RESERVA);
+  // Taxas de exemplo para comparar cenários. Não são produtos nem recomendações.
+  const TAXAS = TEXTOS_SIMULADOR.taxas;
   const f = useFormatos();
   const [mensal, setMensal] = useState("50");
   const [anos, setAnos] = useState(10);

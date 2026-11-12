@@ -13,7 +13,8 @@ import {
 } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { NOME_UNIDADE, TEXTOS_PRECOS_LOJAS as T } from "@/lib/textosPrecosLojas";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_PRECOS_LOJAS } from "@/lib/textosPrecosLojas";
 
 import {
   ESTILO_BOTAO,
@@ -39,6 +40,8 @@ type Props = {
 type Resultado = { pedido: string; dados: PrecosDoProduto | null; erro: "" | "nao-existe" | "falhou" };
 
 export default function DetalheProduto(props: Props) {
+  const textosLojas = useTextos(DICIONARIO_PRECOS_LOJAS);
+  const { TEXTOS_PRECOS_LOJAS: T } = textosLojas;
   const { chave, nomeInicial, onVoltar, onPlanoPago, onSessaoExpirada } = props;
   const [versao, setVersao] = useState(0);
   const [resultado, setResultado] = useState<Resultado | null>(null);
@@ -86,7 +89,7 @@ export default function DetalheProduto(props: Props) {
           {nome}
         </h2>
         {dados && totalCompras !== undefined && (
-          <p className="text-sm text-texto-suave">{textoCompras(totalCompras)}</p>
+          <p className="text-sm text-texto-suave">{textoCompras(totalCompras, textosLojas)}</p>
         )}
       </div>
 
@@ -134,6 +137,8 @@ export default function DetalheProduto(props: Props) {
 }
 
 function PrecosDeUmaUnidade({ grupo, comTitulo }: { grupo: PrecosPorUnidade; comTitulo: boolean }) {
+  const textosLojas = useTextos(DICIONARIO_PRECOS_LOJAS);
+  const { NOME_UNIDADE, TEXTOS_PRECOS_LOJAS: T } = textosLojas;
   const f = useFormatos();
   const { unidade, lojas, historico } = grupo;
   if (lojas.length === 0) return null;
@@ -153,7 +158,7 @@ function PrecosDeUmaUnidade({ grupo, comTitulo }: { grupo: PrecosPorUnidade; com
       <div className="rounded-lg border-2 border-destaque bg-fundo p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-destaque-hover">{T.maisBaratoAgora}</p>
         <p className="mt-1 text-3xl font-semibold tabular-nums text-texto">
-          {precoUnitario(maisBarata.preco_recente, unidade, f)}
+          {precoUnitario(maisBarata.preco_recente, unidade, f, textosLojas)}
         </p>
         <p className="mt-1 break-words text-sm text-texto">
           {preencher(T.maisBaratoEm, { loja: maisBarata.loja })}
@@ -165,7 +170,7 @@ function PrecosDeUmaUnidade({ grupo, comTitulo }: { grupo: PrecosPorUnidade; com
       {lojas.length > 1 && (
         <div>
           <h4 className="mb-2 text-sm font-semibold text-texto">
-            {T.porLoja} <span className="font-normal text-texto-suave">({textoLojas(lojas.length)})</span>
+            {T.porLoja} <span className="font-normal text-texto-suave">({textoLojas(lojas.length, textosLojas)})</span>
           </h4>
           <ul className="space-y-2">
             {lojas.map((loja) => {
@@ -187,7 +192,7 @@ function PrecosDeUmaUnidade({ grupo, comTitulo }: { grupo: PrecosPorUnidade; com
                     </div>
                     <p className="ml-auto text-right">
                       <span className="block text-lg font-semibold tabular-nums text-texto">
-                        {precoUnitario(loja.preco_recente, unidade, f)}
+                        {precoUnitario(loja.preco_recente, unidade, f, textosLojas)}
                       </span>
                       <span className="block text-xs text-texto-suave">
                         {T.agora} · {f.data(loja.data_recente)}
@@ -197,11 +202,11 @@ function PrecosDeUmaUnidade({ grupo, comTitulo }: { grupo: PrecosPorUnidade; com
                   <dl className="mt-2 grid grid-cols-3 gap-2 border-t border-borda pt-2 text-xs">
                     <div>
                       <dt className="text-texto-suave">{T.minimo}</dt>
-                      <dd className="tabular-nums text-texto">{precoUnitario(loja.preco_minimo, unidade, f)}</dd>
+                      <dd className="tabular-nums text-texto">{precoUnitario(loja.preco_minimo, unidade, f, textosLojas)}</dd>
                     </div>
                     <div>
                       <dt className="text-texto-suave">{T.medio}</dt>
-                      <dd className="tabular-nums text-texto">{precoUnitario(loja.preco_medio, unidade, f)}</dd>
+                      <dd className="tabular-nums text-texto">{precoUnitario(loja.preco_medio, unidade, f, textosLojas)}</dd>
                     </div>
                     <div>
                       <dt className="text-texto-suave">{T.nCompras}</dt>
@@ -234,6 +239,7 @@ function PrecosDeUmaUnidade({ grupo, comTitulo }: { grupo: PrecosPorUnidade; com
 }
 
 function ListaHistorico({ itens, unidade }: { itens: PrecosPorUnidade["historico"]; unidade: string }) {
+  const textosLojas = useTextos(DICIONARIO_PRECOS_LOJAS);
   const f = useFormatos();
   return (
     <ol className="divide-y divide-borda text-sm">
@@ -242,7 +248,7 @@ function ListaHistorico({ itens, unidade }: { itens: PrecosPorUnidade["historico
           <span className="min-w-0 text-texto-suave">
             <span className="tabular-nums">{f.data(item.data)}</span> · <span className="break-words">{item.loja}</span>
           </span>
-          <span className="shrink-0 tabular-nums text-texto">{precoUnitario(item.preco_unitario, unidade, f)}</span>
+          <span className="shrink-0 tabular-nums text-texto">{precoUnitario(item.preco_unitario, unidade, f, textosLojas)}</span>
         </li>
       ))}
     </ol>

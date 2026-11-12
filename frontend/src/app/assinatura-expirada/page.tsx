@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 
 import Logo from "@/components/Logo";
 import { apagarToken } from "@/lib/api";
-import { TEXTOS_EXPIRADA } from "@/lib/textosPlanos";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 
 // Aparece quando a API responde 403: o login está certo, mas a conta não tem assinatura.
 // Um plano pago que termina já não manda para aqui (a conta passa a Free sozinha, sem 403).
 // Sem botão para o dashboard: a API voltava a responder 403 e a pessoa ficava num ciclo.
 export default function PaginaAssinaturaExpirada() {
+  const { TEXTOS_EXPIRADA } = useTextos(DICIONARIO_PLANOS);
   const router = useRouter();
 
   function sair() {

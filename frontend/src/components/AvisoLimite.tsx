@@ -4,8 +4,9 @@ import Link from "next/link";
 
 import { useEstadoPlano } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_DEMO } from "@/lib/textosDemo";
-import { TEXTOS_LIMITE } from "@/lib/textosPlanos";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_DEMO } from "@/lib/textosDemo";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 // O aviso do 429 (limite de pedidos à IA), igual em todos os ecrãs que usam a IA.
@@ -14,6 +15,8 @@ import { useSessaoDemo } from "@/lib/useSessaoDemo";
 // Numa sessão de demo, o texto é o do limite da demo (por IP ou dos pedidos partilhados), sem link para mudar de plano.
 // mensagem: o "detail" do 429 que a API mandou (na demo, mostra-se esse em vez do texto fixo).
 export default function AvisoLimite({ mensagem }: { mensagem?: string }) {
+  const { TEXTOS_DEMO } = useTextos(DICIONARIO_DEMO);
+  const { TEXTOS_LIMITE } = useTextos(DICIONARIO_PLANOS);
   const demo = useSessaoDemo();
   const estado = useEstadoPlano(); // null: sem o número, mostra o aviso sem ele
 

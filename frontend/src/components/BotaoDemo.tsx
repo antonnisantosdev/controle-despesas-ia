@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 
 import { demoTerminou, ErroApi, EVENTO_SESSAO, guardarToken, pedirTokenDemo } from "@/lib/api";
-import { TEXTOS_DEMO } from "@/lib/textosDemo";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_DEMO, type TextosDemo } from "@/lib/textosDemo";
 
 // Avisa o React quando a marca "a sessão da demo terminou" muda (ver enviarComToken em api.ts).
 function subscrever(avisar: () => void) {
@@ -13,7 +14,7 @@ function subscrever(avisar: () => void) {
 }
 
 // A mensagem para cada erro do POST /demo: 429 (o texto da API, se vier), 503 (demo desligada) ou outro.
-function mensagemDoErro(e: unknown): string {
+function mensagemDoErro(e: unknown, { TEXTOS_DEMO }: TextosDemo): string {
   if (e instanceof ErroApi && e.status === 429) return typeof e.detalhe === "string" ? e.detalhe : TEXTOS_DEMO.limiteEntradas;
   if (e instanceof ErroApi && e.status === 503) return TEXTOS_DEMO.indisponivel;
   return TEXTOS_DEMO.erroEntrar;
@@ -22,6 +23,8 @@ function mensagemDoErro(e: unknown): string {
 // "Ver a demo": pede o token da conta de demo (POST /demo), guarda-o como o login normal
 // (marcado como sessão de demo) e abre o dashboard.
 export default function BotaoDemo() {
+  const textosDemo = useTextos(DICIONARIO_DEMO);
+  const { TEXTOS_DEMO } = textosDemo;
   const router = useRouter();
   const [aEntrar, setAEntrar] = useState(false);
   const [erro, setErro] = useState("");
@@ -35,7 +38,7 @@ export default function BotaoDemo() {
       guardarToken(await pedirTokenDemo(), true);
       router.push("/dashboard");
     } catch (e) {
-      setErro(mensagemDoErro(e));
+      setErro(mensagemDoErro(e, textosDemo));
       setAEntrar(false);
     }
   }

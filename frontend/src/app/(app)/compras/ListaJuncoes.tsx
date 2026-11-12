@@ -6,7 +6,8 @@ import { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import { eBloqueadoNaDemo, ErroApi, eSoPlanosPagos, pedirApi, SessaoExpirada, type JuncaoProdutos } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_PRECOS_LOJAS as T } from "@/lib/textosPrecosLojas";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_PRECOS_LOJAS } from "@/lib/textosPrecosLojas";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import { ESTILO_BOTAO, ESTILO_BOTAO_PRINCIPAL, ESTILO_ERRO, ESTILO_SUCESSO } from "./formatosPrecos";
@@ -23,6 +24,7 @@ type Mensagem = { tipo: "sucesso" | "erro"; texto: string } | null;
 // As junções ("origem → destino"), cada uma com "Desfazer" e confirmação no próprio ecrã.
 // Na demo o botão fica desligado (a API responderia 423) e a NotaDemo do topo explica porquê.
 export default function ListaJuncoes({ juncoes, onMudou, onPlanoPago, onSessaoExpirada }: Props) {
+  const { TEXTOS_PRECOS_LOJAS: T } = useTextos(DICIONARIO_PRECOS_LOJAS);
   const demo = useSessaoDemo();
   const f = useFormatos();
   const [aConfirmar, setAConfirmar] = useState<string | null>(null); // chave_origem

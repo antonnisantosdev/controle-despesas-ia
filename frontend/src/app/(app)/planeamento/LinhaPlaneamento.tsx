@@ -6,7 +6,8 @@ import { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import type { LinhaOrcamento } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_LINHA_ORCAMENTO } from "@/lib/textosPlaneamento";
+import { useOpcoes, useTextos } from "@/lib/textos";
+import { DICIONARIO_PLANEAMENTO } from "@/lib/textosPlaneamento";
 
 // desligado: demo (só leitura), o campo e o botão Guardar ficam desligados.
 type Props = {
@@ -25,6 +26,8 @@ function corDaBarra(percentagem: number) {
 }
 
 export default function LinhaPlaneamento({ linha, onGuardar, compacta = false, desligado = false }: Props) {
+  const { TEXTOS_LINHA_ORCAMENTO } = useTextos(DICIONARIO_PLANEAMENTO);
+  const { rotuloCategoria } = useOpcoes();
   const f = useFormatos();
   const [valor, setValor] = useState(linha.limite?.toString().replace(".", ",") ?? "");
 
@@ -42,7 +45,7 @@ export default function LinhaPlaneamento({ linha, onGuardar, compacta = false, d
         onChange={(e) => setValor(e.target.value)}
         disabled={desligado}
         placeholder={preencher(TEXTOS_LINHA_ORCAMENTO.marcador, { simbolo: f.simbolo })}
-        aria-label={preencher(TEXTOS_LINHA_ORCAMENTO.rotuloCampo, { categoria: linha.categoria })}
+        aria-label={preencher(TEXTOS_LINHA_ORCAMENTO.rotuloCampo, { categoria: rotuloCategoria(linha.categoria) })}
         className="w-24 rounded-md border border-borda bg-cartao px-2 py-1 text-right text-sm text-texto"
       />
       <button
@@ -64,7 +67,7 @@ export default function LinhaPlaneamento({ linha, onGuardar, compacta = false, d
     <div className="space-y-2 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-medium capitalize text-texto">{linha.categoria}</p>
+          <p className="font-medium capitalize text-texto">{rotuloCategoria(linha.categoria)}</p>
           <p className="text-xs text-texto-suave">
             {linha.limite === null
               ? preencher(TEXTOS_LINHA_ORCAMENTO.semOrcamento, { gasto: f.dinheiro(linha.gasto) })

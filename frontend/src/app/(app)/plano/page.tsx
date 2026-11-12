@@ -19,19 +19,22 @@ import {
   preencher,
   temFuncoesPagas,
 } from "@/lib/planos";
-import { TEXTOS_DEMO } from "@/lib/textosDemo";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_DEMO } from "@/lib/textosDemo";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import { useLimitesPlanos } from "@/lib/useLimitesPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
-import { TEXTOS_CARTOES, TEXTOS_EXPIRADA, TEXTOS_MEU_PLANO } from "@/lib/textosPlanos";
 
 import ApagarConta from "./ApagarConta";
 
 // "O meu plano": o plano atual, os pedidos à IA do período, até quando dura e como mudar ou renovar.
 export default function PaginaPlano() {
+  const { TEXTOS_DEMO } = useTextos(DICIONARIO_DEMO);
+  const { TEXTOS_EXPIRADA, TEXTOS_MEU_PLANO } = useTextos(DICIONARIO_PLANOS);
   const router = useRouter();
   const [estado, setEstado] = useState<EstadoPlano | null>(null);
   const [emailConta, setEmailConta] = useState<string | null>(null);
-  const [erro, setErro] = useState("");
+  const [erro, setErro] = useState(false); // o texto escolhe-se ao desenhar, no país da conta
   // Na demo a conta é partilhada: mostra-se só que é uma conta de demonstração (sem contador, data nem pedidos de acesso).
   const demo = useSessaoDemo();
 
@@ -46,7 +49,7 @@ export default function PaginaPlano() {
           apagarToken();
           router.replace("/login");
         } else {
-          setErro(TEXTOS_MEU_PLANO.erroCarregar);
+          setErro(true);
         }
       });
   }, [router]);
@@ -58,7 +61,7 @@ export default function PaginaPlano() {
           <h1 className="text-2xl font-semibold text-texto">{TEXTOS_MEU_PLANO.titulo}</h1>
         </header>
 
-        {erro && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
+        {erro && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{TEXTOS_MEU_PLANO.erroCarregar}</p>}
         {!estado && !erro && !demo && (
           <p role="status" className="rounded-xl border border-borda bg-cartao p-4 text-sm text-texto-suave sm:p-6">
             {TEXTOS_MEU_PLANO.aCarregar}
@@ -92,6 +95,8 @@ export default function PaginaPlano() {
 }
 
 function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta: string | null }) {
+  const textosPlanos = useTextos(DICIONARIO_PLANOS);
+  const { TEXTOS_CARTOES, TEXTOS_MEU_PLANO } = textosPlanos;
   const f = useFormatos();
   const nome = nomeDoPlano(estado.plano) ?? TEXTOS_MEU_PLANO.nomeSemPlano;
   const usadas = Math.min(estado.usadas, estado.limite);
@@ -190,7 +195,7 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
             <div className="grid gap-4 sm:grid-cols-2">
               {superiores.map((id) => {
                 // O primeiro ponto (os pedidos à IA) vai em destaque; os outros (PDF, talões...) por baixo.
-                const [pedidos, ...outros] = pontosDoCartao(id, limites[id]);
+                const [pedidos, ...outros] = pontosDoCartao(id, limites[id], textosPlanos);
                 return (
                   <div key={id} className="flex flex-col gap-3 rounded-xl border border-borda bg-cartao p-4 sm:p-6">
                     <div className="space-y-1">

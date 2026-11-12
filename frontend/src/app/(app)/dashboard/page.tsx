@@ -16,8 +16,9 @@ import {
 } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_DASHBOARD } from "@/lib/textosDashboard";
-import { TEXTOS_SEM_DADOS } from "@/lib/textosPlanos";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_DASHBOARD } from "@/lib/textosDashboard";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 
 import CartaoResumo from "./CartaoResumo";
 import Chat from "./Chat";
@@ -28,23 +29,25 @@ import { calcularTotais } from "./totais";
 
 type Router = ReturnType<typeof useRouter>;
 
-// Sessão expirada volta ao login; qualquer outro erro aparece na página.
-function tratarErro(erro: unknown, router: Router, setErro: (mensagem: string) => void) {
+// Sessão expirada volta ao login; qualquer outro erro aparece na página (o texto vem do país da conta, ao desenhar).
+function tratarErro(erro: unknown, router: Router, setErro: (houveErro: boolean) => void) {
   if (erro instanceof SessaoExpirada) {
     apagarToken();
     router.replace("/login");
   } else {
-    setErro(TEXTOS_DASHBOARD.erroCarregar);
+    setErro(true);
   }
 }
 
 export default function PaginaDashboard() {
+  const { TEXTOS_DASHBOARD } = useTextos(DICIONARIO_DASHBOARD);
+  const { TEXTOS_SEM_DADOS } = useTextos(DICIONARIO_PLANOS);
   const router = useRouter();
   const f = useFormatos();
   const [mensal, setMensal] = useState<ResumoMensal[]>([]);
   const [mes, setMes] = useState("");
   const [categorias, setCategorias] = useState<GastoCategoria[]>([]);
-  const [erro, setErro] = useState("");
+  const [erro, setErro] = useState(false);
   // Conta nova, ainda sem nenhuma movimentação: mostra como começar em vez de ficar "a analisar" para sempre.
   const [semDados, setSemDados] = useState(false);
   const totais = calcularTotais(mensal, mes);
@@ -103,7 +106,7 @@ export default function PaginaDashboard() {
           <CartaoResumo titulo={TEXTOS_DASHBOARD.saldoAcumulado} valor={totais.saldoTotal} descricao={TEXTOS_DASHBOARD.saldoAcumuladoDescricao} icone="M4 19h16M6 15v-4M10 15V7M14 15v-6M18 15V5" corIcone="var(--texto-suave)" />
         </div>
 
-        {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{erro}</p>}
+        {erro && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{TEXTOS_DASHBOARD.erroCarregar}</p>}
 
         {semDados && (
           <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6">

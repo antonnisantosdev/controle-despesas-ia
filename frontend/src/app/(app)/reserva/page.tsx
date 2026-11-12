@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 
 import NotaDemo, { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import { apagarToken, pedirApi, SessaoExpirada, type Objetivo } from "@/lib/api";
-import { TEXTOS_RESERVA } from "@/lib/textosReserva";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_RESERVA } from "@/lib/textosReserva";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import CartaoObjetivo from "./CartaoObjetivo";
@@ -13,6 +14,7 @@ import FormNovoObjetivo from "./FormNovoObjetivo";
 import SimuladorPoupanca from "./SimuladorPoupanca";
 
 export default function PaginaReserva() {
+  const { TEXTOS_RESERVA } = useTextos(DICIONARIO_RESERVA);
   // Na demo (só leitura) não se criam objetivos; a API recusa-os na mesma (423).
   const demo = useSessaoDemo();
   const router = useRouter();

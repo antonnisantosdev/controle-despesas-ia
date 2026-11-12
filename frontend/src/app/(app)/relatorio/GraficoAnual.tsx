@@ -4,7 +4,8 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 
 import type { MesRelatorio } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
-import { TEXTOS_RELATORIO } from "@/lib/textosRelatorio";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_RELATORIO } from "@/lib/textosRelatorio";
 
 import { ESTILO_TOOLTIP } from "../dashboard/formatos";
 
@@ -15,6 +16,7 @@ const COR_EIXO = "var(--texto-suave)";
 // Entradas e saídas de cada mês do ano, lado a lado. Barras em vez de linhas: num ano são 12 valores
 // separados, e um mês sem movimentos fica vazio em vez de parecer uma descida.
 export default function GraficoAnual({ meses }: { meses: MesRelatorio[] }) {
+  const { TEXTOS_RELATORIO } = useTextos(DICIONARIO_RELATORIO);
   const f = useFormatos();
   // "2026-03" -> "mar." (o ano já está no título da página).
   const mesCurto = (mes: string) => f.data(mes, { month: "short" });

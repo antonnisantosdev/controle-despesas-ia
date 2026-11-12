@@ -10,10 +10,14 @@ import BotaoGoogle from "@/components/BotaoGoogle";
 import BotaoDemo from "@/components/BotaoDemo";
 import RodapeLegal from "@/components/RodapeLegal";
 import { API_URL, contaApagada, EVENTO_SESSAO, fetchComTentativas, guardarToken } from "@/lib/api";
-import { TEXTOS_GERAIS } from "@/lib/textosComuns";
+import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
 import { TEXTOS_LOGIN } from "@/lib/textosLogin";
-import { TEXTOS_APAGAR_CONTA } from "@/lib/textosPlanos";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import CampoPalavraPasse from "@/components/CampoPalavraPasse";
+
+// Página pública: sempre em PT-PT (decisão do CEO), seja qual for o país da conta.
+const { TEXTOS_GERAIS } = DICIONARIO_COMUNS.PT;
+const { TEXTOS_APAGAR_CONTA } = DICIONARIO_PLANOS.PT;
 
 // Avisa o React quando a marca "a conta foi apagada" muda (ver terminarSessaoContaApagada em api.ts).
 function subscrever(avisar: () => void) {

@@ -14,7 +14,8 @@ import {
 } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_PRECOS_LOJAS as T } from "@/lib/textosPrecosLojas";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_PRECOS_LOJAS } from "@/lib/textosPrecosLojas";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import {
@@ -43,6 +44,8 @@ type Mensagem = { tipo: "sucesso" | "erro"; texto: string } | null;
 // "É o mesmo produto": junta outro produto da lista a este, com confirmação; mostra os já juntados (com desfazer).
 // Na demo os botões ficam desligados (a API responderia 423) e a NotaDemo do topo explica porquê.
 export default function JuntarProdutos(props: Props) {
+  const textosLojas = useTextos(DICIONARIO_PRECOS_LOJAS);
+  const { TEXTOS_PRECOS_LOJAS: T } = textosLojas;
   const { chave, nome, juncoes, onMudou, onPlanoPago, onSessaoExpirada } = props;
   const demo = useSessaoDemo();
   const f = useFormatos();
@@ -187,7 +190,7 @@ export default function JuntarProdutos(props: Props) {
                       <span className="min-w-0">
                         <span className="block break-words text-sm font-medium text-texto">{produto.nome}</span>
                         <span className="block text-xs text-texto-suave">
-                          {textoLojas(produto.n_lojas)} · {preencher(T.ultimaCompra, { data: f.data(produto.ultima_data) })}
+                          {textoLojas(produto.n_lojas, textosLojas)} · {preencher(T.ultimaCompra, { data: f.data(produto.ultima_data) })}
                         </span>
                       </span>
                     </label>

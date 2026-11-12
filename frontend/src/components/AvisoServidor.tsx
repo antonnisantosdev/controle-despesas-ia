@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 
 import { EVENTO_A_ACORDAR } from "@/lib/api";
-import { TEXTOS_SERVIDOR } from "@/lib/textosComuns";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
 
 // Faixa no fundo do ecrã enquanto a API está a acordar (o api.ts avisa com um evento).
 // Fica fora das páginas para funcionar em todas, sem cada uma ter de tratar disto.
 export default function AvisoServidor() {
+  const { TEXTOS_SERVIDOR } = useTextos(DICIONARIO_COMUNS);
   const [aAcordar, setAAcordar] = useState(false);
 
   useEffect(() => {

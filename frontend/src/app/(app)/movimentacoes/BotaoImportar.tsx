@@ -13,8 +13,9 @@ import {
   type ResultadoImportacao,
 } from "@/lib/api";
 import { ID_NOTA_DEMO } from "@/components/NotaDemo";
-import { TEXTOS_IMPORTAR } from "@/lib/textosMovimentacoes";
-import { TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_MOVIMENTACOES } from "@/lib/textosMovimentacoes";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 
 type Props = {
   onImportado: (resultado: ResultadoImportacao) => void;
@@ -38,6 +39,8 @@ export default function BotaoImportar({
   soCsv,
   desligado = false,
 }: Props) {
+  const { TEXTOS_IMPORTAR } = useTextos(DICIONARIO_MOVIMENTACOES);
+  const { TEXTOS_PLANO_PAGO } = useTextos(DICIONARIO_PLANOS);
   // useRef: uma ligação direta ao <input type="file"> escondido, para o "clicar" a partir do botão.
   const entradaFicheiro = useRef<HTMLInputElement>(null);
   const [aImportar, setAImportar] = useState(false);

@@ -3,10 +3,10 @@
 import { useState, type FormEvent } from "react";
 
 import { eBloqueadoNaDemo, mensagemDaApi, pedirApi, SessaoExpirada, type Compra, type ItemTalao, type Talao } from "@/lib/api";
-import { CATEGORIAS, METODOS_PAGAMENTO } from "@/lib/opcoes";
 import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_REVISAO_TALAO } from "@/lib/textosCompras";
+import { comValorAtual, useOpcoes, useTextos } from "@/lib/textos";
+import { DICIONARIO_COMPRAS } from "@/lib/textosCompras";
 
 const ESTILO_CAMPO = "mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-sm text-texto";
 const ESTILO_CELULA = "w-full rounded-md border border-borda bg-cartao px-2 py-1 text-sm text-texto";
@@ -20,6 +20,8 @@ type Props = {
 
 // O que a IA leu, num formulário: o utilizador corrige o que estiver mal e só depois grava.
 export default function RevisaoTalao({ talao, onGravada, onCancelar, onSessaoExpirada }: Props) {
+  const { TEXTOS_REVISAO_TALAO } = useTextos(DICIONARIO_COMPRAS);
+  const { categorias, rotuloCategoria, metodos, rotuloMetodo } = useOpcoes();
   const f = useFormatos();
   const [loja, setLoja] = useState(talao.loja);
   const [data, setData] = useState(talao.data ?? ""); // vazia se a IA não a conseguiu ler
@@ -89,9 +91,9 @@ export default function RevisaoTalao({ talao, onGravada, onCancelar, onSessaoExp
         <label className="text-sm text-texto-suave">
           {TEXTOS_REVISAO_TALAO.categoria}
           <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className={`${ESTILO_CAMPO} capitalize`}>
-            {CATEGORIAS.map((c) => (
+            {comValorAtual(categorias, categoria).map((c) => (
               <option key={c} value={c}>
-                {c}
+                {rotuloCategoria(c)}
               </option>
             ))}
           </select>
@@ -99,9 +101,9 @@ export default function RevisaoTalao({ talao, onGravada, onCancelar, onSessaoExp
         <label className="text-sm text-texto-suave">
           {TEXTOS_REVISAO_TALAO.metodo}
           <select value={metodo} onChange={(e) => setMetodo(e.target.value)} className={ESTILO_CAMPO}>
-            {Object.entries(METODOS_PAGAMENTO).map(([codigo, nome]) => (
+            {comValorAtual(metodos, metodo).map((codigo) => (
               <option key={codigo} value={codigo}>
-                {nome}
+                {rotuloMetodo(codigo)}
               </option>
             ))}
           </select>

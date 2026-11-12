@@ -2,11 +2,13 @@
 
 import { useEstadoPlano } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_LIMITE_PDF } from "@/lib/textosPlanos";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 
 // O aviso do 429 do limite de extratos PDF do mês. Mesmo aspeto do AvisoLimite.
 // O número vem do /plano (pdf_limite, do ProvedorConta no layout da app); enquanto não chega (ou se falhar), o texto sai sem ele.
 export default function AvisoLimitePdf() {
+  const { TEXTOS_LIMITE_PDF } = useTextos(DICIONARIO_PLANOS);
   const estado = useEstadoPlano();
   const limite = estado && estado.pdf_limite > 0 ? estado.pdf_limite : null;
 

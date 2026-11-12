@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { EVENTO_BLOQUEADO_DEMO } from "@/lib/api";
-import { TEXTOS_DEMO } from "@/lib/textosDemo";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_DEMO } from "@/lib/textosDemo";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 // Segundos que a mensagem do 423 fica visível.
@@ -13,6 +14,7 @@ const SEGUNDOS_AVISO = 6;
 // Faixa no topo da app numa sessão de demo: "Modo demo: dados inventados, só leitura".
 // Quando a API recusa uma alteração (423), mostra a explicação por baixo durante uns segundos.
 export default function FaixaDemo() {
+  const { TEXTOS_DEMO } = useTextos(DICIONARIO_DEMO);
   const demo = useSessaoDemo();
   const [bloqueado, setBloqueado] = useState(false);
 

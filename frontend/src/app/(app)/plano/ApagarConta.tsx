@@ -5,12 +5,14 @@ import { useState, type FormEvent } from "react";
 
 import NotaDemo, { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import { apagarToken, eBloqueadoNaDemo, pedirApi, SessaoExpirada, terminarSessaoContaApagada } from "@/lib/api";
-import { TEXTOS_APAGAR_CONTA } from "@/lib/textosPlanos";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 // Zona "Apagar conta" (DELETE /conta). Só apaga depois de escrever APAGAR; a API pede o mesmo no corpo.
 // Na demo fica desligada (a API responde 423 na mesma).
 export default function ApagarConta() {
+  const { TEXTOS_APAGAR_CONTA } = useTextos(DICIONARIO_PLANOS);
   const router = useRouter();
   const demo = useSessaoDemo();
   const [texto, setTexto] = useState("");

@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 
-import { TEXTOS_PLANO_PAGO } from "@/lib/textosPlanos";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 // O aviso de uma função só dos planos pagos (PDF, talões): o 402 da API, ou o Free antes de tentar.
 // Mesmo aspeto do AvisoLimite, com o link "Mudar de plano" para a página O meu plano (/plano).
 // Numa sessão de demo, sem o link (a conta de demo não muda de plano).
 export default function AvisoPlanoPago({ mensagem }: { mensagem: string }) {
+  const { TEXTOS_PLANO_PAGO } = useTextos(DICIONARIO_PLANOS);
   const demo = useSessaoDemo();
   return (
     <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm sm:p-4 dark:border-amber-800 dark:bg-amber-950/40">

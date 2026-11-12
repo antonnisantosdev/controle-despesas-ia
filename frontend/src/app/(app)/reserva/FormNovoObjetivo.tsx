@@ -5,7 +5,8 @@ import { useState, type FormEvent } from "react";
 import { eBloqueadoNaDemo, pedirApi, SessaoExpirada, type Objetivo } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_NOVO_OBJETIVO } from "@/lib/textosReserva";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_RESERVA } from "@/lib/textosReserva";
 
 const ESTILO_CAMPO = "mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-sm text-texto";
 
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export default function FormNovoObjetivo({ onCriado, onFechar, onSessaoExpirada }: Props) {
+  const { TEXTOS_NOVO_OBJETIVO } = useTextos(DICIONARIO_RESERVA);
   const f = useFormatos();
   const [nome, setNome] = useState("");
   const [valor, setValor] = useState("");

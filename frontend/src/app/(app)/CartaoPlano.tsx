@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 
 import { useEstadoPlano } from "@/lib/conta";
 import { avisoCurtoDeQuota, nomeDoPlano, preencher } from "@/lib/planos";
-import { TEXTOS_CARTAO_PLANO } from "@/lib/textosComuns";
-import { TEXTOS_DEMO } from "@/lib/textosDemo";
-import { TEXTOS_MEU_PLANO } from "@/lib/textosPlanos";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
+import { DICIONARIO_DEMO } from "@/lib/textosDemo";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 // A cor da barra conforme os pedidos à IA já feitos no período: avisa antes de o limite chegar.
@@ -25,6 +26,10 @@ export function corDaBarra(usadas: number, limite: number): string {
 // Na demo, só "Conta de demonstração" e as 5 perguntas por dia: o contador do plano é partilhado
 // por todos os visitantes e não diz nada a quem está a ver.
 export default function CartaoPlano() {
+  const { TEXTOS_CARTAO_PLANO } = useTextos(DICIONARIO_COMUNS);
+  const { TEXTOS_DEMO } = useTextos(DICIONARIO_DEMO);
+  const textosPlanos = useTextos(DICIONARIO_PLANOS);
+  const { TEXTOS_MEU_PLANO } = textosPlanos;
   const pagina = usePathname();
   const demo = useSessaoDemo();
   // O ProvedorConta (layout da app) volta a pedir o estado a cada página nova: assim o número acompanha
@@ -55,7 +60,7 @@ export default function CartaoPlano() {
   const doMes = estado.periodo === "mes";
   const texto = preencher(doMes ? TEXTOS_MEU_PLANO.cartaoMes : TEXTOS_MEU_PLANO.cartaoHoje, { usadas, limite: estado.limite });
   // A partir de 80% dos pedidos (e antes do limite): "Faltam 4 pedidos à IA". O cartão já leva a /plano.
-  const avisoCurto = avisoCurtoDeQuota(estado);
+  const avisoCurto = avisoCurtoDeQuota(estado, textosPlanos);
 
   return (
     <Link

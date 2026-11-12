@@ -5,7 +5,8 @@ import { useState } from "react";
 import { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import { eBloqueadoNaDemo, eLimiteDiario, ErroApi, pedirApi, SessaoExpirada, type Transacao } from "@/lib/api";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_CATEGORIZAR } from "@/lib/textosPlanos";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 
 // Pendentes que a API categoriza em cada clique (MAX_PENDENTES_POR_PEDIDO no main.py): as mais recentes primeiro.
 const LOTE_POR_CLIQUE = 300;
@@ -30,6 +31,7 @@ export default function BotaoCategorizar({
   onLimiteDiario,
   desligado = false,
 }: Props) {
+  const { TEXTOS_CATEGORIZAR } = useTextos(DICIONARIO_PLANOS);
   const [aCategorizar, setACategorizar] = useState(false);
 
   async function categorizar() {

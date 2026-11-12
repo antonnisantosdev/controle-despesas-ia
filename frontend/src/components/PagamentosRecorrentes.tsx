@@ -7,7 +7,8 @@ import { pedirApi, type Recorrente } from "@/lib/api";
 import { useFormatos } from "@/lib/conta";
 import type { Formatos } from "@/lib/formatos";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_RECORRENTES } from "@/lib/textosRecorrentes";
+import { useOpcoes, useTextos } from "@/lib/textos";
+import { DICIONARIO_RECORRENTES, type TextosRecorrentes } from "@/lib/textosRecorrentes";
 
 // "2026-11-05" -> "5 nov." (f: os formatos da conta, useFormatos())
 function dataCurta(iso: string, f: Formatos): string {
@@ -15,9 +16,9 @@ function dataCurta(iso: string, f: Formatos): string {
 }
 
 // "Subiu de 10,99 € para 12,99 €" (ou "Desceu..."), ou null se o preço não mudou.
-function mudancaDePreco(r: Recorrente, f: Formatos): string | null {
+function mudancaDePreco(r: Recorrente, f: Formatos, textos: TextosRecorrentes["TEXTOS_RECORRENTES"]): string | null {
   if (r.valor_anterior == null) return null;
-  const modelo = r.valor_mensal > r.valor_anterior ? TEXTOS_RECORRENTES.subiu : TEXTOS_RECORRENTES.desceu;
+  const modelo = r.valor_mensal > r.valor_anterior ? textos.subiu : textos.desceu;
   return preencher(modelo, { antes: f.dinheiro(r.valor_anterior), depois: f.dinheiro(r.valor_mensal) });
 }
 
@@ -27,6 +28,8 @@ const MAXIMO_NO_CARTAO = 3;
 // Pagamentos que se repetem todos os meses (GET /recorrentes). Só contas na API, sem IA: não gasta pedidos.
 // compacto: o cartão pequeno do dashboard (só aparece se houver algum). Sem compacto: a secção do Planeamento.
 export default function PagamentosRecorrentes({ compacto = false }: { compacto?: boolean }) {
+  const { TEXTOS_RECORRENTES } = useTextos(DICIONARIO_RECORRENTES);
+  const { rotuloCategoria } = useOpcoes();
   const f = useFormatos();
   const [lista, setLista] = useState<Recorrente[] | null>(null);
   const [erro, setErro] = useState(false);
@@ -105,14 +108,14 @@ export default function PagamentosRecorrentes({ compacto = false }: { compacto?:
               <div className="min-w-0">
                 <p className="break-words font-medium text-texto">{r.descricao}</p>
                 <p className="text-xs text-texto-suave">
-                  {r.categoria && <span className="capitalize">{r.categoria} · </span>}
+                  {r.categoria && <span className="capitalize">{rotuloCategoria(r.categoria)} · </span>}
                   {preencher(TEXTOS_RECORRENTES.detalhe, {
                     meses: r.meses_seguidos,
                     data: dataCurta(r.ultimo_pagamento, f),
                   })}
                 </p>
-                {mudancaDePreco(r, f) && (
-                  <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{mudancaDePreco(r, f)}</p>
+                {mudancaDePreco(r, f, TEXTOS_RECORRENTES) && (
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{mudancaDePreco(r, f, TEXTOS_RECORRENTES)}</p>
                 )}
               </div>
               <p className="shrink-0 text-sm font-semibold text-texto">

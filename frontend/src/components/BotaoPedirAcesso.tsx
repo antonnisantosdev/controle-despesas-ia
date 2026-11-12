@@ -1,7 +1,9 @@
 "use client";
 
 import { CONTACTOS, linkEmail, linkWhatsapp, type Pedido } from "@/lib/planos";
-import { TEXTOS_PEDIR_ACESSO } from "@/lib/textosComuns";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
+import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 type Props = {
@@ -23,6 +25,8 @@ const ESTILO_DESATIVADO = `${ESTILO_BASE} cursor-not-allowed border border-dashe
 // com os dois, o WhatsApp é o botão e o email fica como alternativa; sem nenhum, o botão fica desativado.
 // Numa sessão de demo não aparece: a conta é partilhada e não muda de plano.
 export default function BotaoPedirAcesso({ pedido, rotulo, principal = true }: Props) {
+  const { TEXTOS_PEDIR_ACESSO } = useTextos(DICIONARIO_COMUNS);
+  const textosPlanos = useTextos(DICIONARIO_PLANOS); // a mensagem e o assunto do pedido
   const demo = useSessaoDemo();
   const estilo = principal ? ESTILO_PRINCIPAL : ESTILO_SECUNDARIO;
   const { whatsapp, email } = CONTACTOS;
@@ -44,19 +48,19 @@ export default function BotaoPedirAcesso({ pedido, rotulo, principal = true }: P
     <div className="space-y-1">
       {whatsapp ? (
         // O WhatsApp abre noutro separador; o mailto abre o programa de email, sem separador novo.
-        <a href={linkWhatsapp(whatsapp, pedido)} target="_blank" rel="noopener noreferrer" className={estilo}>
+        <a href={linkWhatsapp(whatsapp, pedido, textosPlanos)} target="_blank" rel="noopener noreferrer" className={estilo}>
           {rotulo}
         </a>
       ) : (
         email && (
-          <a href={linkEmail(email, pedido)} className={estilo}>
+          <a href={linkEmail(email, pedido, textosPlanos)} className={estilo}>
             {rotulo}
           </a>
         )
       )}
       {whatsapp && email && (
         <a
-          href={linkEmail(email, pedido)}
+          href={linkEmail(email, pedido, textosPlanos)}
           className={`flex min-h-11 items-center justify-center rounded-md text-center text-xs text-texto-suave hover:text-texto hover:underline ${FOCO}`}
         >
           {TEXTOS_PEDIR_ACESSO.porEmail}

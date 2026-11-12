@@ -15,9 +15,10 @@ import {
   type RespostaChat,
 } from "@/lib/api";
 import { preencher } from "@/lib/planos";
-import { TEXTOS_GERAIS } from "@/lib/textosComuns";
-import { TEXTOS_CHAT } from "@/lib/textosDashboard";
-import { TEXTOS_DEMO } from "@/lib/textosDemo";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
+import { DICIONARIO_DASHBOARD } from "@/lib/textosDashboard";
+import { DICIONARIO_DEMO } from "@/lib/textosDemo";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 type Mensagem = { autor: "tu" | "ia"; texto: string };
@@ -57,14 +58,17 @@ function historicoParaEnviar(mensagens: Mensagem[], maximo: number): MensagemHis
   ]);
 }
 
-// "a", "b" ou "c": vírgulas entre os exemplos e "ou" só antes do último.
-function juntarExemplos(exemplos: readonly string[]): string {
+// "a", "b" ou "c": vírgulas entre os exemplos e "ou" só antes do último (ou: TEXTOS_CHAT.ou, do país da conta).
+function juntarExemplos(exemplos: readonly string[], ou: string): string {
   const comAspas = exemplos.map((e) => `"${e}"`);
   if (comAspas.length < 2) return comAspas.join("");
-  return `${comAspas.slice(0, -1).join(", ")} ${TEXTOS_CHAT.ou} ${comAspas[comAspas.length - 1]}`;
+  return `${comAspas.slice(0, -1).join(", ")} ${ou} ${comAspas[comAspas.length - 1]}`;
 }
 
 export default function Chat() {
+  const { TEXTOS_GERAIS } = useTextos(DICIONARIO_COMUNS);
+  const { TEXTOS_CHAT } = useTextos(DICIONARIO_DASHBOARD);
+  const { TEXTOS_DEMO } = useTextos(DICIONARIO_DEMO);
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [pergunta, setPergunta] = useState("");
   const [aPensar, setAPensar] = useState(false);
@@ -132,7 +136,7 @@ export default function Chat() {
       <div className="mb-4 max-h-80 space-y-3 overflow-y-auto">
         {mensagens.length === 0 && (
           <p className="text-sm text-texto-suave">
-            {preencher(TEXTOS_CHAT.experimenta, { exemplos: juntarExemplos(TEXTOS_CHAT.exemplos) })}
+            {preencher(TEXTOS_CHAT.experimenta, { exemplos: juntarExemplos(TEXTOS_CHAT.exemplos, TEXTOS_CHAT.ou) })}
           </p>
         )}
         {mensagens.map((m, i) => (

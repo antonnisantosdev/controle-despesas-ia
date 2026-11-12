@@ -24,7 +24,11 @@ import {
 import { useEstadoPlano, useFormatos } from "@/lib/conta";
 import type { Formatos } from "@/lib/formatos";
 import { dataPorExtenso, preencher, temFuncoesPagas } from "@/lib/planos";
-import { TEXTOS_RELATORIO as T } from "@/lib/textosRelatorio";
+import { useTextos } from "@/lib/textos";
+import { DICIONARIO_RELATORIO, type TextosRelatorio } from "@/lib/textosRelatorio";
+
+// Os textos da página, do país da conta (useTextos), para as funções de fora dos componentes.
+type Textos = TextosRelatorio["TEXTOS_RELATORIO"];
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import CartaoResumo from "../dashboard/CartaoResumo";
@@ -58,13 +62,13 @@ function diaCurto(data: string, f: Formatos) {
 }
 
 // +12,30 € / −12,30 € / igual: o sinal escrito, para a diferença não depender só da cor.
-function diferencaDinheiro(valor: number, f: Formatos) {
+function diferencaDinheiro(valor: number, f: Formatos, T: Textos) {
   if (Math.abs(valor) < 0.005) return T.comparacaoIgual;
   return valor > 0 ? preencher(T.comparacaoMais, { valor: f.dinheiro(valor) }) : f.dinheiro(valor);
 }
 
 // "janeiro a novembro" / "ano inteiro"
-function textoDosMeses(meses: string[], f: Formatos) {
+function textoDosMeses(meses: string[], f: Formatos, T: Textos) {
   if (meses.length === 0) return "";
   if (meses.length === 12) return T.anoInteiro;
   if (meses.length === 1) return nomeDoMes(meses[0], f);
@@ -100,6 +104,7 @@ function Titulo({ titulo, texto }: { titulo: string; texto?: string }) {
 type PropsLinha = { nome: string; atual: number; anterior: number; ano: number; anoAnterior: number };
 
 function LinhaComparada({ nome, atual, anterior, ano, anoAnterior }: PropsLinha) {
+  const { TEXTOS_RELATORIO: T } = useTextos(DICIONARIO_RELATORIO);
   const f = useFormatos();
   return (
     <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-sm">
@@ -108,13 +113,14 @@ function LinhaComparada({ nome, atual, anterior, ano, anoAnterior }: PropsLinha)
         <span className="text-xs text-texto-suave">
           {ano}: {f.dinheiro(atual)} · {anoAnterior}: {f.dinheiro(anterior)}
         </span>
-        <span className="font-semibold text-texto">{diferencaDinheiro(atual - anterior, f)}</span>
+        <span className="font-semibold text-texto">{diferencaDinheiro(atual - anterior, f, T)}</span>
       </span>
     </li>
   );
 }
 
 function Comparacao({ comparacao, ano, totais }: { comparacao: ComparacaoAno; ano: number; totais: TotaisAno }) {
+  const { TEXTOS_RELATORIO: T } = useTextos(DICIONARIO_RELATORIO);
   const f = useFormatos();
   const anterior = comparacao.ano;
   const anos = { ano, anoAnterior: anterior };
@@ -122,7 +128,7 @@ function Comparacao({ comparacao, ano, totais }: { comparacao: ComparacaoAno; an
     <section className={ESTILO_SECAO}>
       <Titulo
         titulo={preencher(T.comparacaoTitulo, { ano: anterior })}
-        texto={preencher(T.comparacaoMeses, { meses: textoDosMeses(comparacao.meses_comparados, f) })}
+        texto={preencher(T.comparacaoMeses, { meses: textoDosMeses(comparacao.meses_comparados, f, T) })}
       />
       {comparacao.meses_com_dados < comparacao.meses_comparados.length && (
         <p className="-mt-2 mb-3 text-xs text-texto-suave">
@@ -150,6 +156,7 @@ function Comparacao({ comparacao, ano, totais }: { comparacao: ComparacaoAno; an
 }
 
 function Relatorio({ dados }: { dados: RelatorioAnual }) {
+  const { TEXTOS_RELATORIO: T } = useTextos(DICIONARIO_RELATORIO);
   const f = useFormatos();
   const maiorCategoria = dados.categorias[0]?.percentagem ?? 0;
   return (
@@ -363,10 +370,12 @@ const lerAnoAtual = () => new Date().getFullYear();
 const semAnoNoServidor = () => null;
 
 // O resultado guarda o ano a que pertence: se o ano escolhido mudou, o guardado já não serve.
-type Resultado = { ano: number; dados?: RelatorioAnual; erro?: string };
+// erro.texto: o texto da API (422) ou null para o nosso, escolhido ao desenhar no país da conta.
+type Resultado = { ano: number; dados?: RelatorioAnual; erro?: { texto: string | null } };
 type ResumoIA = { ano: number; texto?: string; erro?: string; semPedidos?: boolean; planoPago?: string };
 
 export default function PaginaRelatorio() {
+  const { TEXTOS_RELATORIO: T } = useTextos(DICIONARIO_RELATORIO);
   const router = useRouter();
   const f = useFormatos();
   const demo = useSessaoDemo();
@@ -389,7 +398,7 @@ export default function PaginaRelatorio() {
 
   const aCarregar = resultado?.ano !== ano;
   const dados = aCarregar ? undefined : resultado?.dados;
-  const erro = aCarregar ? undefined : resultado?.erro;
+  const erro = aCarregar || !resultado?.erro ? undefined : (resultado.erro.texto ?? T.erro);
   const semMovimentos = dados ? !dados.meses.some((m) => m.com_dados) : false;
   const ia = resumoIA?.ano === ano ? resumoIA : null;
   const completo = plano === "completo";
@@ -416,8 +425,8 @@ export default function PaginaRelatorio() {
           router.replace("/login");
           return;
         }
-        const texto = e instanceof ErroApi && e.status === 422 && typeof e.detalhe === "string" ? e.detalhe : T.erro;
-        if (!cancelado) setResultado({ ano, erro: texto });
+        const texto = e instanceof ErroApi && e.status === 422 && typeof e.detalhe === "string" ? e.detalhe : null;
+        if (!cancelado) setResultado({ ano, erro: { texto } });
       });
     return () => {
       cancelado = true;
