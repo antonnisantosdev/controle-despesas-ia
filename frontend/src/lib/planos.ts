@@ -110,6 +110,13 @@ export const PRECOS: Record<Exclude<IdPlano, "free">, Preco | null> = {
   completo: { mensal: 8.99, anual: 89 },
 };
 
+// Preços do Brasil, em reais, aprovados pelo CEO a 2026-11-12 (pesquisa de mercado + estimativa de custos).
+// Ainda NÃO aparecem: as contas BR veem "Preço em breve" até haver PIX/cartão em R$ e o OK do contabilista.
+export const PRECOS_BR: Record<Exclude<IdPlano, "free">, Preco> = {
+  essencial: { mensal: 19.9, anual: 199 },
+  completo: { mensal: 34.9, anual: 349 },
+};
+
 // 4.99 -> "4,99 €" e 49 -> "49 €" (sem ",00" nos valores certos).
 export function formatarEuros(valor: number): string {
   const casas = Number.isInteger(valor) ? 0 : 2;

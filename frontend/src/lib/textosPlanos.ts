@@ -293,7 +293,7 @@ const BR: TextosPlanos = {
     // TEXTO NOVO
     subtitulo:
       "Começas no Free, sem cartão. Os planos pagos dão-te mais pedidos à IA, importação de extratos em PDF e leitura de talões por fotografia.",
-    precoPorDefinir: "Preço em breve", // só aparece se um plano pago ficar sem preço em PRECOS (planos.ts)
+    precoPorDefinir: "Preço em breve", // também nos cartões de /plano das contas BR (preços em PRECOS_BR, ainda escondidos)
     precoFree: "Grátis",
     porMes: "/mês",
     precoAnual: "ou {anual}/ano (2 meses grátis)",

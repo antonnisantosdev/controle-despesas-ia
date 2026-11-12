@@ -37,6 +37,9 @@ export default function PaginaPlano() {
   const [erro, setErro] = useState(false); // o texto escolhe-se ao desenhar, no país da conta
   // Na demo a conta é partilhada: mostra-se só que é uma conta de demonstração (sem contador, data nem pedidos de acesso).
   const demo = useSessaoDemo();
+  // Contas do Brasil: sem ligação para /precos (página PT, em euros e com MB Way). Decisão do CEO, 2026-11-12.
+  // O país vem desta mesma resposta do /plano: o link só aparece depois de ela chegar (nunca pisca numa conta BR).
+  const mostrarLinkPrecos = !demo && estado !== null && estado.pais !== "BR";
 
   useEffect(() => {
     pedirEstadoPlano()
@@ -78,7 +81,7 @@ export default function PaginaPlano() {
         )}
         {estado && !demo && <DetalhesPlano estado={estado} emailConta={emailConta} />}
 
-        {!demo && (
+        {mostrarLinkPrecos && (
           <Link
             href="/precos"
             className="inline-flex min-h-11 items-center rounded-md text-sm font-semibold text-destaque-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destaque"
@@ -104,8 +107,10 @@ export default function PaginaPlano() {
 
 function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta: string | null }) {
   const textosPlanos = useTextos(DICIONARIO_PLANOS);
-  const { TEXTOS_CARTOES, TEXTOS_MEU_PLANO } = textosPlanos;
+  const { TEXTOS_CARTOES, TEXTOS_MEU_PLANO, TEXTOS_PRECOS } = textosPlanos;
   const f = useFormatos();
+  // Brasil: os cartões dizem "Preço em breve" até haver PIX/cartão em R$ (valores em PRECOS_BR, lib/planos.ts).
+  const brasil = estado.pais === "BR";
   const nome = nomeDoPlano(estado.plano) ?? TEXTOS_MEU_PLANO.nomeSemPlano;
   const usadas = Math.min(estado.usadas, estado.limite);
   // O Free conta os pedidos por mês; os pagos, por dia.
@@ -210,6 +215,7 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
                       <p className="text-lg font-semibold text-texto">{NOMES_PLANOS[id]}</p>
                       <p className="text-sm text-texto-suave">{TEXTOS_CARTOES[id].frase}</p>
                     </div>
+                    {brasil && <p className="text-sm font-semibold text-destaque-hover">{TEXTOS_PRECOS.precoPorDefinir}</p>}
                     <p className="text-sm font-semibold text-texto">{pedidos}</p>
                     {/* O que o plano traz além dos pedidos (PDF e talões, para quem vem do Free). */}
                     <ul className="space-y-1 text-sm text-texto-suave">
