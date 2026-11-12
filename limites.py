@@ -1,9 +1,9 @@
 """Limites de pedidos à IA e funções de cada plano, para cada utilizador não gastar demasiados créditos.
 
 O plano vem da assinatura (coluna plano da tabela assinaturas). O Free conta os pedidos por mês;
-os planos pagos contam por dia. Os contadores começam no início do dia (ou mês) mais antigo entre
-Lisboa e São Paulo (inicio_dos_contadores), não no do servidor (o Render está em UTC): mudar de país
-nunca dá pedidos a mais. O "hoje" mostrado é o do país onde a pessoa vive (sql/020). O ativo_ate dos
+os planos pagos contam por dia. Os contadores começam no início do dia (ou mês) do país da conta
+(inicio_dos_contadores), não no do servidor (o Render está em UTC); no período em que a conta mudou de país
+(sql/022) contam desde o mais antigo entre Lisboa e São Paulo: mudar de país nunca dá pedidos a mais. O "hoje" mostrado é o do país onde a pessoa vive (sql/020). O ativo_ate dos
 planos pagos conta-se sempre em Lisboa (é o CEO que o escreve, em Portugal).
 """
 
@@ -183,15 +183,27 @@ def inicio_do_periodo(periodo: str, agora: datetime, fuso: ZoneInfo = FUSO_LISBO
     return meia_noite.astimezone(timezone.utc)
 
 
-def inicio_dos_contadores(periodo: str, agora: datetime) -> datetime:
-    """O início do período dos limites (pedidos à IA e PDF): o MAIS ANTIGO entre todos os fusos de FUSO_POR_PAIS.
+def inicio_dos_contadores(periodo: str, agora: datetime, conta: "Assinatura | None" = None) -> datetime:
+    """O início do período dos limites (pedidos à IA e PDF) de uma conta: no fuso do país onde vive.
 
-    Revisão de segurança: se cada conta contasse no fuso do seu país, mudar de país nas definições
-    (Lisboa <-> São Paulo) abria uma janela nova e dava pedidos a dobrar. Com o mais antigo, mudar de país
-    nunca dá pedidos a mais (falha fechada). O preço: perto da meia-noite o período fica umas horas maior
-    (até 3 h, ou 4 h com a hora de verão de Lisboa). O fuso do país serve só para mostrar datas e o "hoje".
+    Revisão de segurança: se mudar de país (Lisboa <-> São Paulo) abrisse logo uma janela nova, dava pedidos
+    a dobrar. Por isso, no período em que a conta mudou de país (pais_mudado_em, sql/022), conta-se desde o
+    início MAIS ANTIGO entre todos os fusos de FUSO_POR_PAIS (falha fechada): mudar de país nunca dá pedidos
+    a mais. Fora disso, cada conta volta a zero à meia-noite do seu país (antes da 022 contava-se sempre
+    desde o mais antigo, e as contas PT ficavam até 3-4 h presas depois da meia-noite).
+    Sem conta, ou sem a coluna da sql/022: o mais antigo (como antes).
     """
-    return min(inicio_do_periodo(periodo, agora, fuso) for fuso in FUSO_POR_PAIS.values())
+    mais_antigo = min(inicio_do_periodo(periodo, agora, fuso) for fuso in FUSO_POR_PAIS.values())
+    if conta is None or not conta.com_mudanca_pais:
+        return mais_antigo
+    if conta.pais_mudado_em is not None and conta.pais_mudado_em >= mais_antigo:
+        return mais_antigo
+    return inicio_do_periodo(periodo, agora, conta.fuso)
+
+
+def inicio_dos_contadores_da_conta(user_id: str, periodo: str, agora: datetime) -> datetime:
+    """inicio_dos_contadores com a assinatura da conta (lida uma só vez por pedido)."""
+    return inicio_dos_contadores(periodo, agora, assinatura_do_utilizador(user_id))
 
 
 # --- Planos ---
@@ -274,7 +286,7 @@ def pdfs_no_mes(user_id: str) -> int:
     conta-se então pelas chamadas à IA de leitura de PDF (chamadas_ia, sql/014). Se nem isso der,
     devolve 0 (fica só o limite de pedidos à IA, como antes) e deixa um aviso nos logs.
     """
-    inicio = inicio_dos_contadores("mes", agora_utc()).isoformat()
+    inicio = inicio_dos_contadores_da_conta(user_id, "mes", agora_utc()).isoformat()
     try:
         resposta = (
             supabase.table("uso_ia")
@@ -327,7 +339,7 @@ def exigir_limite_pdf(user_id: str) -> None:
 
 def pedidos_no_periodo(user_id: str, periodo: str) -> int:
     """Quantos pedidos à IA o utilizador já fez neste dia (ou mês), desde inicio_dos_contadores."""
-    inicio = inicio_dos_contadores(periodo, agora_utc())
+    inicio = inicio_dos_contadores_da_conta(user_id, periodo, agora_utc())
     # count="exact" pede ao Supabase só o número de linhas (como um SELECT COUNT(*)), sem as trazer.
     resposta = (
         supabase.table("uso_ia")
@@ -366,6 +378,10 @@ class Assinatura:
     # com_boas_vindas: False se a coluna ainda não existe (ninguém vê o questionário, e as rotas dão 503).
     boas_vindas_em: datetime | None = None
     com_boas_vindas: bool = False
+    # Quando a conta mudou de país pela última vez (sql/022; None = nunca). com_mudanca_pais: False se a coluna
+    # ainda não existe (os contadores contam então desde o início mais antigo entre os fusos, como antes).
+    pais_mudado_em: datetime | None = None
+    com_mudanca_pais: bool = False
 
     @property
     def fuso(self) -> ZoneInfo:
@@ -424,6 +440,7 @@ def assinatura_do_utilizador(user_id: str) -> Assinatura:
 # As colunas lidas, da mais completa (com a sql/021) à mais antiga (antes da 020). Se uma coluna ainda não existir,
 # tenta a seguinte: o perfil e o questionário só contam quando as colunas deles existem.
 _COLUNAS_ASSINATURA = (
+    ("plano, ativo_ate, pais, paises_bancos, moeda, boas_vindas_em, pais_mudado_em", True, True),
     ("plano, ativo_ate, pais, paises_bancos, moeda, boas_vindas_em", True, True),
     ("plano, ativo_ate, pais, paises_bancos, moeda", True, False),
     ("plano, ativo_ate", False, False),
@@ -444,7 +461,9 @@ def _ler_assinatura(user_id: str) -> Assinatura:
         except APIError as erro:
             if ultima or erro.code not in COLUNA_NAO_EXISTE:
                 raise
-            if com_boas_vindas:
+            if "pais_mudado_em" in colunas:
+                print("AVISO: coluna pais_mudado_em não encontrada (sql/022); contadores desde o início mais antigo.")
+            elif com_boas_vindas:
                 print("AVISO: coluna boas_vindas_em não encontrada (sql/021); ninguém vê o questionário.")
             else:
                 print("AVISO: colunas pais/paises_bancos/moeda não encontradas (sql/020); a conta conta como PT/EUR.")
@@ -459,8 +478,21 @@ def _ler_assinatura(user_id: str) -> Assinatura:
         com_perfil=com_perfil,
         boas_vindas_em=_data_hora(linha.get("boas_vindas_em")) if com_boas_vindas else None,
         com_boas_vindas=com_boas_vindas,
+        pais_mudado_em=_mudanca_de_pais(linha.get("pais_mudado_em")),
+        com_mudanca_pais="pais_mudado_em" in colunas,
         **perfil,
     )
+
+
+def _mudanca_de_pais(valor: object) -> datetime | None:
+    """O pais_mudado_em (sql/022). Um valor que não se lê conta como mudança recente (falha fechada:
+    os contadores contam desde o início mais antigo entre os fusos)."""
+    if valor is None:
+        return None
+    try:
+        return datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.max.replace(tzinfo=timezone.utc)
 
 
 def _data_hora(valor: object) -> datetime | None:
@@ -617,7 +649,7 @@ def registar_pergunta(user_id: str, funcao: str) -> None:
     plano = plano_do_utilizador(user_id)
     limite, periodo = limite_do_plano(plano), periodo_do_plano(plano)
 
-    registado = registar_pedido_atomico(user_id, inicio_dos_contadores(periodo, agora_utc()), limite, funcao)
+    registado = registar_pedido_atomico(user_id, inicio_dos_contadores_da_conta(user_id, periodo, agora_utc()), limite, funcao)
     if registado is None:
         # Aparece nos logs do Render: se continuar a aparecer depois de correr a 015, algo está mal.
         print("AVISO: função registar_pedido_ia não encontrada (sql/015); a usar o contador em dois passos.")
@@ -656,9 +688,9 @@ def registar_pdf(user_id: str) -> None:
     resultado = _chamar_registar_pdf_ia(
         {
             "p_user_id": user_id,
-            "p_desde_pedidos": inicio_dos_contadores(periodo, agora).isoformat(),
+            "p_desde_pedidos": inicio_dos_contadores_da_conta(user_id, periodo, agora).isoformat(),
             "p_limite_pedidos": limite,
-            "p_desde_pdf": inicio_dos_contadores("mes", agora).isoformat(),
+            "p_desde_pdf": inicio_dos_contadores_da_conta(user_id, "mes", agora).isoformat(),
             "p_limite_pdf": limite_pdf,
         }
     )

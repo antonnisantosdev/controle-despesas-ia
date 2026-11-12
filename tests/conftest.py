@@ -136,6 +136,19 @@ def sem_proxies_a_frente(monkeypatch):
     monkeypatch.setattr(limite_ip, "PROXIES_A_FRENTE", 0)
 
 
+# O inicio_dos_contadores_da_conta verdadeiro (lê a assinatura). O test_contadores_por_pais.py usa-o.
+INICIO_DA_CONTA_REAL = limites.inicio_dos_contadores_da_conta
+
+
+@pytest.fixture(autouse=True)
+def contadores_sem_ler_a_conta(monkeypatch):
+    """Por omissão, os contadores contam desde o início mais antigo entre os fusos (como antes da sql/022),
+    sem ler a assinatura: muitos testes imitam só o plano. O test_contadores_por_pais.py testa a regra nova."""
+    monkeypatch.setattr(
+        limites, "inicio_dos_contadores_da_conta", lambda user_id, periodo, agora: limites.inicio_dos_contadores(periodo, agora)
+    )
+
+
 @pytest.fixture(autouse=True)
 def jwks_sem_rede(monkeypatch):
     """Os testes nunca vão buscar o JWKS ao Supabase: por omissão o JWKS vem vazio (como num projeto

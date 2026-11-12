@@ -196,7 +196,7 @@ def test_sem_a_021_le_o_perfil_e_ninguem_ve_o_questionario(monkeypatch, capsys):
 
     conta = limites.assinatura_do_utilizador("utilizador-teste")
 
-    assert len(falsa.selects) == 2
+    assert len(falsa.selects) == 3  # com a coluna da 022, com a da 021 (as duas falham), só com as da 020
     assert (conta.com_perfil, conta.com_boas_vindas, conta.boas_vindas_pendente) == (True, False, False)
     assert (conta.pais, conta.moeda) == ("BR", "BRL")
     assert "sql/021" in capsys.readouterr().out
