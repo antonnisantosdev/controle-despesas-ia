@@ -245,7 +245,7 @@ const PT = {
   // e o valor de cada movimento, para a categorização; ver _categorizar_claude em ia.py).
   TEXTOS_ENVIO_IA: {
     pdf: "O ficheiro é enviado à Anthropic (EUA) para ser lido pela IA e não fica guardado.",
-    talao: "A fotografia é enviada à Anthropic (EUA) para ser lido pela IA e não fica guardado.",
+    talao: "A fotografia é enviada à Anthropic (EUA) para ser lida pela IA e não fica guardada.",
     csv: "No CSV, só a descrição e o valor de cada movimentação são enviados à Anthropic (EUA), para a IA escolher a categoria.",
   },
 
