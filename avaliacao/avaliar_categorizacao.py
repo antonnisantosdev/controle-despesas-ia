@@ -6,6 +6,7 @@ Correr a partir da raiz do projeto:
     python avaliacao/avaliar_categorizacao.py                        (casos_categorizacao.csv)
     python avaliacao/avaliar_categorizacao.py casos_novos.csv        (outro conjunto de casos)
     python avaliacao/avaliar_categorizacao.py --guardar "nota"       (junta o resultado a resultados.md)
+    python avaliacao/avaliar_categorizacao.py casos_br.csv --pais BR (bancos brasileiros: moeda BRL e prompt BR)
 """
 
 import csv
@@ -24,7 +25,11 @@ os.environ["IA_ORIGEM"] = "avaliacao"
 from typing import get_args  # noqa: E402
 
 from ia import categorizar  # noqa: E402
+from mensagens import Local  # noqa: E402
 from models import Categoria, TransacaoCriar  # noqa: E402
+
+# --pais BR: conta do Brasil em reais (o prompt da categorização escolhe-se pela moeda da conta).
+LOCAIS = {"PT": Local("PT", "EUR"), "BR": Local("BR", "BRL")}
 
 CATEGORIAS = set(get_args(Categoria))
 
@@ -60,7 +65,21 @@ def ler_casos(nome: str) -> list[dict]:
 
 
 def main():
-    argumentos = [a for a in sys.argv[1:] if a != "--guardar"]
+    argumentos = sys.argv[1:]
+    pais = "PT"
+    if "--pais" in argumentos:
+        posicao = argumentos.index("--pais")
+        pais = argumentos[posicao + 1].upper() if posicao + 1 < len(argumentos) else ""
+        if pais not in LOCAIS:
+            print("Usa --pais PT ou --pais BR.")
+            sys.exit(1)
+        del argumentos[posicao : posicao + 2]
+    argumentos = [a for a in argumentos if a != "--guardar"]
+    # Uma opção desconhecida (ex. "--pais=BR" ou um 2.º --pais) parava na nota e gastava pedidos com o país errado.
+    desconhecidas = [a for a in argumentos if a.startswith("--")]
+    if desconhecidas:
+        print(f"Opção desconhecida: {desconhecidas[0]}. Usa --pais PT ou --pais BR (uma vez) e --guardar.")
+        sys.exit(1)
     # O conjunto de casos é o argumento que acaba em .csv; o resto é uma nota para o resultados.md.
     conjunto = next((a for a in argumentos if a.endswith(".csv")), "casos_categorizacao.csv")
     nota = " ".join(a for a in argumentos if not a.endswith(".csv"))
@@ -70,7 +89,7 @@ def main():
     ]
 
     # Exatamente a mesma função que a API usa ao importar um extrato: é ela que se está a avaliar.
-    respostas = categorizar(transacoes)
+    respostas = categorizar(transacoes, local=LOCAIS[pais])
 
     erros = [
         (caso["descricao"], caso["categoria"], resposta)
@@ -81,7 +100,7 @@ def main():
     percentagem = 100 * acertos / len(casos)
     modelo = os.getenv("CLAUDE_MODELO", "claude-haiku-5-5")
 
-    print(f"Modelo: {modelo} | Conjunto: {conjunto}")
+    print(f"Modelo: {modelo} | Conjunto: {conjunto} | País: {pais}")
     print(f"Acertou {acertos} de {len(casos)}: {percentagem:.1f}%\n")
 
     if erros:
@@ -97,8 +116,8 @@ def main():
         if not resultados.exists():
             resultados.write_text(
                 "# Resultados da avaliação da categorização\n\n"
-                "| Data | Modelo | Casos | Acertos | Percentagem |\n"
-                "|---|---|---|---|---|\n",
+                "| Data | Modelo | Conjunto | Casos | Acertos | Percentagem | Nota |\n"
+                "|---|---|---|---|---|---|---|\n",
                 encoding="utf-8",
             )
         with open(resultados, "a", encoding="utf-8") as ficheiro:

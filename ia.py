@@ -172,7 +172,8 @@ O sinal do valor:
 
 Abreviaturas comuns nas descrições:
 - "PIX" = Pix (pagamento ou transferência instantânea). Pix para uma loja ou empresa: a categoria é a da loja;
-  Pix para uma pessoa: categoria = transferências.
+  Pix para uma pessoa: categoria = transferências. Pix recebido de uma pessoa: categoria = transferências
+  (só é rendimento se a descrição indicar salário, um serviço prestado ou outra receita).
 - "TED", "DOC", "TEF" = transferência bancária
 - "SAQUE" = saque de dinheiro em um caixa eletrônico
 - "PAG BOLETO" = pagamento de boleto (a categoria é a do que foi pago, se a descrição disser; senão, outros)
