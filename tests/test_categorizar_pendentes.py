@@ -74,7 +74,7 @@ def transacoes(monkeypatch):
 def test_categoriza_o_lote_de_pendentes_numa_so_chamada_e_um_pedido(cliente, limite, transacoes, monkeypatch):
     chamadas = []
     monkeypatch.setattr(
-        main, "categorizar", lambda lista, user_id=None: chamadas.append(len(lista)) or ["outros"] * len(lista)
+        main, "categorizar", lambda lista, user_id=None, local=None: chamadas.append(len(lista)) or ["outros"] * len(lista)
     )
 
     resposta = cliente.post("/transacoes/categorizar")
@@ -88,7 +88,7 @@ def test_categoriza_o_lote_de_pendentes_numa_so_chamada_e_um_pedido(cliente, lim
 
 def test_vao_no_maximo_300_pendentes_as_mais_recentes_primeiro(cliente, limite, transacoes, monkeypatch):
     # Quem tiver mais de 300 carrega outra vez: cada clique é um lote e um pedido.
-    monkeypatch.setattr(main, "categorizar", lambda lista, user_id=None: ["outros"] * len(lista))
+    monkeypatch.setattr(main, "categorizar", lambda lista, user_id=None, local=None: ["outros"] * len(lista))
 
     resposta = cliente.post("/transacoes/categorizar")
 
@@ -102,7 +102,7 @@ def test_vao_no_maximo_300_pendentes_as_mais_recentes_primeiro(cliente, limite, 
 def test_sem_pendentes_nao_chama_a_ia_nem_gasta_pedido(cliente, limite, monkeypatch):
     # A BaseDadosFalsa do conftest devolve uma lista vazia no select.
     chamadas = []
-    monkeypatch.setattr(main, "categorizar", lambda lista, user_id=None: chamadas.append(lista))
+    monkeypatch.setattr(main, "categorizar", lambda lista, user_id=None, local=None: chamadas.append(lista))
 
     resposta = cliente.post("/transacoes/categorizar")
 
@@ -116,7 +116,7 @@ def test_sem_pedidos_responde_429_sem_chamar_a_ia(cliente, limite, transacoes, m
     # O frontend mostra o AvisoLimite quando recebe este 429.
     limite.maximo = 0
     chamadas = []
-    monkeypatch.setattr(main, "categorizar", lambda lista, user_id=None: chamadas.append(lista))
+    monkeypatch.setattr(main, "categorizar", lambda lista, user_id=None, local=None: chamadas.append(lista))
 
     resposta = cliente.post("/transacoes/categorizar")
 
@@ -126,7 +126,7 @@ def test_sem_pedidos_responde_429_sem_chamar_a_ia(cliente, limite, transacoes, m
 
 
 def test_ia_em_baixo_responde_503_e_nao_grava_nada(cliente, limite, transacoes, monkeypatch):
-    def ia_em_baixo(lista, user_id=None):
+    def ia_em_baixo(lista, user_id=None, local=None):
         raise ErroIA("IA indisponível (teste)")
 
     monkeypatch.setattr(main, "categorizar", ia_em_baixo)

@@ -158,6 +158,9 @@ function Comparacao({ comparacao, ano, totais }: { comparacao: ComparacaoAno; an
 function Relatorio({ dados }: { dados: RelatorioAnual }) {
   const { TEXTOS_RELATORIO: T } = useTextos(DICIONARIO_RELATORIO);
   const f = useFormatos();
+  // As etiquetas já vêm com maiúscula da API. Em PT fica o capitalize de sempre (igual a antes); no BR não,
+  // senão "Telefone e internet" aparecia "Telefone E Internet".
+  const maiusculas = f.pais === "BR" ? "" : "capitalize";
   const maiorCategoria = dados.categorias[0]?.percentagem ?? 0;
   return (
     <>
@@ -234,7 +237,7 @@ function Relatorio({ dados }: { dados: RelatorioAnual }) {
               {dados.categorias.map((c) => (
                 <li key={c.categoria} className="text-sm">
                   <div className="flex items-baseline gap-3">
-                    <span className="min-w-0 flex-1 truncate capitalize text-texto">{c.etiqueta}</span>
+                    <span className={`min-w-0 flex-1 truncate text-texto ${maiusculas}`}>{c.etiqueta}</span>
                     <span className="shrink-0 tabular-nums text-texto">{f.dinheiro(c.total)}</span>
                     <span className="w-12 shrink-0 text-right text-xs tabular-nums text-texto-suave">
                       {f.numero(c.percentagem)}%
@@ -279,7 +282,7 @@ function Relatorio({ dados }: { dados: RelatorioAnual }) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-texto print:whitespace-normal">{s.descricao}</p>
                   <p className="text-xs text-texto-suave">
-                    {diaCurto(s.data, f)} · <span className="capitalize">{s.etiqueta}</span>
+                    {diaCurto(s.data, f)} · <span className={maiusculas}>{s.etiqueta}</span>
                   </p>
                 </div>
                 <span className="shrink-0 font-semibold tabular-nums text-texto">{f.dinheiro(s.valor)}</span>
@@ -301,7 +304,7 @@ function Relatorio({ dados }: { dados: RelatorioAnual }) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-texto print:whitespace-normal">{r.descricao}</p>
                     <p className="text-xs text-texto-suave">
-                      <span className="capitalize">{r.etiqueta}</span> ·{" "}
+                      <span className={maiusculas}>{r.etiqueta}</span> ·{" "}
                       {preencher(T.recorrentesPorMes, { valor: f.dinheiro(r.valor_mensal) })} ·{" "}
                       {r.pagamentos_no_ano === 1
                         ? T.recorrentesUmPagamento

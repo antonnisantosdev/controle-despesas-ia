@@ -33,11 +33,11 @@ def ia(monkeypatch):
     """Substitui a IA: lê sempre um movimento e categoriza como "outros". Guarda o user_id de cada chamada."""
     chamadas = []
 
-    def ler_extrato_pdf(pdf, user_id=None):
+    def ler_extrato_pdf(pdf, user_id=None, local=None):
         chamadas.append(("ler_extrato_pdf", user_id))
         return ExtratoPdf(movimentos=[MovimentoPdf(data="2026-10-01", descricao="CAFE", valor=-1.2, saldo=None)])
 
-    def categorizar(transacoes, user_id=None):
+    def categorizar(transacoes, user_id=None, local=None):
         chamadas.append(("categorizar", user_id))
         return ["outros"] * len(transacoes)
 

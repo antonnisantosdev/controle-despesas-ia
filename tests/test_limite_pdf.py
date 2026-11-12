@@ -26,12 +26,12 @@ def ia(monkeypatch):
     """Substitui a IA e o contador de páginas; regista por que ordem foram chamados."""
     chamadas = []
 
-    def ler_extrato_pdf(pdf, user_id=None):
+    def ler_extrato_pdf(pdf, user_id=None, local=None):
         chamadas.append("ia")
         return ExtratoPdf(movimentos=[MovimentoPdf(data="2026-10-01", descricao="CAFE", valor=-1.2, saldo=None)])
 
     monkeypatch.setattr(main, "ler_extrato_pdf", ler_extrato_pdf)
-    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None: ["outros"] * len(transacoes))
+    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None, local=None: ["outros"] * len(transacoes))
     monkeypatch.setattr(main, "contar_paginas_pdf", lambda pdf: chamadas.append("paginas") or 1)
     return chamadas
 

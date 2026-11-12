@@ -9,6 +9,7 @@ planos pagos conta-se sempre em Lisboa (é o CEO que o escreve, em Portugal).
 
 from __future__ import annotations
 
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from typing import TYPE_CHECKING, Literal
@@ -18,6 +19,7 @@ from fastapi import HTTPException
 from postgrest.exceptions import APIError
 
 from database import supabase
+from mensagens import Local, msg
 
 # O models.py usa os limites do histórico do chat (abaixo): para não haver importação circular,
 # os modelos importam-se dentro das funções que os usam.
@@ -106,29 +108,16 @@ def primeiro_mes_visivel(config: ConfigIA, hoje: date) -> str | None:
     return f"{absoluto // 12:04d}-{absoluto % 12 + 1:02d}"
 
 
-# Funções que só os planos pagos têm, com a mensagem do 402 para quem não as tem.
+# Funções que só os planos pagos têm, com a mensagem do 402 para quem não as tem, em PT (a de cada país
+# está em mensagens.py, chave "funcao_paga_<funcao>"). Os textos são os mesmos do frontend.
 PLANOS_PAGOS = {"essencial", "completo"}
 FUNCOES_PAGAS = {
-    "importar_pdf": (
-        "A importação de extratos em PDF está disponível nos planos Essencial e Completo. "
-        "No Free, podes importar o extrato em CSV."
-    ),
-    "ler_talao": "A leitura de talões está disponível nos planos Essencial e Completo.",
-    # O mesmo texto do frontend.
-    "precos_por_loja": "Comparar preços entre as lojas onde compraste está disponível nos planos Essencial e Completo.",
-    "exportar_relatorio": (
-        "Descarregar o resumo anual em CSV (para abrir numa folha de cálculo) está disponível nos planos "
-        "Essencial e Completo. No Free, podes ver o resumo na app e guardá-lo em PDF."
-    ),
+    funcao: msg(f"funcao_paga_{funcao}", "PT")
+    for funcao in ("importar_pdf", "ler_talao", "precos_por_loja", "exportar_relatorio")
 }
 
-# Funções que só o plano Completo tem, com a mensagem do 402 para os outros planos.
-FUNCOES_SO_COMPLETO = {
-    "resumo_anual_ia": (
-        "O resumo do ano escrito pela IA está disponível no plano Completo. "
-        "Os números do resumo anual continuam disponíveis no teu plano."
-    ),
-}
+# Funções que só o plano Completo tem, com a mensagem do 402 para os outros planos (chave "funcao_completo_<funcao>").
+FUNCOES_SO_COMPLETO = {"resumo_anual_ia": msg("funcao_completo_resumo_anual_ia", "PT")}
 
 # Extratos em PDF que cada plano pode importar por mês de Lisboa (o Free não importa PDF).
 # Contam à parte dos pedidos à IA: cada PDF conta aqui E gasta 1 pedido. Para mudar, muda-se só aqui.
@@ -146,13 +135,14 @@ MAX_PAGINAS_PDF = 10
 MAX_TRANSACOES_POR_CONTA = 20000
 
 
-def exigir_espaco_na_conta(atuais: int, novas: int) -> None:
-    """Responde 422 se as movimentações atuais mais as novas passarem MAX_TRANSACOES_POR_CONTA."""
+def exigir_espaco_na_conta(atuais: int, novas: int, user_id: str | None = None) -> None:
+    """Responde 422 se as movimentações atuais mais as novas passarem MAX_TRANSACOES_POR_CONTA.
+
+    user_id: só para escrever a mensagem no país da conta (sem ele, em PT).
+    """
     if atuais + novas > MAX_TRANSACOES_POR_CONTA:
-        raise HTTPException(
-            status_code=422,
-            detail="Chegaste ao máximo de 20 000 movimentações nesta conta. Fala connosco se precisares de mais.",
-        )
+        pais = local_do_utilizador(user_id).pais if user_id else None
+        raise HTTPException(status_code=422, detail=msg("conta_cheia", pais))
 
 
 # Hora de Lisboa e de São Paulo, com a mudança de hora incluída. No Windows a base de dados de fusos vem
@@ -269,8 +259,8 @@ def exigir_funcao(user_id: str, funcao: str) -> None:
     402 e não 403: no frontend, 403 quer dizer "assinatura expirada" e manda para outra página.
     """
     if not plano_inclui(plano_do_utilizador(user_id), funcao):
-        mensagem = FUNCOES_SO_COMPLETO.get(funcao) or FUNCOES_PAGAS[funcao]
-        raise HTTPException(status_code=402, detail=mensagem)
+        chave = f"funcao_completo_{funcao}" if funcao in FUNCOES_SO_COMPLETO else f"funcao_paga_{funcao}"
+        raise HTTPException(status_code=402, detail=msg(chave, local_do_utilizador(user_id).pais))
 
 
 # Códigos de erro do PostgREST quando uma coluna não existe (ex.: uso_ia.funcao antes da sql/016).
@@ -313,17 +303,15 @@ def pdfs_no_mes(user_id: str) -> int:
     except APIError as erro:
         # Falha fechado: sem saber quantos PDF já foram lidos, não se lê mais nenhum (o CSV continua).
         print(f"AVISO: não foi possível contar os PDF deste mês: {erro}")
-        raise HTTPException(
-            status_code=503, detail="Não foi possível importar o PDF agora. Tenta outra vez daqui a pouco."
-        )
+        raise HTTPException(status_code=503, detail=msg("pdf_indisponivel", local_do_utilizador(user_id).pais))
 
 
-def mensagem_do_limite_pdf(limite: int) -> str:
-    """O texto do 429 do limite de PDF (igual ao do frontend, textosPlanos.ts)."""
-    return (
-        f"Chegaste ao limite de {limite} extratos PDF este mês. O contador volta a zero no dia 1. "
-        "Até lá, podes importar o extrato em CSV."
-    )
+def mensagem_do_limite_pdf(limite: int, pais: str | None = None) -> str:
+    """O texto do 429 do limite de PDF no país da conta (o PT é igual ao do frontend, textosPlanos.ts).
+
+    Tem sempre "extratos PDF": é assim que o frontend o distingue do limite de pedidos (api.ts, eLimitePdf).
+    """
+    return msg("limite_pdf", pais, limite=limite)
 
 
 def exigir_limite_pdf(user_id: str) -> None:
@@ -334,7 +322,7 @@ def exigir_limite_pdf(user_id: str) -> None:
     """
     limite = limite_pdf_do_plano(plano_do_utilizador(user_id))
     if pdfs_no_mes(user_id) >= limite:
-        raise HTTPException(status_code=429, detail=mensagem_do_limite_pdf(limite))
+        raise HTTPException(status_code=429, detail=mensagem_do_limite_pdf(limite, local_do_utilizador(user_id).pais))
 
 
 def pedidos_no_periodo(user_id: str, periodo: str) -> int:
@@ -389,7 +377,42 @@ def _perfil_da_linha(linha: dict) -> dict:
     return {"pais": pais, "paises_bancos": bancos, "moeda": moeda}
 
 
+# A assinatura lida durante um pedido fica guardada até ao fim desse pedido (só desse): o plano, o "hoje", a moeda
+# e o país (língua das mensagens e da IA) saem da mesma leitura, em vez de uma consulta para cada um.
+# O main.py abre e fecha esta memória em cada pedido (CacheDoPedido). Fora de um pedido (testes, scripts) é None
+# e cada chamada lê a base de dados, como antes.
+_ASSINATURAS_DO_PEDIDO: ContextVar[dict[str, Assinatura] | None] = ContextVar("assinaturas_do_pedido", default=None)
+
+
+def abrir_cache_do_pedido() -> Token:
+    """Começa a memória das assinaturas de um pedido. Devolve o que o fechar_cache_do_pedido precisa."""
+    return _ASSINATURAS_DO_PEDIDO.set({})
+
+
+def fechar_cache_do_pedido(token: Token) -> None:
+    """Esquece as assinaturas lidas no pedido."""
+    _ASSINATURAS_DO_PEDIDO.reset(token)
+
+
+def esquecer_assinatura(user_id: str) -> None:
+    """Tira a assinatura da memória do pedido (depois de a mudar, ex.: PUT /conta/perfil)."""
+    cache = _ASSINATURAS_DO_PEDIDO.get()
+    if cache is not None:
+        cache.pop(user_id, None)
+
+
 def assinatura_do_utilizador(user_id: str) -> Assinatura:
+    """A assinatura da conta, lida uma só vez por pedido (ver _ASSINATURAS_DO_PEDIDO)."""
+    cache = _ASSINATURAS_DO_PEDIDO.get()
+    if cache is not None and user_id in cache:
+        return cache[user_id]
+    conta = _ler_assinatura(user_id)
+    if cache is not None:
+        cache[user_id] = conta
+    return conta
+
+
+def _ler_assinatura(user_id: str) -> Assinatura:
     """A assinatura da conta (plano, ativo_ate e perfil), numa só consulta. Sem linha: Assinatura() (plano None).
 
     Antes da sql/020 as colunas do perfil não existem: lê só o plano e o ativo_ate, e o perfil fica
@@ -415,6 +438,21 @@ def assinatura_do_utilizador(user_id: str) -> Assinatura:
     ativo_ate = date.fromisoformat(linha["ativo_ate"]) if linha.get("ativo_ate") else None
     perfil = _perfil_da_linha(linha) if com_perfil else {}
     return Assinatura(plano=linha["plano"], ativo_ate=ativo_ate, com_perfil=com_perfil, **perfil)
+
+
+def local_do_utilizador(user_id: str) -> Local:
+    """O país onde a pessoa vive e a moeda principal: a língua das mensagens e o que a IA recebe (mensagens.Local).
+
+    Usa a assinatura já lida no pedido (sem consulta a mais, ver _ASSINATURAS_DO_PEDIDO). Se a leitura falhar,
+    fica PT/EUR (só muda a língua e a moeda dos textos) e deixa um aviso nos logs, sem dados da conta.
+    """
+    try:
+        conta = assinatura_do_utilizador(user_id)
+    except Exception as erro:
+        # De propósito largo: corre também nos caminhos de erro (429, 402...), que nunca podem virar 500.
+        print(f"AVISO: país da conta não lido ({type(erro).__name__}); textos em PT.")
+        return Local()
+    return Local(pais=conta.pais, moeda=conta.moeda)
 
 
 def moeda_da_conta(user_id: str) -> str | None:
@@ -480,17 +518,9 @@ def planos_disponiveis() -> list[PlanoDisponivel]:
     ]
 
 
-def mensagem_do_limite(limite: int, periodo: str) -> str:
-    """O texto do 429, conforme o plano conta por dia ou por mês."""
-    if periodo == "mes":
-        return (
-            f"Chegaste ao limite deste mês. Já usaste os {limite} pedidos à IA deste mês. "
-            "O contador volta a zero no dia 1."
-        )
-    return (
-        f"Chegaste ao limite de hoje. Já usaste os {limite} pedidos à IA do teu plano. "
-        "O contador volta a zero à meia-noite."
-    )
+def mensagem_do_limite(limite: int, periodo: str, pais: str | None = None) -> str:
+    """O texto do 429, conforme o plano conta por dia ou por mês, no país da conta (sem país, PT)."""
+    return msg("limite_pedidos_mes" if periodo == "mes" else "limite_pedidos_dia", pais, limite=limite)
 
 
 # Códigos de erro do PostgREST quando a função registar_pedido_ia não existe com os parâmetros enviados
@@ -559,7 +589,7 @@ def registar_pergunta(user_id: str, funcao: str) -> None:
         registado = registar_pedido_em_dois_passos(user_id, periodo, limite, funcao)
 
     if not registado:
-        raise HTTPException(status_code=429, detail=mensagem_do_limite(limite, periodo))
+        raise HTTPException(status_code=429, detail=mensagem_do_limite(limite, periodo, local_do_utilizador(user_id).pais))
 
 
 def _chamar_registar_pdf_ia(parametros: dict) -> str | None:
@@ -606,13 +636,14 @@ def registar_pdf(user_id: str) -> None:
 
     if resultado == "ok":
         return
+    pais = local_do_utilizador(user_id).pais
     if resultado == "pdf":
-        raise HTTPException(status_code=429, detail=mensagem_do_limite_pdf(limite_pdf))
+        raise HTTPException(status_code=429, detail=mensagem_do_limite_pdf(limite_pdf, pais))
     if resultado == "pedidos":
-        raise HTTPException(status_code=429, detail=mensagem_do_limite(limite, periodo))
+        raise HTTPException(status_code=429, detail=mensagem_do_limite(limite, periodo, pais))
     # Resposta inesperada: falha fechado (não se sabe se o pedido contou, por isso não se chama a IA).
     print(f"AVISO: registar_pdf_ia devolveu uma resposta inesperada: {resultado!r}")
-    raise HTTPException(status_code=503, detail="Não foi possível importar o PDF agora. Tenta outra vez daqui a pouco.")
+    raise HTTPException(status_code=503, detail=msg("pdf_indisponivel", pais))
 
 
 def pode_usar_ia(user_id: str, funcao: str) -> bool:
@@ -629,7 +660,6 @@ def pode_usar_ia(user_id: str, funcao: str) -> bool:
 
 
 def aviso_resumo_sem_pedidos(user_id: str) -> str:
-    """O texto do resumo do mês quando já não há pedidos à IA (dia nos pagos, mês no Free)."""
-    if periodo_do_plano(plano_do_utilizador(user_id)) == "mes":
-        return "Chegaste ao limite de pedidos à IA deste mês. O resumo volta no dia 1."
-    return "Chegaste ao limite de pedidos à IA de hoje. O resumo volta depois da meia-noite."
+    """O texto do resumo do mês quando já não há pedidos à IA (dia nos pagos, mês no Free), no país da conta."""
+    por_mes = periodo_do_plano(plano_do_utilizador(user_id)) == "mes"
+    return msg("resumo_sem_pedidos_mes" if por_mes else "resumo_sem_pedidos_dia", local_do_utilizador(user_id).pais)

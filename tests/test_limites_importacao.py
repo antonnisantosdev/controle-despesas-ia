@@ -29,7 +29,7 @@ def ia(monkeypatch):
     """Regista quantas transações foram à IA em cada chamada."""
     chamadas = []
     monkeypatch.setattr(
-        main, "categorizar", lambda lista, user_id=None: chamadas.append(len(lista)) or ["outros"] * len(lista)
+        main, "categorizar", lambda lista, user_id=None, local=None: chamadas.append(len(lista)) or ["outros"] * len(lista)
     )
     return chamadas
 
@@ -117,7 +117,7 @@ def test_pdf_com_a_conta_no_teto_e_recusado_antes_de_ler(cliente, limite, base_d
     base_dados.contagem = MAX_TRANSACOES_POR_CONTA
     lidos = []
     monkeypatch.setattr(main, "contar_paginas_pdf", lambda pdf: lidos.append("paginas") or 1)
-    monkeypatch.setattr(main, "ler_extrato_pdf", lambda pdf, user_id=None: lidos.append("ia"))
+    monkeypatch.setattr(main, "ler_extrato_pdf", lambda pdf, user_id=None, local=None: lidos.append("ia"))
 
     resposta = importar(cliente, b"%PDF-1.4 extrato inventado", nome="extrato.pdf", tipo="application/pdf")
 
@@ -136,7 +136,7 @@ def test_pdf_com_movimentos_a_mais_para_o_teto_nao_grava_nem_categoriza(cliente,
     movimentos = [
         MovimentoPdf(data=date(2026, 10, 1), descricao="CAFE", valor=-1.2, saldo=saldo) for saldo in (10.0, 8.8)
     ]
-    monkeypatch.setattr(main, "ler_extrato_pdf", lambda pdf, user_id=None: ExtratoPdf(movimentos=movimentos))
+    monkeypatch.setattr(main, "ler_extrato_pdf", lambda pdf, user_id=None, local=None: ExtratoPdf(movimentos=movimentos))
 
     resposta = importar(cliente, b"%PDF-1.4 extrato inventado", nome="extrato.pdf", tipo="application/pdf")
 

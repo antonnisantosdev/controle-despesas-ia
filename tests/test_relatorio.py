@@ -301,7 +301,7 @@ def test_relatorio_json_e_de_todos_os_planos(cliente, leituras, limite):
 def ia_imitada(monkeypatch):
     chamadas = []
 
-    def resumir_ano(dados, user_id=None, config=None):
+    def resumir_ano(dados, user_id=None, config=None, local=None):
         chamadas.append((dados, user_id, config))
         return ResumoAnualIA(resumo="Em 2025 entraram 12.000,00 €.")
 

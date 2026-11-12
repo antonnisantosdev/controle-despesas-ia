@@ -28,6 +28,7 @@ import perfil
 from limites import FUSO_LISBOA, FUSO_SAO_PAULO, Assinatura, CONFIG_IA_POR_PLANO
 from models import NovaCompra, NovaConta, PerfilConta, TrocaGoogle
 from conftest import BaseDadosFalsa
+from mensagens import msg
 from perfil import Perfil
 
 UTC = timezone.utc
@@ -596,6 +597,28 @@ def test_moeda_que_nao_e_dos_bancos_da_422_sem_chamar_a_base_de_dados(cliente, c
     assert falso.chamadas == []
 
 
+def test_respostas_do_perfil_em_br_numa_conta_do_brasil(cliente, conta, rpc_perfil):
+    conta(CONTA_BR)
+    rpc_perfil("tem_dados")
+
+    com_dados = cliente.put("/conta/perfil", json={"paises_bancos": ["PT"]})
+    incoerente = cliente.put("/conta/perfil", json={"moeda": "EUR"})
+
+    assert com_dados.status_code == 409
+    assert com_dados.json() == {"detail": msg("perfil_moeda_com_dados", "BR")}
+    assert incoerente.status_code == 422
+    assert incoerente.json() == {"detail": msg("perfil_moeda_incoerente", "BR")}
+
+
+def test_503_do_perfil_em_br_numa_conta_do_brasil(cliente, conta, rpc_perfil):
+    conta(CONTA_BR)
+    rpc_perfil("talvez")
+
+    resposta = cliente.put("/conta/perfil", json={"pais": "PT"})
+
+    assert resposta.json() == {"detail": "Não foi possível salvar as configurações agora. Tente mais tarde."}
+
+
 def test_antes_da_020_o_perfil_responde_503(cliente, conta, rpc_perfil):
     conta(Assinatura("free", None, com_perfil=False))
     falso = rpc_perfil("ok")
@@ -671,8 +694,21 @@ def test_o_11_pedido_numa_hora_da_429_sem_tocar_na_base_de_dados(cliente, monkey
 
     assert respostas == [200] * 10
     assert a_mais.status_code == 429
-    assert a_mais.json() == {"detail": limite_ip.MENSAGEM_MUITAS_MUDANCAS_DE_PERFIL}
+    # Sem ler a base de dados, a língua do 429 vem do país pedido (aqui BR).
+    assert a_mais.json() == {"detail": msg("perfil_muitas_mudancas", "BR")}
     assert len(leituras) == 10 and len(falso.chamadas) == 10
+
+
+def test_o_429_do_perfil_sem_pais_no_pedido_fica_em_pt(cliente, conta, rpc_perfil, relogio):
+    conta()
+    rpc_perfil("ok")
+    for _ in range(10):
+        cliente.put("/conta/perfil", json={"paises_bancos": ["PT"]})
+
+    a_mais = cliente.put("/conta/perfil", json={"paises_bancos": ["PT"]})
+
+    assert a_mais.status_code == 429
+    assert a_mais.json() == {"detail": limite_ip.MENSAGEM_MUITAS_MUDANCAS_DE_PERFIL}
 
 
 def test_passada_uma_hora_o_perfil_volta_a_mudar(cliente, conta, rpc_perfil, relogio):
@@ -773,7 +809,7 @@ def test_sem_a_020_a_movimentacao_vai_sem_moeda(cliente, base_dados, monkeypatch
 
 def test_importar_csv_grava_a_moeda_da_conta_em_cada_linha(cliente, base_dados, limite, monkeypatch):
     monkeypatch.setattr(main, "moeda_da_conta", lambda user_id: "BRL")
-    monkeypatch.setattr(main, "categorizar", lambda novas, user_id=None: ["outros"] * len(novas))
+    monkeypatch.setattr(main, "categorizar", lambda novas, user_id=None, local=None: ["outros"] * len(novas))
     csv = "Data;Descrição;Montante;Saldo\n01-11-2026;MERCADO INVENTADO;-10,00;90,00\n02-11-2026;SALARIO INVENTADO;1000,00;1090,00\n"
 
     resposta = cliente.post("/transacoes/importar", files={"ficheiro": ("extrato.csv", csv.encode(), "text/csv")})

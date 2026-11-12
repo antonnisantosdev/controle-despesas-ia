@@ -364,7 +364,7 @@ def conversa_falsa(monkeypatch):
     """Substitui o conversar() do main e guarda com que argumentos foi chamado."""
     chamadas = []
 
-    def conversar(pergunta, ferramentas, executar, user_id=None, config=None, historico=None, hoje=None):
+    def conversar(pergunta, ferramentas, executar, user_id=None, config=None, historico=None, hoje=None, local=None):
         chamadas.append({"pergunta": pergunta, "config": config, "historico": historico, "executar": executar, "hoje": hoje})
         return "resposta de teste"
 

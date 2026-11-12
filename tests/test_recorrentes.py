@@ -334,7 +334,7 @@ def test_criar_ou_editar_movimentacoes_apaga_a_cache(cliente, leituras, base_dad
 
 
 def test_importar_apaga_a_cache(cliente, leituras, monkeypatch):
-    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None: ["outros"] * len(transacoes))
+    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None, local=None: ["outros"] * len(transacoes))
     cliente.get("/recorrentes")
 
     csv = "Data;Descrição;Montante;Saldo\n05-11-2026;SPOTIFY;-7,99;100,00\n".encode()

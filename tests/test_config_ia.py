@@ -114,7 +114,7 @@ def test_a_rota_do_resumo_passa_a_config_do_plano(cliente, limite, monkeypatch, 
     recebidas = []
     monkeypatch.setattr(main, "recolher_dados", lambda user_id, mes: {"transacoes_no_mes": 1, "mes": mes})
     monkeypatch.setattr(
-        main, "resumir_mes", lambda dados, user_id=None, config=None: recebidas.append(config) or ResumoMes(resumo="ok", alertas=[])
+        main, "resumir_mes", lambda dados, user_id=None, config=None, local=None: recebidas.append(config) or ResumoMes(resumo="ok", alertas=[])
     )
 
     assert cliente.get("/resumo?mes=2026-11").status_code == 200

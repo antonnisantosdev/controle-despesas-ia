@@ -35,7 +35,7 @@ from demo import (
     registar_entrada_demo,
     registar_forma_do_ip,
 )
-from ferramentas import FERRAMENTAS, executar_ferramenta
+from ferramentas import executar_ferramenta, ferramentas_para
 from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_ano, resumir_mes, sugerir_orcamento
 from importar_csv import (
     MAX_ENTRADAS_ARVORE_PDF,
@@ -58,13 +58,17 @@ from limite_ip import (
     registar_mudanca_de_perfil,
 )
 from lista_espera import inscrever
+from mensagens import Local, msg
 from limites import (
     MAX_PAGINAS_PDF,
+    abrir_cache_do_pedido,
     aviso_resumo_sem_pedidos,
     estado_do_plano,
     exigir_espaco_na_conta,
     exigir_funcao,
+    fechar_cache_do_pedido,
     hoje_do_utilizador,
+    local_do_utilizador,
     moeda_da_conta,
     plano_e_config_ia,
     planos_disponiveis,
@@ -151,6 +155,35 @@ class SemIpNoRegisto(logging.Filter):
 
 # Fica no logger (e não num handler): o uvicorn troca os handlers ao configurar os logs, mas mantém os filtros.
 logging.getLogger("uvicorn.access").addFilter(SemIpNoRegisto())
+
+
+class CacheDoPedido:
+    """Em cada pedido, a assinatura da conta lê-se uma só vez (limites._ASSINATURAS_DO_PEDIDO): o plano,
+    o "hoje", a moeda e o país (língua das mensagens e da IA) vêm todos da mesma leitura.
+
+    Middleware ASGI simples: abre a memória antes da rota e esquece-a no fim. Cada pedido tem a sua.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        token = abrir_cache_do_pedido()
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            fechar_cache_do_pedido(token)
+
+
+app.add_middleware(CacheDoPedido)
+
+
+def erro_no_pais(user_id: str, status: int, chave: str, **valores) -> HTTPException:
+    """O HTTPException com a mensagem (mensagens.py) no país da conta. Para os caminhos de erro das rotas com sessão."""
+    return HTTPException(status_code=status, detail=msg(chave, local_do_utilizador(user_id).pais, **valores))
 
 # Os endereços do frontend (FRONTEND_URL); no deploy junta-se o da Vercel, separado por vírgula.
 # Servem para o CORS e para validar o regresso do login com o Google.
@@ -337,8 +370,9 @@ def quem_sou_eu(user_id: str = Depends(obter_utilizador_atual)):
 
 # O que o utilizador tem de escrever para apagar a conta (o frontend pede o mesmo).
 CONFIRMACAO_APAGAR_CONTA = "APAGAR"
-MENSAGEM_SEM_CONFIRMACAO = 'Para apagar a conta, escreve "APAGAR" na confirmação.'
-MENSAGEM_APAGAR_CONTA_FALHOU = "Não foi possível apagar a conta agora. Tenta mais tarde."
+# Em PT; a resposta vai no país da conta (mensagens.py).
+MENSAGEM_SEM_CONFIRMACAO = msg("apagar_conta_sem_confirmacao", "PT")
+MENSAGEM_APAGAR_CONTA_FALHOU = msg("apagar_conta_falhou", "PT")
 
 
 # Apaga a conta de quem está autenticado (só a própria: o id vem do token, nunca do pedido).
@@ -349,7 +383,7 @@ def apagar_conta(
     pedido: ConfirmacaoApagarConta | None = None, user_id: str = Depends(obter_utilizador_confirmado)
 ) -> None:
     if pedido is None or pedido.confirmacao != CONFIRMACAO_APAGAR_CONTA:
-        raise HTTPException(status_code=400, detail=MENSAGEM_SEM_CONFIRMACAO)
+        raise erro_no_pais(user_id, 400, "apagar_conta_sem_confirmacao")
     # Segunda barreira: mesmo que a lista da demo mude por engano, a conta de demo não se apaga.
     id_demo = config_demo().user_id
     if id_demo is not None and str(user_id).lower() == id_demo:
@@ -359,7 +393,7 @@ def apagar_conta(
     except Exception as erro:
         # Só o tipo no log: a mensagem do Supabase pode trazer dados da conta.
         print(f"AVISO: apagar conta falhou ({type(erro).__name__}).")
-        raise HTTPException(status_code=502, detail=MENSAGEM_APAGAR_CONTA_FALHOU)
+        raise erro_no_pais(user_id, 502, "apagar_conta_falhou")
     # O que ficava na memória do servidor sobre esta conta.
     esquecer_recorrentes(user_id)
     esquecer_resumos(user_id)
@@ -370,7 +404,13 @@ def apagar_conta(
 # Até 10 pedidos por hora por conta (429 acima disso, antes de ler a base de dados): ver limite_ip.py.
 @app.put("/conta/perfil")
 def mudar_perfil(pedido: PerfilConta, user_id: str = Depends(obter_utilizador_atual)) -> PerfilGuardado:
-    registar_mudanca_de_perfil(user_id)
+    try:
+        registar_mudanca_de_perfil(user_id)
+    except HTTPException as erro:
+        # O 429 vem antes de ler a base de dados (é para isso que serve): a língua vem do país pedido, se vier.
+        raise HTTPException(
+            status_code=erro.status_code, detail=msg("perfil_muitas_mudancas", pedido.pais), headers=erro.headers
+        )
     perfil = atualizar_perfil(user_id, pedido.pais, pedido.paises_bancos, pedido.moeda)
     return PerfilGuardado(pais=perfil.pais, paises_bancos=list(perfil.paises_bancos), moeda=perfil.moeda)
 
@@ -430,7 +470,7 @@ def obter_transacao(transacao_id: IdTransacao, user_id: str = Depends(obter_util
 
     linhas = ler_todas(nova_consulta)
     if not linhas:
-        raise HTTPException(status_code=404, detail="Transação não encontrada")
+        raise erro_no_pais(user_id, 404, "transacao_nao_encontrada")
     return linhas[0]
 
 
@@ -438,11 +478,13 @@ def obter_transacao(transacao_id: IdTransacao, user_id: str = Depends(obter_util
 @app.post("/transacoes", status_code=201)
 def criar_transacao(nova: NovaMovimentacao, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
     # Antes de gastar um pedido à IA: a conta tem de ter espaço para mais uma.
-    exigir_espaco_na_conta(contar_transacoes(user_id), 1)
+    exigir_espaco_na_conta(contar_transacoes(user_id), 1, user_id)
     categoria = nova.categoria
     if not categoria and pode_usar_ia(user_id, "categorizar"):
         try:
-            categoria = categorizar([TransacaoCriar(**nova.model_dump())], user_id=user_id)[0]
+            # O país dos bancos (contexto da IA) vem da moeda da conta.
+            local = local_do_utilizador(user_id)
+            categoria = categorizar([TransacaoCriar(**nova.model_dump())], user_id=user_id, local=local)[0]
         except ErroIA as erro:
             # Sem raise: a movimentação grava-se sem categoria, para o utilizador não perder o que escreveu.
             # Fica para o POST /transacoes/categorizar tratar mais tarde.
@@ -470,7 +512,7 @@ def corrigir_categoria(
         .execute()
     )
     if not resposta.data:
-        raise HTTPException(status_code=404, detail="Transação não encontrada")
+        raise erro_no_pais(user_id, 404, "transacao_nao_encontrada")
     esquecer_recorrentes(user_id)  # a categoria aparece nos pagamentos que se repetem
     return resposta.data[0]
 
@@ -482,7 +524,7 @@ def corrigir_categoria(
 def apagar_transacao(transacao_id: IdTransacao, user_id: str = Depends(obter_utilizador_atual)) -> None:
     resposta = supabase.table("transacoes").delete().eq("id", transacao_id).eq("user_id", user_id).execute()
     if not resposta.data:
-        raise HTTPException(status_code=404, detail="Transação não encontrada")
+        raise erro_no_pais(user_id, 404, "transacao_nao_encontrada")
     esquecer_recorrentes(user_id)
 
 
@@ -512,11 +554,12 @@ def categorizar_pendentes(user_id: str = Depends(obter_utilizador_atual)) -> lis
 
     # O lote inteiro vai numa só chamada à IA, por isso conta como uma pergunta.
     registar_pergunta(user_id, "categorizar_pendentes")
+    local = local_do_utilizador(user_id)  # a assinatura já foi lida para o limite: sem consulta a mais
     try:
-        categorias = categorizar(pendentes, user_id=user_id)
+        categorias = categorizar(pendentes, user_id=user_id, local=local)
     except ErroIA as erro:
         print(erro)
-        raise HTTPException(status_code=503, detail="A categorização automática falhou. Tenta mais tarde.")
+        raise HTTPException(status_code=503, detail=msg("categorizacao_falhou", local.pais))
 
     atualizadas = []
     for transacao, categoria in zip(pendentes, categorias):
@@ -540,86 +583,65 @@ TAMANHO_MAXIMO_PDF = 10 * 1024 * 1024
 # Tamanho máximo de um extrato em CSV. Um ano de movimentos em CSV tem uns 100 KB.
 TAMANHO_MAXIMO_CSV = 1 * 1024 * 1024
 
-AVISO_IMPORTACAO_SEM_IA = (
-    "Importámos as movimentações sem categorias porque chegaste ao limite de pedidos à IA. "
-    "Podes categorizá-las mais tarde."
-)
-
-AVISO_IMPORTACAO_IA_EM_BAIXO = (
-    "Importámos as movimentações sem categorias porque a IA não respondeu. Podes categorizá-las mais tarde."
-)
-
-
-def ler_csv_enviado(csv: bytes) -> list[TransacaoImportada]:
+def ler_csv_enviado(csv: bytes, user_id: str) -> list[TransacaoImportada]:
     """Lê o extrato em CSV, sem IA. Responde 422 se for grande demais ou tiver linhas inválidas."""
     if len(csv) > TAMANHO_MAXIMO_CSV:
-        raise HTTPException(status_code=422, detail="CSV demasiado grande. Máx. 1 MB.")
+        raise erro_no_pais(user_id, 422, "csv_grande")
     try:
         # "utf-8-sig" ignora a marca invisível (BOM) que o Excel põe no início dos CSV.
         return ler_extrato(csv.decode("utf-8-sig"))
     except ExtratoGrandeDemais:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Este extrato tem mais de {MAX_MOVIMENTOS_CSV} movimentos. Divide-o em partes mais pequenas.",
-        )
+        raise erro_no_pais(user_id, 422, "csv_movimentos_a_mais", maximo=MAX_MOVIMENTOS_CSV)
     except UnicodeDecodeError:
-        raise HTTPException(
-            status_code=422,
-            detail="Não consegui ler o CSV. Grava-o com a codificação UTF-8 e tenta outra vez.",
-        )
+        raise erro_no_pais(user_id, 422, "csv_codificacao")
     except ErroImportacao as erro:
         # Nada é gravado: o utilizador corrige o ficheiro e volta a importar.
         raise HTTPException(status_code=422, detail={"mensagem": str(erro), "erros": erro.erros})
 
 
-def ler_pdf_enviado(pdf: bytes, user_id: str) -> tuple[list[TransacaoImportada], int]:
+def ler_pdf_enviado(pdf: bytes, user_id: str, local: Local = Local()) -> tuple[list[TransacaoImportada], int]:
     """A IA lê o extrato em PDF. Devolve os movimentos lidos e as movimentações que a conta já tinha.
 
     As verificações vêm por esta ordem, todas antes de gastar o pedido e de chamar a IA:
     402 no Free; 422 se for grande demais ou ilegível; 400 se tiver páginas a mais;
     422 se a conta estiver no teto de movimentações; 429 se já chegou ao limite de PDF do mês.
     Só então conta o pedido à IA (e, com ele, o PDF do mês). 503 se a IA falhar.
+    local: o país e a moeda da conta (língua das mensagens; o país dos bancos para a IA vem da moeda).
     """
     # Primeiro o plano: o Free nem chega a ter o ficheiro analisado.
     exigir_funcao(user_id, "importar_pdf")
     if len(pdf) > TAMANHO_MAXIMO_PDF:
-        raise HTTPException(status_code=422, detail="PDF demasiado grande. Máx. 10 MB.")
+        raise HTTPException(status_code=422, detail=msg("pdf_grande", local.pais))
 
     # As páginas contam-se antes de chamar a IA e antes de gastar o pedido: um PDF recusado não custa nada.
     try:
         paginas = contar_paginas_pdf(pdf)
     except PdfIlegivel as erro:
         print(erro)
-        raise HTTPException(status_code=422, detail="Não consegui ler o PDF. Se tiver palavra-passe, tira-a.")
+        raise HTTPException(status_code=422, detail=msg("pdf_ilegivel", local.pais))
     if paginas > MAX_PAGINAS_PDF:
         # Acima do teto a contagem para a meio, por isso não sabemos o número exato.
         quantas = f"mais de {MAX_ENTRADAS_ARVORE_PDF}" if paginas > MAX_ENTRADAS_ARVORE_PDF else str(paginas)
         raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Este PDF tem {quantas} páginas. O máximo é {MAX_PAGINAS_PDF}. "
-                "Divide o extrato em partes mais pequenas."
-            ),
+            status_code=400, detail=msg("pdf_paginas", local.pais, quantas=quantas, maximo=MAX_PAGINAS_PDF)
         )
 
     # Ainda não se sabe quantos movimentos tem (só a IA o diz), mas uma conta já no teto
     # é recusada antes de gastar o pedido e de pagar a leitura do PDF.
     atuais = contar_transacoes(user_id)
-    exigir_espaco_na_conta(atuais, 1)
+    exigir_espaco_na_conta(atuais, 1, user_id)
 
     # O PDF foi aceite: só agora se veem o limite de PDF do mês e o de pedidos. Um PDF recusado acima não conta.
     # Ler um PDF é a chamada mais cara da importação: gasta um pedido à IA, registado como "importar_pdf",
     # e é essa linha que conta para o limite de PDF do mês (as duas coisas de uma vez, ver limites.registar_pdf).
     registar_pdf(user_id)
     try:
-        extrato = ler_extrato_pdf(pdf, user_id=user_id)
+        extrato = ler_extrato_pdf(pdf, user_id=user_id, local=local)
     except ErroIA as erro:
         print(erro)
-        raise HTTPException(
-            status_code=503, detail="Não consegui ler o PDF. Se tiver palavra-passe, tira-a. Senão, tenta mais tarde."
-        )
+        raise HTTPException(status_code=503, detail=msg("pdf_ia_falhou", local.pais))
     if not extrato.movimentos:
-        raise HTTPException(status_code=422, detail="Não encontrei movimentos neste PDF. Confirma que é um extrato bancário.")
+        raise HTTPException(status_code=422, detail=msg("pdf_sem_movimentos", local.pais))
     return transacoes_do_pdf(extrato), atuais
 
 
@@ -631,39 +653,41 @@ def importar_extrato(ficheiro: UploadFile, user_id: str = Depends(obter_utilizad
     # Todos os PDF começam por "%PDF": é mais seguro do que confiar no nome do ficheiro.
     eh_pdf = conteudo.startswith(b"%PDF")
     if eh_pdf:
+        # O PDF lê sempre a assinatura (plano): o país e a moeda vêm da mesma leitura.
+        local = local_do_utilizador(user_id)
         # Plano, tamanho, páginas, teto da conta e limite de PDF: tudo antes de gastar o pedido (ver a função).
-        novas, atuais = ler_pdf_enviado(conteudo, user_id)
+        novas, atuais = ler_pdf_enviado(conteudo, user_id, local)
     else:
-        novas = ler_csv_enviado(conteudo)
+        novas = ler_csv_enviado(conteudo, user_id)
         atuais = contar_transacoes(user_id)
     if not novas:
-        raise HTTPException(status_code=422, detail="O ficheiro não tem transações")
+        raise erro_no_pais(user_id, 422, "ficheiro_sem_transacoes")
 
     # Antes de categorizar (no CSV, antes de gastar o pedido). As duplicadas também contam:
     # só se sabe quais são ao gravar.
-    exigir_espaco_na_conta(atuais, len(novas))
+    exigir_espaco_na_conta(atuais, len(novas), user_id)
 
     # No PDF o pedido já contou ao ler o ficheiro (ler e categorizar fazem parte da mesma importação).
     # No CSV, a categorização do ficheiro inteiro é uma só chamada à IA: conta como uma pergunta.
     # Sem pedidos, o CSV importa-se na mesma, sem categorias: os dados são do utilizador.
     aviso = None
     if eh_pdf or pode_usar_ia(user_id, "importar_csv"):
+        # A assinatura já foi lida (plano e limites): o país e a moeda não custam outra consulta.
+        local = local_do_utilizador(user_id)
         try:
-            categorias = categorizar(novas, user_id=user_id)
+            categorias = categorizar(novas, user_id=user_id, local=local)
         except ErroIA as erro:
             print(erro)
             if eh_pdf:
-                raise HTTPException(
-                    status_code=503, detail="A categorização automática falhou. Tenta importar mais tarde."
-                )
+                raise HTTPException(status_code=503, detail=msg("categorizacao_falhou_importar", local.pais))
             # No CSV os dados já estão lidos: gravam-se sem categoria (o pedido fica gasto).
             categorias = [None] * len(novas)
-            aviso = AVISO_IMPORTACAO_IA_EM_BAIXO
+            aviso = msg("importacao_ia_em_baixo", local.pais)
         for nova, categoria in zip(novas, categorias):
             nova.categoria = categoria
     else:
         # Ficam com categoria vazia (NULL): o POST /transacoes/categorizar trata-as mais tarde.
-        aviso = AVISO_IMPORTACAO_SEM_IA
+        aviso = msg("importacao_sem_ia", local_do_utilizador(user_id).pais)
 
     moeda = campos_de_moeda(user_id)
     dados = [nova.model_dump(mode="json") | {"user_id": user_id} | moeda for nova in novas]
@@ -707,6 +731,8 @@ def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -
     plano, config = plano_e_config_ia(user_id)
     # O "hoje" do país onde a pessoa vive: vai nas instruções da IA e decide os meses que as ferramentas veem.
     hoje = hoje_do_utilizador(user_id)
+    # A língua (país onde vive) e a moeda: da mesma assinatura já lida no pedido.
+    local = local_do_utilizador(user_id)
 
     # Closure: uma função que "lembra" o user_id, o plano e o dia deste pedido. A IA só lhe passa o nome e os argumentos.
     def executar(nome: str, argumentos: dict) -> str:
@@ -716,16 +742,17 @@ def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -
         # O histórico vem do browser: o conversar() corta-o para a memória do plano (0 no Free).
         resposta = conversar(
             pedido.pergunta,
-            FERRAMENTAS,
+            ferramentas_para(local),
             executar,
             user_id=user_id,
             config=config,
             historico=pedido.historico,
             hoje=hoje,
+            local=local,
         )
     except ErroIA as erro:
         print(erro)
-        raise HTTPException(status_code=503, detail="O chat falhou. Tenta mais tarde.")
+        raise HTTPException(status_code=503, detail=msg("chat_falhou", local.pais))
     return RespostaChat(resposta=resposta)
 
 
@@ -736,6 +763,7 @@ def resumo_do_mes(
 ) -> ResumoMes:
     dados = recolher_dados(user_id, mes)
     # Sem transações não há nada para resumir: não vale a pena pagar uma chamada à IA.
+    # O texto é o mesmo em PT e BR (assim este caminho não precisa de ler o país da conta).
     if dados["transacoes_no_mes"] == 0:
         return ResumoMes(resumo="Ainda não há transações neste mês.", alertas=[])
 
@@ -748,11 +776,12 @@ def resumo_do_mes(
 
     if not pode_usar_ia(user_id, "resumo"):
         return ResumoMes(resumo=aviso_resumo_sem_pedidos(user_id), alertas=[])
+    local = local_do_utilizador(user_id)
     try:
-        resumo = resumir_mes(dados, user_id=user_id, config=plano_e_config_ia(user_id)[1])
+        resumo = resumir_mes(dados, user_id=user_id, config=plano_e_config_ia(user_id)[1], local=local)
     except ErroIA as erro:
         print(erro)
-        raise HTTPException(status_code=503, detail="O resumo automático falhou. Tenta mais tarde.")
+        raise HTTPException(status_code=503, detail=msg("resumo_falhou", local.pais))
     guardar_resumo(user_id, mes, assinatura, resumo)
     return resumo
 
@@ -793,11 +822,12 @@ def sugestao_orcamento(
         return SugestaoOrcamento(sugestoes=[])
     # Conta para o limite do plano, como as perguntas do chat (cada sugestão é uma chamada à IA).
     registar_pergunta(user_id, "orcamento")
+    local = local_do_utilizador(user_id)
     try:
-        return sugerir_orcamento(historico, user_id=user_id, config=plano_e_config_ia(user_id)[1])
+        return sugerir_orcamento(historico, user_id=user_id, config=plano_e_config_ia(user_id)[1], local=local)
     except ErroIA as erro:
         print(erro)
-        raise HTTPException(status_code=503, detail="A sugestão automática falhou. Tenta mais tarde.")
+        raise HTTPException(status_code=503, detail=msg("sugestao_falhou", local.pais))
 
 
 # Pagamentos que se repetem todos os meses (assinaturas, ginásio...). Só contas, sem IA:
@@ -831,28 +861,30 @@ def eh_imagem_suportada(imagem: bytes) -> str | None:
 def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual)) -> Talao:
     # Ler talões é só dos planos pagos: 402 antes de ler a foto e de gastar um pedido.
     exigir_funcao(user_id, "ler_talao")
+    # O plano já leu a assinatura: o país (talão ou nota fiscal) vem da mesma leitura.
+    local = local_do_utilizador(user_id)
     imagem = foto.file.read(TAMANHO_MAXIMO + 1)
 
     if foto.content_type not in TIPOS_IMAGEM:
-        raise HTTPException(status_code=422, detail="Formato de imagem não suportado. Usa JPEG, PNG ou WebP.")
+        raise HTTPException(status_code=422, detail=msg("imagem_formato", local.pais))
     if len(imagem) > TAMANHO_MAXIMO:
-        raise HTTPException(status_code=422, detail="Imagem demasiado grande. Máx. 5 MB.")
+        raise HTTPException(status_code=422, detail=msg("imagem_grande", local.pais))
     elif len(imagem) < 1024:
-        raise HTTPException(status_code=422, detail="Imagem demasiado pequena. Tenta outra fotografia.")
+        raise HTTPException(status_code=422, detail=msg("imagem_pequena", local.pais))
     tipo = eh_imagem_suportada(imagem)
     if tipo is None:
-        raise HTTPException(status_code=422, detail="Formato de imagem não suportado. Usa JPEG, PNG ou WebP.")
+        raise HTTPException(status_code=422, detail=msg("imagem_formato", local.pais))
 
     # Só depois de a foto ser válida é que conta para o limite do plano (uma foto errada não gasta perguntas).
     registar_pergunta(user_id, "talao")
     try:
-        talao = ler_talao(imagem, tipo, user_id=user_id)
+        talao = ler_talao(imagem, tipo, user_id=user_id, local=local)
     except ErroIA as erro:
         print(erro)
-        raise HTTPException(status_code=503, detail="A leitura do talão falhou. Tenta mais tarde.")
+        raise HTTPException(status_code=503, detail=msg("talao_falhou", local.pais))
     # Pelas regras do prompt, uma foto que não é um talão (ou ilegível) volta sem itens.
     if not talao.itens:
-        raise HTTPException(status_code=422, detail="Não consegui ler o talão. Tenta outra fotografia, com mais luz.")
+        raise HTTPException(status_code=422, detail=msg("talao_ilegivel", local.pais))
     return talao
 
 
@@ -860,7 +892,7 @@ def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual))
 @app.post("/compras", status_code=201)
 def criar_compra(nova: NovaCompra, user_id: str = Depends(obter_utilizador_atual)) -> Compra:
     # Guardar um talão cria uma transação: conta para o teto de movimentações da conta.
-    exigir_espaco_na_conta(contar_transacoes(user_id), 1)
+    exigir_espaco_na_conta(contar_transacoes(user_id), 1, user_id)
     compra = gravar_compra(user_id, nova, moeda_da_conta(user_id))
     esquecer_recorrentes(user_id)
     return compra
@@ -895,11 +927,11 @@ def lista_de_juncoes(user_id: str = Depends(obter_utilizador_atual)) -> list[Jun
 def precos_de_um_produto(chave: str, user_id: str = Depends(obter_utilizador_atual)) -> PrecosDoProduto:
     exigir_funcao(user_id, "precos_por_loja")
     if len(chave) > 100:
-        raise HTTPException(status_code=404, detail="Produto não encontrado nas tuas compras.")
+        raise erro_no_pais(user_id, 404, "produto_nao_encontrado")
     # A mesma normalização das chaves: "Leite Meio-Gordo" encontra "leite meio gordo".
     precos = precos_do_utilizador(user_id, chave_do_produto(chave))
     if precos is None:
-        raise HTTPException(status_code=404, detail="Produto não encontrado nas tuas compras.")
+        raise erro_no_pais(user_id, 404, "produto_nao_encontrado")
     return precos
 
 
@@ -907,17 +939,19 @@ def precos_de_um_produto(chave: str, user_id: str = Depends(obter_utilizador_atu
 @app.post("/compras/produtos/juntar", status_code=204)
 def juntar_dois_produtos(pedido: JuntarProdutos, user_id: str = Depends(obter_utilizador_atual)) -> None:
     exigir_funcao(user_id, "precos_por_loja")
-    juntar_produtos(user_id, pedido.chave_origem, pedido.chave_destino)
+    # O plano já leu a assinatura: o país das mensagens vem da mesma leitura.
+    juntar_produtos(user_id, pedido.chave_origem, pedido.chave_destino, local_do_utilizador(user_id).pais)
 
 
 # Desfaz uma junção: os itens de chave_origem voltam a ser um produto à parte.
 @app.delete("/compras/produtos/juntar/{chave_origem}", status_code=204)
 def separar_dois_produtos(chave_origem: str, user_id: str = Depends(obter_utilizador_atual)) -> None:
     exigir_funcao(user_id, "precos_por_loja")
+    pais = local_do_utilizador(user_id).pais  # da assinatura já lida para o plano
     if len(chave_origem) > 100:
-        raise HTTPException(status_code=404, detail="Esta junção não existe.")
+        raise HTTPException(status_code=404, detail=msg("juncao_nao_existe", pais))
     # A chave exata e depois a normalizada (ver separar_produtos).
-    separar_produtos(user_id, chave_origem)
+    separar_produtos(user_id, chave_origem, pais)
 
 
 # Minha reserva: os objetivos de poupança do utilizador, do prazo mais próximo para o mais distante.
@@ -938,7 +972,7 @@ def mudar_poupado(
 ) -> Objetivo:
     objetivo = atualizar_poupado(user_id, objetivo_id, alteracao.valor_poupado)
     if objetivo is None:
-        raise HTTPException(status_code=404, detail="Objetivo não encontrado")
+        raise erro_no_pais(user_id, 404, "objetivo_nao_encontrado")
     return objetivo
 
 
@@ -946,7 +980,7 @@ def mudar_poupado(
 @app.delete("/objetivos/{objetivo_id}", status_code=204)
 def remover_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_atual)) -> None:
     if not apagar_objetivo(user_id, objetivo_id):
-        raise HTTPException(status_code=404, detail="Objetivo não encontrado")
+        raise erro_no_pais(user_id, 404, "objetivo_nao_encontrado")
 
 
 # A IA avalia o objetivo (as contas já vêm feitas do objetivos.py). Não guarda nada.
@@ -954,29 +988,25 @@ def remover_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_a
 def plano_do_objetivo(objetivo_id: int, user_id: str = Depends(obter_utilizador_atual)) -> PlanoPoupanca:
     objetivo = obter_objetivo(user_id, objetivo_id)
     if objetivo is None:
-        raise HTTPException(status_code=404, detail="Objetivo não encontrado")
+        raise erro_no_pais(user_id, 404, "objetivo_nao_encontrado")
     dados = dados_do_plano(user_id, objetivo, hoje_do_utilizador(user_id))
+    # O "hoje" já leu a assinatura: o país e a moeda vêm da mesma leitura.
+    local = local_do_utilizador(user_id)
 
     # Casos em que a resposta é sempre a mesma: não vale a pena pagar uma chamada à IA.
     if dados["falta"] == 0:
-        return PlanoPoupanca(viavel=True, explicacao="Já atingiste este objetivo. Parabéns!", cortes=[])
+        return PlanoPoupanca(viavel=True, explicacao=msg("objetivo_atingido", local.pais), cortes=[])
     if dados["necessario_por_mes"] is None:
-        return PlanoPoupanca(
-            viavel=False, explicacao="O prazo deste objetivo já terminou. Escolhe uma nova data para voltar a planear.", cortes=[]
-        )
+        return PlanoPoupanca(viavel=False, explicacao=msg("objetivo_prazo_terminou", local.pais), cortes=[])
     if not dados["meses_do_saldo_medio"]:
-        return PlanoPoupanca(
-            viavel=False,
-            explicacao="Ainda não tens um mês completo de movimentações, por isso não consigo calcular a tua poupança média.",
-            cortes=[],
-        )
+        return PlanoPoupanca(viavel=False, explicacao=msg("objetivo_sem_mes_completo", local.pais), cortes=[])
 
     registar_pergunta(user_id, "poupanca")
     try:
-        return planear_poupanca(dados, user_id=user_id, config=plano_e_config_ia(user_id)[1])
+        return planear_poupanca(dados, user_id=user_id, config=plano_e_config_ia(user_id)[1], local=local)
     except ErroIA as erro:
         print(erro)
-        raise HTTPException(status_code=503, detail="O plano de poupança falhou. Tenta mais tarde.")
+        raise HTTPException(status_code=503, detail=msg("poupanca_falhou", local.pais))
 
 
 # Simulador de poupança: só contas, sem IA. Exemplo: /simulador?mensal=50&anos=10&taxa=3
@@ -995,11 +1025,15 @@ def simulador(
 
 
 def relatorio_pedido(ano: int, user_id: str) -> RelatorioAnual:
-    """O relatório do ano para este utilizador, ou 422 se o ano não for de 2000 até ao ano atual (no seu país)."""
+    """O relatório do ano para este utilizador, ou 422 se o ano não for de 2000 até ao ano atual (no seu país).
+
+    Título, aviso, etiquetas e mensagens no país onde a pessoa vive (da assinatura já lida para o "hoje").
+    """
     hoje = hoje_do_utilizador(user_id)
+    pais = local_do_utilizador(user_id).pais
     if not ano_valido(ano, hoje):
-        raise HTTPException(status_code=422, detail=f"Ano inválido. Escolhe um ano entre 2000 e {hoje.year}.")
-    return relatorio_do_ano(user_id, ano, hoje)
+        raise HTTPException(status_code=422, detail=msg("ano_invalido", pais, ano=hoje.year))
+    return relatorio_do_ano(user_id, ano, hoje, pais)
 
 
 # O resumo do ano em JSON, para a página do relatório. Todos os planos; sem IA. Exemplo: /relatorio?ano=2026
@@ -1017,7 +1051,8 @@ def relatorio(ano: int, response: Response, user_id: str = Depends(obter_utiliza
 @app.get("/relatorio/csv")
 def relatorio_csv(ano: int, user_id: str = Depends(obter_utilizador_atual)) -> Response:
     exigir_funcao(user_id, "exportar_relatorio")
-    conteudo = relatorio_em_csv(relatorio_pedido(ano, user_id))
+    local = local_do_utilizador(user_id)  # da assinatura já lida para o plano
+    conteudo = relatorio_em_csv(relatorio_pedido(ano, user_id), local.pais, local.moeda)
     return Response(
         content=conteudo,
         media_type="text/csv; charset=utf-8",
@@ -1036,15 +1071,16 @@ def relatorio_csv(ano: int, user_id: str = Depends(obter_utilizador_atual)) -> R
 def relatorio_resumo_ia(ano: int, user_id: str = Depends(obter_utilizador_atual)) -> ResumoAnualIA:
     exigir_funcao(user_id, "resumo_anual_ia")
     dados = relatorio_pedido(ano, user_id)
+    local = local_do_utilizador(user_id)  # da assinatura já lida para o plano
     # Sem movimentações no ano não há nada para resumir: não se gasta um pedido.
     if not any(mes.com_dados for mes in dados.meses):
-        return ResumoAnualIA(resumo="Ainda não há movimentos neste ano.")
+        return ResumoAnualIA(resumo=msg("ano_sem_movimentos", local.pais))
     registar_pergunta(user_id, "resumo_anual")
     try:
-        return resumir_ano(dados_para_ia(dados), user_id=user_id, config=plano_e_config_ia(user_id)[1])
+        return resumir_ano(dados_para_ia(dados), user_id=user_id, config=plano_e_config_ia(user_id)[1], local=local)
     except ErroIA as erro:
         print(erro)
-        raise HTTPException(status_code=503, detail="O resumo do ano falhou. Tenta mais tarde.")
+        raise HTTPException(status_code=503, detail=msg("resumo_anual_falhou", local.pais))
 
 
 # O plano do utilizador e quantos pedidos à IA já fez no dia (ou no mês, no Free). O menu lateral mostra-o.

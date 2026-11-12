@@ -33,6 +33,21 @@ AVISO = (
 )
 NOTA_CATEGORIAS = "Categorias da app, não correspondem às do e-fatura."
 
+# Os mesmos textos por país onde a pessoa vive (pais da conta). O título BR é o do frontend (textosRelatorio.ts);
+# o aviso e a nota BR são TEXTO NOVO, por rever pelo copywriter e pelo contador.
+TEXTOS_POR_PAIS = {
+    "PT": {"titulo": TITULO, "aviso": AVISO, "nota_categorias": NOTA_CATEGORIAS},
+    "BR": {
+        "titulo": "Resumo anual das suas finanças – {ano}",
+        "aviso": (
+            "Resumo pessoal feito a partir dos extratos e movimentações que você registrou, com categorias "
+            "atribuídas automaticamente (podem ter erros). Não é um documento fiscal nem consultoria financeira "
+            "e não substitui os documentos oficiais nem a orientação de um contador."
+        ),
+        "nota_categorias": "Categorias da app, não correspondem às categorias fiscais.",
+    },
+}
+
 # Ano mais antigo aceite no relatório.
 PRIMEIRO_ANO = 2000
 MAX_MAIORES_SAIDAS = 10
@@ -40,15 +55,27 @@ MAX_CARACTERES_DESCRICAO = 100
 
 # O que se mostra em vez do nome guardado na base de dados. O contador pediu "Entradas", nunca "rendimento".
 ETIQUETAS = {"rendimento": "Entradas"}
+# No BR, os rótulos das categorias do frontend (lib/opcoes.ts, ROTULOS_CATEGORIAS.BR), com maiúscula.
+ETIQUETAS_POR_PAIS = {
+    "PT": ETIQUETAS,
+    "BR": {
+        "casa": "Moradia",
+        "telecomunicações": "Telefone e internet",
+        "rendimento": "Receitas",
+        "levantamentos": "Saques",
+    },
+}
 SEM_CATEGORIA = "sem categoria"
 
 
-def etiqueta(categoria: str | None) -> str:
-    """O nome da categoria para mostrar: "rendimento" passa a "Entradas"; sem categoria, "sem categoria"."""
+def etiqueta(categoria: str | None, pais: str = "PT") -> str:
+    """O nome da categoria para mostrar no país dado: em PT "rendimento" passa a "Entradas"; sem categoria,
+    "sem categoria". A chave guardada (categoria) nunca muda."""
     if not categoria:
         return SEM_CATEGORIA
     # Com maiúscula ("Casa"), como na app: o CSV mostra a etiqueta tal e qual.
-    return ETIQUETAS.get(categoria, categoria[:1].upper() + categoria[1:])
+    etiquetas = ETIQUETAS_POR_PAIS.get(pais, ETIQUETAS)
+    return etiquetas.get(categoria, categoria[:1].upper() + categoria[1:])
 
 
 def ano_valido(ano: int, hoje: date) -> bool:
@@ -87,13 +114,13 @@ def _mes_a_mes(linhas: list[dict], meses: list[str]) -> list[MesRelatorio]:
     return resultado
 
 
-def _categorias(linhas: list[dict], total_saidas: float) -> list[CategoriaRelatorio]:
+def _categorias(linhas: list[dict], total_saidas: float, pais: str) -> list[CategoriaRelatorio]:
     """As saídas por categoria, da maior para a menor, com a % das saídas do ano."""
     totais = _saidas_por_categoria(linhas)
     categorias = [
         CategoriaRelatorio(
             categoria=categoria or SEM_CATEGORIA,
-            etiqueta=etiqueta(categoria),
+            etiqueta=etiqueta(categoria, pais),
             total=round(total, 2),
             percentagem=round(total / total_saidas * 100, 1) if total_saidas else 0.0,
         )
@@ -102,7 +129,9 @@ def _categorias(linhas: list[dict], total_saidas: float) -> list[CategoriaRelato
     return sorted(categorias, key=lambda c: c.total, reverse=True)
 
 
-def _comparacao(atuais: list[dict], anteriores: list[dict], ano: int, meses: list[str]) -> ComparacaoAno | None:
+def _comparacao(
+    atuais: list[dict], anteriores: list[dict], ano: int, meses: list[str], pais: str
+) -> ComparacaoAno | None:
     """O ano anterior nos mesmos meses (janeiro a novembro, se o relatório for até novembro).
 
     None se o ano anterior não tiver movimentações nesses meses: não se compara com zeros inventados.
@@ -115,7 +144,7 @@ def _comparacao(atuais: list[dict], anteriores: list[dict], ano: int, meses: lis
     categorias = [
         CategoriaComparada(
             categoria=categoria or SEM_CATEGORIA,
-            etiqueta=etiqueta(categoria),
+            etiqueta=etiqueta(categoria, pais),
             total=round(agora.get(categoria, 0), 2),
             total_anterior=round(antes.get(categoria, 0), 2),
             diferenca=round(agora.get(categoria, 0) - antes.get(categoria, 0), 2),
@@ -136,7 +165,7 @@ def _descricao_curta(descricao: str | None) -> str:
     return " ".join((descricao or "").split())[:MAX_CARACTERES_DESCRICAO]
 
 
-def _maiores_saidas(linhas: list[dict]) -> list[SaidaRelatorio]:
+def _maiores_saidas(linhas: list[dict], pais: str) -> list[SaidaRelatorio]:
     saidas = sorted((l for l in linhas if l["valor"] < 0), key=lambda l: (l["valor"], l["data"]))
     return [
         SaidaRelatorio(
@@ -144,13 +173,13 @@ def _maiores_saidas(linhas: list[dict]) -> list[SaidaRelatorio]:
             descricao=_descricao_curta(linha.get("descricao")),
             valor=round(-linha["valor"], 2),
             categoria=linha.get("categoria"),
-            etiqueta=etiqueta(linha.get("categoria")),
+            etiqueta=etiqueta(linha.get("categoria"), pais),
         )
         for linha in saidas[:MAX_MAIORES_SAIDAS]
     ]
 
 
-def _recorrentes(linhas: list[dict], ano: int, hoje: date) -> list[RecorrenteAno]:
+def _recorrentes(linhas: list[dict], ano: int, hoje: date, pais: str) -> list[RecorrenteAno]:
     """Os pagamentos que se repetem (recorrentes.py) com o que somaram no ano.
 
     A deteção é a mesma do Planeamento, sobre as movimentações do ano: num ano que já acabou, entram
@@ -166,7 +195,7 @@ def _recorrentes(linhas: list[dict], ano: int, hoje: date) -> list[RecorrenteAno
             RecorrenteAno(
                 descricao=_descricao_curta(recorrente.descricao),
                 categoria=recorrente.categoria,
-                etiqueta=etiqueta(recorrente.categoria),
+                etiqueta=etiqueta(recorrente.categoria, pais),
                 valor_mensal=recorrente.valor_mensal,
                 pagamentos_no_ano=len(pagamentos),
                 total_no_ano=round(sum(-linha["valor"] for linha in pagamentos), 2),
@@ -189,8 +218,14 @@ def _objetivos(user_id: str) -> list[ObjetivoRelatorio]:
     ]
 
 
-def montar_relatorio(ano: int, linhas: list[dict], objetivos: list[ObjetivoRelatorio], hoje: date) -> RelatorioAnual:
-    """O relatório a partir das movimentações já lidas (do ano e do anterior). Sem base de dados: fácil de testar."""
+def montar_relatorio(
+    ano: int, linhas: list[dict], objetivos: list[ObjetivoRelatorio], hoje: date, pais: str = "PT"
+) -> RelatorioAnual:
+    """O relatório a partir das movimentações já lidas (do ano e do anterior). Sem base de dados: fácil de testar.
+
+    pais: onde a pessoa vive (título, aviso e etiquetas das categorias nesse país).
+    """
+    textos = TEXTOS_POR_PAIS.get(pais, TEXTOS_POR_PAIS["PT"])
     meses = meses_do_relatorio(ano, hoje)
     do_ano = [linha for linha in linhas if linha["data"][:7] in meses]
     do_anterior = [linha for linha in linhas if linha["data"][:4] == str(ano - 1)]
@@ -199,26 +234,26 @@ def montar_relatorio(ano: int, linhas: list[dict], objetivos: list[ObjetivoRelat
     totais = _totais(do_ano)
     return RelatorioAnual(
         ano=ano,
-        titulo=TITULO.format(ano=ano),
-        aviso=AVISO,
-        nota_categorias=NOTA_CATEGORIAS,
+        titulo=textos["titulo"].format(ano=ano),
+        aviso=textos["aviso"],
+        nota_categorias=textos["nota_categorias"],
         ate_mes=meses[-1],
         ano_incompleto=ano == hoje.year or bool(sem_dados),
         meses_sem_dados=sem_dados,
         totais=totais,
         meses=mes_a_mes,
-        categorias=_categorias(do_ano, totais.saidas),
-        comparacao=_comparacao(do_ano, do_anterior, ano, meses),
-        maiores_saidas=_maiores_saidas(do_ano),
-        recorrentes=_recorrentes(do_ano, ano, hoje),
+        categorias=_categorias(do_ano, totais.saidas, pais),
+        comparacao=_comparacao(do_ano, do_anterior, ano, meses, pais),
+        maiores_saidas=_maiores_saidas(do_ano, pais),
+        recorrentes=_recorrentes(do_ano, ano, hoje, pais),
         objetivos=objetivos,
     )
 
 
-def relatorio_do_ano(user_id: str, ano: int, hoje: date) -> RelatorioAnual:
+def relatorio_do_ano(user_id: str, ano: int, hoje: date, pais: str = "PT") -> RelatorioAnual:
     """Lê as movimentações do ano e do anterior (página a página, só deste utilizador) e monta o relatório."""
     linhas = movimentos_entre(user_id, f"{ano - 1}-01", f"{ano}-12")
-    return montar_relatorio(ano, linhas, _objetivos(user_id), hoje)
+    return montar_relatorio(ano, linhas, _objetivos(user_id), hoje, pais)
 
 
 # --- Para a IA (resumo do ano) ---
@@ -295,12 +330,35 @@ def nome_do_mes(mes: str) -> str:
     return f"{NOMES_DOS_MESES[int(mes[5:7]) - 1]} de {mes[:4]}"
 
 
-def relatorio_em_csv(relatorio: RelatorioAnual) -> bytes:
+# Os rótulos do CSV que mudam no BR (o resto é igual nos dois países). TEXTO NOVO (BR).
+ROTULOS_CSV = {
+    "PT": {
+        "meses_sem": "Meses sem movimentos",
+        "objetivos": "Objetivos de poupança (hoje)",
+        "objetivo": "Objetivo",
+        "poupado": "Poupado",
+        "percentagem_poupada": "% poupada",
+    },
+    "BR": {
+        "meses_sem": "Meses sem movimentações",
+        "objetivos": "Metas de economia (hoje)",
+        "objetivo": "Meta",
+        "poupado": "Guardado",
+        "percentagem_poupada": "% guardada",
+    },
+}
+SIMBOLOS_MOEDA = {"EUR": "€", "BRL": "R$"}
+
+
+def relatorio_em_csv(relatorio: RelatorioAnual, pais: str = "PT", moeda: str = "EUR") -> bytes:
     """O relatório em CSV: várias tabelas separadas por uma linha em branco, separador ";", UTF-8 com BOM.
 
     Uma só folha com tabelas por baixo umas das outras abre direto no Excel em português (o BOM diz-lhe
-    que é UTF-8, senão os acentos saíam estragados; o ";" é o separador de listas do Excel PT).
+    que é UTF-8, senão os acentos saíam estragados; o ";" é o separador de listas do Excel PT e BR).
+    pais: a língua dos rótulos; moeda: o símbolo nos cabeçalhos ("Valor (€)" ou "Valor (R$)").
     """
+    rotulos = ROTULOS_CSV.get(pais, ROTULOS_CSV["PT"])
+    m = SIMBOLOS_MOEDA.get(moeda, "€")
     saida = io.StringIO()
     escritor = csv.writer(saida, delimiter=";", lineterminator="\r\n")
 
@@ -310,24 +368,26 @@ def relatorio_em_csv(relatorio: RelatorioAnual) -> bytes:
     linha(relatorio.titulo)
     linha(relatorio.aviso)
     if relatorio.ano_incompleto:
-        sem_dados = f" Meses sem movimentos: {', '.join(relatorio.meses_sem_dados)}." if relatorio.meses_sem_dados else ""
+        sem_dados = (
+            f" {rotulos['meses_sem']}: {', '.join(relatorio.meses_sem_dados)}." if relatorio.meses_sem_dados else ""
+        )
         linha(f"Ano incompleto: dados até {nome_do_mes(relatorio.ate_mes)}.{sem_dados}")
     escritor.writerow([])
 
-    linha("Resumo", "Valor (€)")
+    linha("Resumo", f"Valor ({m})")
     linha("Entradas", relatorio.totais.entradas)
     linha("Saídas", relatorio.totais.saidas)
     linha("Saldo", relatorio.totais.saldo)
     escritor.writerow([])
 
-    linha("Mês", "Entradas (€)", "Saídas (€)", "Saldo (€)")
+    linha("Mês", f"Entradas ({m})", f"Saídas ({m})", f"Saldo ({m})")
     for mes in relatorio.meses:
         linha(nome_do_mes(mes.mes), mes.entradas, mes.saidas, mes.saldo)
     escritor.writerow([])
 
     linha("Gastos por categoria")
     linha(relatorio.nota_categorias)
-    linha("Categoria", "Total (€)", "% das saídas")
+    linha("Categoria", f"Total ({m})", "% das saídas")
     for categoria in relatorio.categorias:
         linha(categoria.etiqueta, categoria.total, categoria.percentagem)
     escritor.writerow([])
@@ -335,7 +395,7 @@ def relatorio_em_csv(relatorio: RelatorioAnual) -> bytes:
     if relatorio.comparacao:
         comp = relatorio.comparacao
         linha(f"Comparação com {comp.ano} (meses {comp.meses_comparados[0]} a {comp.meses_comparados[-1]})")
-        linha("", str(relatorio.ano), str(comp.ano), "Diferença (€)")
+        linha("", str(relatorio.ano), str(comp.ano), f"Diferença ({m})")
         linha("Entradas", relatorio.totais.entradas, comp.totais.entradas, relatorio.totais.entradas - comp.totais.entradas)
         linha("Saídas", relatorio.totais.saidas, comp.totais.saidas, relatorio.totais.saidas - comp.totais.saidas)
         for categoria in comp.categorias:
@@ -343,19 +403,19 @@ def relatorio_em_csv(relatorio: RelatorioAnual) -> bytes:
         escritor.writerow([])
 
     linha(f"{MAX_MAIORES_SAIDAS} maiores saídas")
-    linha("Data", "Descrição", "Valor (€)", "Categoria")
+    linha("Data", "Descrição", f"Valor ({m})", "Categoria")
     for saida_ in relatorio.maiores_saidas:
         linha(saida_.data.isoformat(), _descricao_curta(saida_.descricao), saida_.valor, saida_.etiqueta)
     escritor.writerow([])
 
     linha("Pagamentos que se repetem")
-    linha("Descrição", "Categoria", "Pagamentos no ano", "Total no ano (€)")
+    linha("Descrição", "Categoria", "Pagamentos no ano", f"Total no ano ({m})")
     for recorrente in relatorio.recorrentes:
         linha(_descricao_curta(recorrente.descricao), recorrente.etiqueta, str(recorrente.pagamentos_no_ano), recorrente.total_no_ano)
     escritor.writerow([])
 
-    linha("Objetivos de poupança (hoje)")
-    linha("Objetivo", "Valor alvo (€)", "Poupado (€)", "Data alvo", "% poupada")
+    linha(rotulos["objetivos"])
+    linha(rotulos["objetivo"], f"Valor alvo ({m})", f"{rotulos['poupado']} ({m})", "Data alvo", rotulos["percentagem_poupada"])
     for objetivo in relatorio.objetivos:
         linha(_descricao_curta(objetivo.nome), objetivo.valor_alvo, objetivo.valor_poupado, objetivo.data_alvo.isoformat(), objetivo.percentagem)
 

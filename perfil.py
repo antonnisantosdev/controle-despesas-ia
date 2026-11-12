@@ -16,14 +16,14 @@ from fastapi import HTTPException
 from postgrest.exceptions import APIError
 
 from database import supabase
-from limites import COLUNA_NAO_EXISTE, FUNCAO_NAO_EXISTE, MOEDA_DO_PAIS, assinatura_do_utilizador
+from limites import COLUNA_NAO_EXISTE, FUNCAO_NAO_EXISTE, MOEDA_DO_PAIS, assinatura_do_utilizador, esquecer_assinatura
+from mensagens import msg
 
-# Textos das respostas do PUT /conta/perfil (novos, PT-PT; o passo 8 do plano Brasil trata as versões BR).
-MENSAGEM_MOEDA_COM_DADOS = (
-    "Só podes mudar a moeda principal enquanto a conta não tiver movimentações, compras, orçamentos nem objetivos."
-)
-MENSAGEM_MOEDA_INCOERENTE = "A moeda principal tem de ser a de um dos países dos teus cartões e contas."
-MENSAGEM_PERFIL_INDISPONIVEL = "Não foi possível guardar as definições agora. Tenta mais tarde."
+# Textos das respostas do PUT /conta/perfil em PT (a versão de cada país está em mensagens.py).
+# O registo (público) usa sempre o PT; o PUT /conta/perfil responde no país da conta.
+MENSAGEM_MOEDA_COM_DADOS = msg("perfil_moeda_com_dados", "PT")
+MENSAGEM_MOEDA_INCOERENTE = msg("perfil_moeda_incoerente", "PT")
+MENSAGEM_PERFIL_INDISPONIVEL = msg("perfil_indisponivel", "PT")
 
 
 @dataclass(frozen=True)
@@ -136,6 +136,7 @@ def atualizar_perfil(user_id: str, pais: str | None, paises_bancos: list[str] | 
 
     422 se a moeda não for de um dos países das contas; 409 se a moeda mudar e a conta já tiver dados;
     503 se a sql/020 ainda não foi corrida ou a base de dados responder algo inesperado.
+    As mensagens vêm no país da conta antes da mudança (sem a assinatura lida, em PT).
     """
     try:
         conta = assinatura_do_utilizador(user_id)
@@ -145,25 +146,27 @@ def atualizar_perfil(user_id: str, pais: str | None, paises_bancos: list[str] | 
         raise HTTPException(status_code=503, detail=MENSAGEM_PERFIL_INDISPONIVEL)
     if not conta.com_perfil:
         print("AVISO: PUT /conta/perfil antes da sql/020.")
-        raise HTTPException(status_code=503, detail=MENSAGEM_PERFIL_INDISPONIVEL)
+        raise HTTPException(status_code=503, detail=msg("perfil_indisponivel", conta.pais))
     atual = Perfil(conta.pais, conta.paises_bancos, conta.moeda)
     try:
         novo = perfil_atualizado(atual, pais, paises_bancos, moeda)
-    except PerfilInvalido as erro:
-        raise HTTPException(status_code=422, detail=str(erro))
+    except PerfilInvalido:
+        raise HTTPException(status_code=422, detail=msg("perfil_moeda_incoerente", conta.pais))
 
     try:
         resultado = _chamar_atualizar_perfil(user_id, novo, so_se_padrao=False)
     except APIError as erro:
         # Ex.: CHECK violado (23514), permissão (42501), bloqueio. Nunca 500 sem CORS.
         print(f"AVISO: atualizar_perfil_conta falhou ({erro.code}).")
-        raise HTTPException(status_code=503, detail=MENSAGEM_PERFIL_INDISPONIVEL)
+        raise HTTPException(status_code=503, detail=msg("perfil_indisponivel", conta.pais))
     if resultado == "ok":
+        # O perfil mudou: o resto do pedido (se ler a assinatura) tem de ver o novo.
+        esquecer_assinatura(user_id)
         return novo
     if resultado == "tem_dados":
-        raise HTTPException(status_code=409, detail=MENSAGEM_MOEDA_COM_DADOS)
+        raise HTTPException(status_code=409, detail=msg("perfil_moeda_com_dados", conta.pais))
     if resultado is None:
         print("AVISO: função atualizar_perfil_conta não encontrada (sql/020).")
     else:
         print(f"AVISO: atualizar_perfil_conta devolveu uma resposta inesperada: {resultado!r}")
-    raise HTTPException(status_code=503, detail=MENSAGEM_PERFIL_INDISPONIVEL)
+    raise HTTPException(status_code=503, detail=msg("perfil_indisponivel", conta.pais))

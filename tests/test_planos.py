@@ -447,7 +447,7 @@ def importar_csv(cliente):
 
 def test_o_free_com_pedidos_importa_csv_categorizado_e_gasta_um(cliente, limite, monkeypatch):
     limite.plano = "free"
-    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None: ["outros"] * len(transacoes))
+    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None, local=None: ["outros"] * len(transacoes))
 
     resposta = importar_csv(cliente)
 
@@ -463,7 +463,7 @@ def test_sem_pedidos_o_csv_importa_na_mesma_sem_categorias(cliente, limite, monk
     limite.plano = "free"
     limite.maximo = 0
     chamadas = []
-    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None: chamadas.append(transacoes))
+    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None, local=None: chamadas.append(transacoes))
 
     resposta = importar_csv(cliente)
 
@@ -564,11 +564,11 @@ def test_os_pagos_importam_pdf(cliente, limite, monkeypatch):
     monkeypatch.setattr(
         main,
         "ler_extrato_pdf",
-        lambda pdf, user_id=None: ExtratoPdf(
+        lambda pdf, user_id=None, local=None: ExtratoPdf(
             movimentos=[MovimentoPdf(data="2026-10-01", descricao="CAFE", valor=-1.2, saldo=None)]
         ),
     )
-    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None: ["outros"] * len(transacoes))
+    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None, local=None: ["outros"] * len(transacoes))
 
     resposta = importar_pdf(cliente)
 

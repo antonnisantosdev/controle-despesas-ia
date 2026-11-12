@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from consultas import normalizar
 from database import ler_todas, supabase
 from limites import hoje_em_lisboa
+from mensagens import msg
 from models import (
     JuncaoProdutos,
     PrecoHistorico,
@@ -306,21 +307,21 @@ def aplicar_alias(itens: list[dict], alias: dict[str, str]) -> list[dict]:
     return [item | {"chave": chave_final(item["chave"], alias)} for item in itens]
 
 
-def juntar_produtos(user_id: str, chave_origem: str, chave_destino: str) -> None:
+def juntar_produtos(user_id: str, chave_origem: str, chave_destino: str, pais: str = "PT") -> None:
     """Grava a junção chave_origem -> chave_destino. 404 se uma das chaves não existir nos itens do utilizador;
-    422 se forem iguais ou se a junção fechasse um ciclo (A -> B -> A)."""
+    422 se forem iguais ou se a junção fechasse um ciclo (A -> B -> A). pais: a língua das mensagens."""
     origem, destino = chave_origem.strip(), chave_destino.strip()
     if not origem or not destino or origem == destino:
-        raise HTTPException(status_code=422, detail="Escolhe dois produtos diferentes para juntar.")
+        raise HTTPException(status_code=422, detail=msg("juntar_iguais", pais))
     chaves = {item["chave"] for item in itens_do_utilizador(user_id)}
     if origem not in chaves or destino not in chaves:
-        raise HTTPException(status_code=404, detail="Produto não encontrado nas tuas compras.")
+        raise HTTPException(status_code=404, detail=msg("produto_nao_encontrado", pais))
     alias = alias_do_utilizador(user_id)
     # Juntar outra vez a mesma origem substitui a junção: não conta para o teto.
     if origem not in alias and len(alias) >= MAX_JUNCOES:
-        raise HTTPException(status_code=422, detail=f"Chegaste ao máximo de {MAX_JUNCOES} produtos juntos.")
+        raise HTTPException(status_code=422, detail=msg("juntar_maximo", pais, maximo=MAX_JUNCOES))
     if fecha_ciclo(origem, destino, alias):
-        raise HTTPException(status_code=422, detail="Estes produtos já estão juntos ao contrário.")
+        raise HTTPException(status_code=422, detail=msg("juntar_ao_contrario", pais))
     supabase.table("produtos_alias").upsert(
         {"user_id": user_id, "chave_origem": origem, "chave_destino": destino},
         on_conflict="user_id,chave_origem",
@@ -363,8 +364,8 @@ def juncoes_do_utilizador(user_id: str) -> list[JuncaoProdutos]:
     return juncoes
 
 
-def separar_produtos(user_id: str, chave_origem: str) -> None:
-    """Desfaz a junção de chave_origem. 404 se não houver.
+def separar_produtos(user_id: str, chave_origem: str, pais: str = "PT") -> None:
+    """Desfaz a junção de chave_origem. 404 se não houver (mensagem na língua de pais).
 
     Procura primeiro a chave tal como veio (só sem espaços nas pontas) e depois a normalizada: uma junção
     gravada com uma chave antiga, de outra regra de normalização, também se consegue desfazer.
@@ -376,7 +377,7 @@ def separar_produtos(user_id: str, chave_origem: str) -> None:
         )
         if resposta.data:
             return
-    raise HTTPException(status_code=404, detail="Esta junção não existe.")
+    raise HTTPException(status_code=404, detail=msg("juncao_nao_existe", pais))
 
 
 # --- Contas ---

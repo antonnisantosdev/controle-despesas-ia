@@ -56,7 +56,7 @@ def tabela(cliente, monkeypatch):
 def ia(monkeypatch):
     chamadas = []
 
-    def resumir_mes(dados, user_id=None, config=None):
+    def resumir_mes(dados, user_id=None, config=None, local=None):
         chamadas.append(dados["despesas"])
         return ResumoMes(resumo=f"Gastaste {dados['despesas']} €.", alertas=[{"nivel": "atencao", "mensagem": "Cuidado"}])
 

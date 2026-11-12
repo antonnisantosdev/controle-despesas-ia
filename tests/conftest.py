@@ -34,6 +34,7 @@ import resumo  # noqa: E402
 from postgrest.exceptions import APIError  # noqa: E402
 from auth import obter_utilizador_atual, obter_utilizador_confirmado  # noqa: E402
 from fastapi import Depends  # noqa: E402
+from mensagens import Local  # noqa: E402
 
 
 class BaseDadosFalsa:
@@ -151,6 +152,10 @@ def limite(monkeypatch):
     monkeypatch.setattr(main, "registar_pdf", limite.registar_pdf)
     # O plano lê-se sempre pelo limites.py (exigir_funcao, aviso do resumo): troca-se lá.
     monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: limite.plano)
+    # O país e a moeda (língua das mensagens e da IA): por omissão PT/EUR, sem ler a tabela assinaturas.
+    # O test_mensagens_pais.py testa as contas BR.
+    monkeypatch.setattr(limites, "local_do_utilizador", lambda user_id: Local())
+    monkeypatch.setattr(main, "local_do_utilizador", lambda user_id: Local())
     return limite
 
 

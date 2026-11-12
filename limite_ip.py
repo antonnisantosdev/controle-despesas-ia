@@ -19,6 +19,8 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, Request
 
+from mensagens import msg
+
 
 def _relogio() -> float:
     """Segundos de um relógio que só anda para a frente. Função à parte para os testes poderem fixá-lo."""
@@ -381,8 +383,8 @@ LIMITE_LOGIN_POR_EMAIL = LimiteDeFalhasPorEmail(
 # também contam: cada um destes já leu a base de dados.
 PERFIL_POR_CONTA = 10
 PERFIL_JANELA_SEGUNDOS = HORA
-# Proposta, por aprovar pelo copywriter.
-MENSAGEM_MUITAS_MUDANCAS_DE_PERFIL = "Mudaste as definições muitas vezes. Tenta daqui a uma hora."
+# Proposta, por aprovar pelo copywriter. Em PT; a versão BR está em mensagens.py e o main.py escolhe (sem ler a base de dados).
+MENSAGEM_MUITAS_MUDANCAS_DE_PERFIL = msg("perfil_muitas_mudancas", "PT")
 
 # Interruptor de emergência: False desliga este limite (não depende do X-Forwarded-For, por isso é à parte
 # do LIMITES_PUBLICOS_LIGADOS).

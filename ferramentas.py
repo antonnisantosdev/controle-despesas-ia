@@ -20,6 +20,7 @@ from consultas import (
 )
 from ia import PedidoInvalido
 from limites import config_ia_do_plano, hoje_em_lisboa, primeiro_mes_visivel
+from mensagens import Local
 from models import Categoria
 from objetivos import listar_objetivos
 from orcamento import planeamento_do_mes
@@ -126,6 +127,35 @@ FERRAMENTAS = [
         },
     },
 ]
+
+
+def _trocar_nas_descricoes(valor, trocas: dict[str, str]):
+    """Uma cópia de valor (dicts, listas e textos das ferramentas) com as trocas feitas em todos os textos."""
+    if isinstance(valor, dict):
+        return {chave: _trocar_nas_descricoes(item, trocas) for chave, item in valor.items()}
+    if isinstance(valor, list):
+        return [_trocar_nas_descricoes(item, trocas) for item in valor]
+    if isinstance(valor, str):
+        for antes, depois in trocas.items():
+            valor = valor.replace(antes, depois)
+    return valor
+
+
+def ferramentas_para(local: Local | None = None) -> list[dict]:
+    """As ferramentas do chat para o país e a moeda da conta.
+
+    PT/EUR: a lista FERRAMENTAS tal e qual (a mesma de sempre, e a mesma para a cache do Completo).
+    Moeda BRL: os valores são "em reais". Quem vive no Brasil: os exemplos de termos com palavras de lá.
+    Os nomes, os parâmetros e as categorias (chaves internas) nunca mudam.
+    """
+    local = local or Local()
+    trocas = {}
+    if local.moeda == "BRL":
+        trocas["em euros"] = "em reais"
+    if local.pais == "BR":
+        trocas['["gasolina", "portagens"]'] = '["gasolina", "pedágio"]'
+    return _trocar_nas_descricoes(FERRAMENTAS, trocas) if trocas else FERRAMENTAS
+
 
 _FORMATO_MES = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 

@@ -485,9 +485,9 @@ const BR: TextosPlanos = {
   TEXTOS_LIMITE_PDF: {
     titulo: "Você chegou ao limite de extratos em PDF deste mês",
     texto: "Você já importou os {limite} extratos em PDF deste mês. O contador zera no dia 1. Até lá, você pode importar o extrato em CSV.",
-    // Igual à API (limites.py), que ainda só fala PT: não traduzir antes do passo 8.
+    // Igual à API (mensagens.py, limite_pdf BR).
     textoApi:
-      "Chegaste ao limite de {limite} extratos PDF este mês. O contador volta a zero no dia 1. Até lá, podes importar o extrato em CSV.",
+      "Você chegou ao limite de {limite} extratos PDF este mês. O contador zera no dia 1. Até lá, você pode importar o extrato em CSV.",
   },
 
   // Aviso discreto quando já se usou 80% (ou mais) dos pedidos à IA do período, antes de chegar ao limite.

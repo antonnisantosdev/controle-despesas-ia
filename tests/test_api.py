@@ -17,11 +17,11 @@ def ia(monkeypatch):
     """Substitui as chamadas à IA e regista quantas vezes foram feitas."""
     chamadas = []
 
-    def categorizar(transacoes, user_id=None):
+    def categorizar(transacoes, user_id=None, local=None):
         chamadas.append("categorizar")
         return ["outros"] * len(transacoes)
 
-    def resumir_mes(dados, user_id=None, config=None):
+    def resumir_mes(dados, user_id=None, config=None, local=None):
         chamadas.append("resumir")
         return ResumoMes(resumo="Resumo de teste", alertas=[])
 
@@ -67,7 +67,7 @@ def test_csv_demasiado_grande_nao_gasta_perguntas(cliente, ia, limite):
     assert limite.perguntas == 0
 
 
-def ia_em_baixo(transacoes, user_id=None):
+def ia_em_baixo(transacoes, user_id=None, local=None):
     raise ErroIA("sem rede")
 
 
@@ -92,7 +92,7 @@ def test_se_a_ia_falhar_ao_categorizar_o_pdf_responde_503_e_nada_e_gravado(clien
     monkeypatch.setattr(
         main,
         "ler_extrato_pdf",
-        lambda pdf, user_id=None: ExtratoPdf(
+        lambda pdf, user_id=None, local=None: ExtratoPdf(
             movimentos=[MovimentoPdf(data="2026-10-01", descricao="CAFE", valor=-1.2, saldo=None)]
         ),
     )
@@ -106,7 +106,7 @@ def test_se_a_ia_falhar_ao_categorizar_o_pdf_responde_503_e_nada_e_gravado(clien
 
 def test_pdf_que_nao_e_um_extrato_responde_422(cliente, monkeypatch):
     monkeypatch.setattr(main, "contar_paginas_pdf", lambda pdf: 1)
-    monkeypatch.setattr(main, "ler_extrato_pdf", lambda pdf, user_id=None: ExtratoPdf(movimentos=[]))
+    monkeypatch.setattr(main, "ler_extrato_pdf", lambda pdf, user_id=None, local=None: ExtratoPdf(movimentos=[]))
 
     resposta = importar(cliente, b"%PDF-1.4 receita de bolo", nome="bolo.pdf")
 
