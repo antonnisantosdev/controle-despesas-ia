@@ -424,6 +424,7 @@ Regras:
 Nomes das categorias:
 - As ferramentas usam nomes internos. Nas ferramentas, use sempre o nome interno (por exemplo "levantamentos").
 - Na resposta ao usuário, use os nomes do Brasil: {NOMES_CATEGORIAS_BR}. As outras categorias ficam iguais.
+  Escreva só o nome do Brasil (por exemplo "moradia"), nunca o nome interno ao lado (nunca "casa (moradia)").
 
 Períodos:
 - "Últimos N meses" inclui sempre o mês atual: são o mês atual e os N-1 anteriores. Por exemplo, em 10 de
@@ -695,6 +696,7 @@ O resumo:
 - Use só os números recebidos. Nunca invente nem estime valores.
 - Escreva os valores no formato {{formato}}, por exemplo {{exemplo}}.
 - Ao falar das categorias, use os nomes do Brasil: {NOMES_CATEGORIAS_BR}.
+  Escreva só o nome do Brasil (por exemplo "moradia"), nunca o nome interno ao lado (nunca "casa (moradia)").
 
 Os alertas (no máximo 3, do mais importante para o menos importante):
 - nivel "atencao": quando as despesas do mês foram maiores do que as receitas do mês.

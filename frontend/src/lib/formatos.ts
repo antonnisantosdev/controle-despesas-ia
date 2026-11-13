@@ -46,14 +46,16 @@ export function dinheiro(valor: number, pais: Pais, moeda: Moeda, casas: Casas =
   });
 }
 
-// O símbolo junto a um número já escrito, com um espaço normal, do lado em que o país o escreve
+// O símbolo junto a um número já escrito, com um espaço que não quebra (NBSP), do lado em que o país o escreve
 // (igual ao dinheiro()): PT depois ("1500 €", "1500 R$"), BR antes ("R$ 1.500", "€ 1.500").
 // Os eixos e rótulos de PT sempre foram escritos assim à mão (`${v} €`), por isso ficam iguais.
 // Sem país: o da moeda (EUR -> PT, BRL -> BR), como antes.
+// NBSP: os eixos do Recharts partem o texto nos espaços normais ("R$" numa linha e "1.500" na outra).
+const NBSP = "\u00A0";
 export function comSimbolo(texto: string, moeda: Moeda, pais?: Pais): string {
   const simbolo = simboloMoeda(moeda);
   const lado = pais ?? (moeda === "BRL" ? "BR" : "PT");
-  return lado === "BR" ? `${simbolo} ${texto}` : `${texto} ${simbolo}`;
+  return lado === "BR" ? `${simbolo}${NBSP}${texto}` : `${texto}${NBSP}${simbolo}`;
 }
 
 // Eixo dos gráficos (valores redondos escolhidos pelo Recharts). PT/EUR: 1500 -> "1500 €", 10000 -> "10 000 €".
@@ -67,7 +69,7 @@ export function dinheiroEixo(valor: number, pais: Pais, moeda: Moeda): string {
 export function dinheiroMil(valor: number, pais: Pais, moeda: Moeda): string {
   const texto = (valor || 0) // "|| 0": sem "-0"
     .toLocaleString(localeDe(pais), { notation: "compact", maximumFractionDigits: 1 })
-    .replace(/\s/g, " ");
+    .replace(/\s/g, NBSP); // "12 mil", "18,5 M": também sem quebrar no eixo
   return comSimbolo(texto, moeda, pais);
 }
 
