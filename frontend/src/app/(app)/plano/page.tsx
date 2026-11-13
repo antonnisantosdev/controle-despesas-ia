@@ -158,7 +158,7 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
           </div>
           <p className="text-sm text-texto-suave">{doMes ? TEXTOS_MEU_PLANO.reiniciaMes : TEXTOS_MEU_PLANO.reinicia}</p>
         </div>
-        {/* Extratos PDF do mês: só nos planos que importam PDF (no Free o limite é 0). */}
+        {/* Extratos PDF do mês: em todos os planos (Free 1). Só não aparece se a API não mandar o limite (0). */}
         {estado.pdf_limite > 0 && (
           <div className="space-y-1 border-t border-borda pt-4 text-sm">
             <p className="font-medium text-texto">

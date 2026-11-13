@@ -1,4 +1,4 @@
-"""Limite de extratos PDF por mês (Essencial 15, Completo 30) e a ordem das verificações antes de chamar a IA."""
+"""Limite de extratos PDF por mês (Free 1, Essencial 15, Completo 30) e a ordem das verificações antes de chamar a IA."""
 
 from datetime import datetime, timezone
 
@@ -18,6 +18,12 @@ AGORA = datetime(2026, 11, 20, 15, 0, tzinfo=UTC)
 MENSAGEM_15 = (
     "Chegaste ao limite de 15 extratos PDF este mês. O contador volta a zero no dia 1. "
     "Até lá, podes importar o extrato em CSV."
+)
+
+# O 429 do limite de PDF no Free (limite 1): no singular, com "extratos PDF" (é por aí que o frontend o reconhece).
+MENSAGEM_1 = (
+    "Chegaste ao limite de extratos PDF deste mês: o teu plano inclui 1 por mês. "
+    "O contador volta a zero no dia 1. Até lá, podes importar o extrato em CSV."
 )
 
 
@@ -46,15 +52,30 @@ def importar_pdf(cliente, conteudo=b"%PDF-1.4 extrato inventado"):
 def test_limites_de_pdf_de_cada_plano():
     assert limites.limite_pdf_do_plano("essencial") == 15
     assert limites.limite_pdf_do_plano("completo") == 30
-    assert limites.limite_pdf_do_plano("free") == 0
+    assert limites.limite_pdf_do_plano("free") == 1
     assert limites.limite_pdf_do_plano(None) == 0
+    assert limites.limite_pdf_do_plano("plano-inventado") == 0
+
+
+def test_o_free_ja_nao_e_funcao_paga():
+    # Desde 2026-11-13 o Free importa PDF (1 por mês): o PDF deixou de ser uma função só dos pagos.
+    assert "importar_pdf" not in limites.FUNCOES_PAGAS
+    assert limites.plano_inclui("free", "importar_pdf")
+
+
+def test_a_mensagem_de_limite_1_e_no_singular():
+    assert limites.mensagem_do_limite_pdf(1) == MENSAGEM_1
+    assert limites.mensagem_do_limite_pdf(1, "BR") == (
+        "Você chegou ao limite de extratos PDF deste mês: o seu plano inclui 1 por mês. "
+        "O contador zera no dia 1. Até lá, você pode importar o extrato em CSV."
+    )
 
 
 def test_os_limites_de_pedidos_nao_mudaram():
     assert limites.LIMITES_POR_PLANO == {"free": (30, "mes"), "essencial": (20, "dia"), "completo": (50, "dia")}
 
 
-@pytest.mark.parametrize(("plano", "limite"), [("essencial", 15), ("completo", 30)])
+@pytest.mark.parametrize(("plano", "limite"), [("free", 1), ("essencial", 15), ("completo", 30)])
 def test_exigir_limite_pdf_deixa_ate_ao_limite_e_recusa_a_partir_dele(monkeypatch, plano, limite):
     monkeypatch.setattr(limites, "plano_do_utilizador", lambda user_id: plano)
 
@@ -65,10 +86,8 @@ def test_exigir_limite_pdf_deixa_ate_ao_limite_e_recusa_a_partir_dele(monkeypatc
     with pytest.raises(HTTPException) as erro:
         limites.exigir_limite_pdf("utilizador-teste")
     assert erro.value.status_code == 429
-    assert erro.value.detail == (
-        f"Chegaste ao limite de {limite} extratos PDF este mês. O contador volta a zero no dia 1. "
-        "Até lá, podes importar o extrato em CSV."
-    )
+    assert erro.value.detail == limites.mensagem_do_limite_pdf(limite)
+    assert "extratos PDF" in erro.value.detail
 
 
 # --- Na rota: a ordem das verificações ---
@@ -94,15 +113,81 @@ def test_no_limite_de_pdf_responde_429_sem_gastar_pedido_nem_chamar_a_ia(cliente
     assert ia == ["paginas"]  # contou as páginas (vem antes), mas não chamou a IA
 
 
-def test_o_free_recebe_402_antes_do_limite_de_pdf(cliente, ia, limite):
+# --- O Free: 1 PDF por mês, com o limite e o contador de pedidos verdadeiros (limites.registar_pdf) ---
+
+
+@pytest.fixture(params=["atomico", "antigo"])
+def free_real(request, cliente, ia, limite, monkeypatch):
+    """A rota com a limites.registar_pdf verdadeira, numa conta Free, pelos dois caminhos.
+
+    atomico: imita a função registar_pdf_ia da sql/017 (mesma lógica: PDF do mês, depois pedidos, depois regista).
+    antigo: sem a 017 (exigir_limite_pdf e registar_pergunta). Os pedidos e os PDF guardam-se no Limite do conftest.
+    """
     limite.plano = "free"
-    limite.maximo_pdf = 0
+    limite.maximo = limites.limite_do_plano("free")  # 30 por mês
+    monkeypatch.setattr(main, "registar_pdf", limites.registar_pdf)
+    monkeypatch.setattr(limites, "agora_utc", lambda: AGORA)
+    monkeypatch.setattr(limites, "inicio_dos_contadores_da_conta", lambda user_id, periodo, agora: AGORA)
+    monkeypatch.setattr(limites, "pdfs_no_mes", lambda user_id: limite.pdfs)
+    parametros = []
+
+    def registar_pergunta(user_id, funcao):
+        # Como a verdadeira no Free: 429 com a mensagem dos pedidos do mês (a do conftest tem um texto fixo).
+        if limite.perguntas >= limite.maximo:
+            raise HTTPException(status_code=429, detail=limites.mensagem_do_limite(limite.maximo, "mes"))
+        limite.registar(user_id, funcao)
+
+    monkeypatch.setattr(limites, "registar_pergunta", registar_pergunta)
+
+    def registar_pdf_ia(p):
+        parametros.append(p)
+        if request.param == "antigo":
+            return None  # como o PGRST202: a função ainda não existe no Supabase
+        if limite.pdfs >= p["p_limite_pdf"]:
+            return "pdf"
+        if limite.perguntas >= p["p_limite_pedidos"]:
+            return "pedidos"
+        limite.perguntas += 1
+        limite.funcoes.append("importar_pdf")
+        return "ok"
+
+    monkeypatch.setattr(limites, "_chamar_registar_pdf_ia", registar_pdf_ia)
+    return parametros
+
+
+def test_o_free_importa_1_pdf_e_gasta_1_pedido(cliente, ia, limite, free_real):
+    resposta = importar_pdf(cliente)
+
+    assert resposta.status_code == 201
+    assert limite.funcoes == ["importar_pdf"]  # 1 PDF e 1 dos 30 pedidos do mês
+    assert ia == ["paginas", "ia"]
+    assert free_real[0]["p_limite_pdf"] == 1
+    assert free_real[0]["p_limite_pedidos"] == 30
+
+
+def test_o_segundo_pdf_do_free_no_mesmo_mes_da_429_do_limite_de_pdf(cliente, ia, limite, free_real, base_dados):
+    assert importar_pdf(cliente).status_code == 201
+    gravadas = len(base_dados.gravado)
 
     resposta = importar_pdf(cliente)
 
-    assert resposta.status_code == 402
+    assert resposta.status_code == 429
+    assert resposta.json()["detail"] == MENSAGEM_1
+    assert limite.funcoes == ["importar_pdf"]  # o 2.º não gastou pedido
+    assert ia == ["paginas", "ia", "paginas"]  # nem chamou a IA
+    assert len(base_dados.gravado) == gravadas  # nem gravou nada
+
+
+def test_o_free_sem_pedidos_a_ia_da_429_dos_pedidos(cliente, ia, limite, free_real):
+    limite.perguntas = 30  # os 30 pedidos do mês já gastos (no chat, por exemplo), nenhum PDF
+
+    resposta = importar_pdf(cliente)
+
+    assert resposta.status_code == 429
+    assert resposta.json()["detail"] == limites.mensagem_do_limite(30, "mes")
+    assert "extratos PDF" not in resposta.json()["detail"]  # o frontend mostra o aviso dos pedidos
     assert limite.pdfs == 0
-    assert ia == []
+    assert ia == ["paginas"]
 
 
 def test_pdf_grande_demais_nao_conta(cliente, ia, limite):
@@ -425,10 +510,24 @@ def test_pdf_recusado_pela_registar_pdf_nao_chama_a_ia_nem_grava(cliente, ia, li
     assert limite.funcoes == []  # nenhum pedido contado
 
 
+def test_o_free_manda_limite_de_pdf_1_e_pedidos_do_mes(rpc):
+    falso = rpc("pdf", plano="free")
+
+    with pytest.raises(HTTPException) as erro:
+        limites.registar_pdf("utilizador-teste")
+    assert erro.value.status_code == 429
+    assert erro.value.detail == MENSAGEM_1
+
+    parametros = falso.chamadas[0][1]
+    assert parametros["p_limite_pdf"] == 1
+    assert parametros["p_limite_pedidos"] == 30
+    assert parametros["p_desde_pedidos"] == "2026-11-01T00:00:00+00:00"  # o Free conta os pedidos por mês
+    assert parametros["p_desde_pdf"] == "2026-11-01T00:00:00+00:00"
+
+
 @pytest.mark.parametrize(
     ("plano", "limite_pedidos", "desde_pedidos"),
     [
-        ("free", 30, "2026-11-01T00:00:00+00:00"),  # o Free conta os pedidos por mês
         (None, 0, "2026-11-20T00:00:00+00:00"),  # sem plano: 0 pedidos (período "dia", como em limites.py)
         ("plano-inventado", 0, "2026-11-20T00:00:00+00:00"),
     ],

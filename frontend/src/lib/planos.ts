@@ -15,7 +15,7 @@ export const ORDEM_PLANOS: IdPlano[] = ["free", "essencial", "completo"];
 export const NOMES_PLANOS: Record<IdPlano, string> = { free: "Free", essencial: "Essencial", completo: "Completo" };
 
 // Pedidos à IA de um plano e o período em que se contam (o Free conta por mês, os pagos por dia),
-// os extratos PDF por mês (0 no Free, que não importa PDF), os meses que o chat vê (null = todo o histórico)
+// os extratos PDF por mês (1 no Free), os meses que o chat vê (null = todo o histórico)
 // e as mensagens anteriores que o chat recebe (0 = cada pergunta à parte).
 export type LimitePlano = {
   limite: number;
@@ -28,7 +28,7 @@ export type LimitePlano = {
 // Só para quando GET /planos falha ou a API ainda está a acordar. Os números certos vêm sempre da API
 // (LIMITES_POR_PLANO, LIMITES_PDF_POR_PLANO e ConfigIA em limites.py); se lá mudarem, mudar também aqui.
 export const LIMITES_RESERVA: Record<IdPlano, LimitePlano> = {
-  free: { limite: 30, periodo: "mes", limitePdf: 0, mesesHistorico: 3, memoriaMensagens: 0 },
+  free: { limite: 30, periodo: "mes", limitePdf: 1, mesesHistorico: 3, memoriaMensagens: 0 },
   essencial: { limite: 20, periodo: "dia", limitePdf: 15, mesesHistorico: 12, memoriaMensagens: 4 },
   completo: { limite: 50, periodo: "dia", limitePdf: 30, mesesHistorico: null, memoriaMensagens: 10 },
 };
@@ -50,15 +50,21 @@ export function textoDaMemoria(memoriaMensagens: number, t: TextosPlanos): strin
   return preencher(t.TEXTOS_PRECOS.chatMemoria, { n: memoriaMensagens });
 }
 
-// Os pontos de um cartão de plano: os pedidos à IA, a importação (PDF nos pagos, CSV no Free), o que o chat
+// A importação de um cartão: "Até 15 extratos PDF por mês" / "Importar extratos em CSV e 1 extrato PDF por mês" (Free)
+// / "Importar extratos em CSV" (um plano sem PDF, ex.: a API antiga durante um deploy).
+export function textoDaImportacao(limitePdf: number, t: TextosPlanos): string {
+  if (limitePdf <= 0) return t.TEXTOS_PRECOS.importarCsv;
+  if (limitePdf === 1) return t.TEXTOS_PRECOS.pdfPorMesUm;
+  return preencher(t.TEXTOS_PRECOS.pdfPorMes, { limitePdf });
+}
+
+// Os pontos de um cartão de plano: os pedidos à IA, a importação (CSV e 1 PDF no Free, mais PDF nos pagos), o que o chat
 // vê e guarda (e, no Completo, a análise mais cuidada) e os pontos fixos do cartão.
 export function pontosDoCartao(id: IdPlano, limite: LimitePlano, t: TextosPlanos): string[] {
-  const importacao =
-    limite.limitePdf > 0 ? preencher(t.TEXTOS_PRECOS.pdfPorMes, { limitePdf: limite.limitePdf }) : t.TEXTOS_PRECOS.importarCsv;
   const analise = id === "completo" ? [t.TEXTOS_PRECOS.analiseCuidada] : [];
   return [
     textoDosPedidos(limite, t),
-    importacao,
+    textoDaImportacao(limite.limitePdf, t),
     textoDoHistorico(limite.mesesHistorico, t),
     textoDaMemoria(limite.memoriaMensagens, t),
     ...analise,
@@ -95,8 +101,9 @@ export function avisoCurtoDeQuota(estado: EstadoPlano, t: TextosPlanos): string 
   return preencher(t.TEXTOS_AVISO_QUOTA.avisoCurto, { restantes });
 }
 
-// Importar PDF e ler talões são só dos planos pagos (FUNCOES_PAGAS em limites.py). Isto só decide o que se
-// mostra: quem decide a sério é a API (responde 402).
+// Ler talões, preços por loja e as outras funções de FUNCOES_PAGAS (limites.py) são só dos planos pagos.
+// Importar PDF já não está aqui: o Free importa 1 por mês. Isto só decide o que se mostra: quem decide
+// a sério é a API (responde 402).
 export function temFuncoesPagas(plano: string | null | undefined): boolean {
   return plano === "essencial" || plano === "completo";
 }

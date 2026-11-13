@@ -723,7 +723,7 @@ class EstadoPlano(BaseModel):
     # Quando um plano pago chegou ao fim e a conta passou ao Free: o nome desse plano e o último dia dele.
     plano_terminado: str | None = None
     terminou_em: date | None = None
-    # Extratos em PDF lidos pela IA neste mês, e quantos o plano permite (0 no Free: não importa PDF).
+    # Extratos em PDF lidos pela IA neste mês, e quantos o plano permite (1 no Free).
     pdf_usados: int = 0
     pdf_limite: int = 0
     # Mensagens anteriores que o chat recebe (0 no Free) e meses que o chat vê (None = sem limite).
@@ -747,7 +747,7 @@ class PlanoDisponivel(BaseModel):
     # Pedidos à IA no período (o nome ficou de quando todos os planos contavam por dia).
     limite_diario: int
     periodo: Literal["dia", "mes"]
-    # Extratos em PDF por mês (0 no Free, que não importa PDF).
+    # Extratos em PDF por mês (1 no Free).
     limite_pdf: int = 0
     # Mensagens anteriores que o chat recebe e meses que o chat vê (None = sem limite).
     memoria_mensagens: int = 0

@@ -384,8 +384,8 @@ def test_inicio_do_periodo_em_hora_de_lisboa(periodo, agora, esperado):
 # --- Funções só dos planos pagos ---
 
 
-@pytest.mark.parametrize("funcao", ["importar_pdf", "ler_talao"])
-def test_pdf_e_taloes_sao_so_dos_planos_pagos(funcao):
+@pytest.mark.parametrize("funcao", ["ler_talao", "precos_por_loja", "exportar_relatorio", "fazer_compras"])
+def test_taloes_e_precos_sao_so_dos_planos_pagos(funcao):
     assert not limites.plano_inclui("free", funcao)
     assert not limites.plano_inclui(None, funcao)
     assert limites.plano_inclui("essencial", funcao)
@@ -394,6 +394,8 @@ def test_pdf_e_taloes_sao_so_dos_planos_pagos(funcao):
 
 def test_o_resto_e_de_todos_os_planos():
     assert limites.plano_inclui("free", "chat")
+    # Desde 2026-11-13 o Free também importa PDF (1 por mês, LIMITES_PDF_POR_PLANO).
+    assert limites.plano_inclui("free", "importar_pdf")
 
 
 def importar_pdf(cliente):
@@ -410,35 +412,24 @@ def ler_talao(cliente, imagem=JPEG_INVENTADO, tipo="image/jpeg"):
     return cliente.post("/compras/ler", files={"foto": ("talao.jpg", imagem, tipo)})
 
 
-def test_o_free_nao_importa_pdf_e_nao_gasta_pedido(cliente, limite, monkeypatch):
+def test_o_free_importa_pdf_sem_402(cliente, limite, monkeypatch):
+    # O Free importa 1 PDF por mês: passa pelas mesmas verificações e conta como os pagos.
     limite.plano = "free"
-    paginas_contadas = []
-    monkeypatch.setattr(main, "contar_paginas_pdf", lambda pdf: paginas_contadas.append(pdf) or 1)
+    limite.maximo_pdf = limites.limite_pdf_do_plano("free")
+    monkeypatch.setattr(main, "contar_paginas_pdf", lambda pdf: 1)
+    monkeypatch.setattr(
+        main,
+        "ler_extrato_pdf",
+        lambda pdf, user_id=None, local=None: ExtratoPdf(
+            movimentos=[MovimentoPdf(data="2026-10-01", descricao="CAFE", valor=-1.2, saldo=None)]
+        ),
+    )
+    monkeypatch.setattr(main, "categorizar", lambda transacoes, user_id=None, local=None: ["outros"] * len(transacoes))
 
     resposta = importar_pdf(cliente)
 
-    # 402 e não 403: o 403 faz o frontend mandar para "O teu plano terminou".
-    assert resposta.status_code == 402
-    assert resposta.json()["detail"] == (
-        "A importação de extratos em PDF está disponível nos planos Essencial e Completo. "
-        "No Free, podes importar o extrato em CSV."
-    )
-    assert limite.perguntas == 0
-    assert paginas_contadas == []
-
-
-def test_ler_pdf_enviado_tambem_recusa_o_free(limite, monkeypatch):
-    # Segunda proteção: mesmo chamada fora da rota, a função não conta páginas nem gasta pedidos no Free.
-    limite.plano = "free"
-    paginas_contadas = []
-    monkeypatch.setattr(main, "contar_paginas_pdf", lambda pdf: paginas_contadas.append(pdf) or 1)
-
-    with pytest.raises(HTTPException) as erro:
-        main.ler_pdf_enviado(b"%PDF-1.4 extrato inventado", "utilizador-teste")
-
-    assert erro.value.status_code == 402
-    assert limite.perguntas == 0
-    assert paginas_contadas == []
+    assert resposta.status_code == 201
+    assert limite.funcoes == ["importar_pdf"]
 
 
 def importar_csv(cliente):
@@ -608,7 +599,7 @@ def assinatura(monkeypatch):
 
 
 def test_a_rota_plano_mostra_o_limite_o_periodo_e_os_pedidos_usados(cliente, assinatura):
-    pdfs_contados = assinatura("free", None, pedidos={"mes": 3, "dia": 99})
+    pdfs_contados = assinatura("free", None, pedidos={"mes": 3, "dia": 99}, pdfs=1)
 
     resposta = cliente.get("/plano")
 
@@ -622,8 +613,8 @@ def test_a_rota_plano_mostra_o_limite_o_periodo_e_os_pedidos_usados(cliente, ass
         "ativo_ate": None,
         "plano_terminado": None,
         "terminou_em": None,
-        "pdf_usados": 0,
-        "pdf_limite": 0,  # o Free não importa PDF
+        "pdf_usados": 1,
+        "pdf_limite": 1,  # o Free importa 1 PDF por mês (desde 2026-11-13)
         "memoria_mensagens": 0,  # o chat do Free não guarda mensagens anteriores
         "meses_historico": 3,  # o mês atual e os 2 anteriores
         # Perfil da conta (sql/020): o de sempre, para as contas que já existiam.
@@ -634,7 +625,7 @@ def test_a_rota_plano_mostra_o_limite_o_periodo_e_os_pedidos_usados(cliente, ass
         "boas_vindas_pendente": False,
         "brasil_disponivel": True,  # nos testes o Brasil está aberto (conftest.py)
     }
-    assert pdfs_contados == []  # no Free nem se contam os PDF
+    assert pdfs_contados == ["utilizador-teste"]  # no Free também se contam os PDF do mês
 
 
 def test_a_rota_plano_conta_por_dia_nos_pagos(cliente, assinatura):
@@ -661,8 +652,8 @@ def test_um_plano_pago_que_terminou_aparece_como_free(cliente, assinatura):
     assert corpo["ativo_ate"] is None
     assert corpo["plano_terminado"] == "completo"
     assert corpo["terminou_em"] == "2026-11-19"
-    assert corpo["pdf_limite"] == 0
-    assert pdfs_contados == []
+    assert corpo["pdf_limite"] == 1  # o PDF do Free
+    assert pdfs_contados == ["utilizador-teste"]
 
 
 def test_no_ultimo_dia_o_plano_pago_ainda_vale(cliente, assinatura):
@@ -682,7 +673,7 @@ def test_plano_pago_sem_data_vale_como_free_sem_aviso_de_terminado(cliente, assi
     assert corpo["plano_terminado"] is None  # sem data não há "terminou a ..." para mostrar
 
 
-def test_um_plano_pago_que_terminou_conta_os_pedidos_do_mes_e_nao_tem_pdf(monkeypatch):
+def test_um_plano_pago_que_terminou_conta_os_pedidos_do_mes_e_fica_com_o_pdf_do_free(monkeypatch):
     # O Free conta todos os pedidos do mês, incluindo os feitos ainda no plano pago (aceite pelo CEO).
     uso = UsoIaFalso([datetime(2026, 11, 5, 10, 0, tzinfo=UTC)] * 30)
     monkeypatch.setattr(limites, "supabase", uso)
@@ -694,8 +685,10 @@ def test_um_plano_pago_que_terminou_conta_os_pedidos_do_mes_e_nao_tem_pdf(monkey
     assert erro.value.status_code == 429
     assert "deste mês" in erro.value.detail
 
+    # Passa a ter o limite de PDF do Free (1 por mês) e deixa de ler talões.
+    assert limites.limite_pdf_do_plano(limites.plano_do_utilizador("utilizador-teste")) == 1
     with pytest.raises(HTTPException) as erro:
-        limites.exigir_funcao("utilizador-teste", "importar_pdf")
+        limites.exigir_funcao("utilizador-teste", "ler_talao")
     assert erro.value.status_code == 402
 
 
@@ -703,6 +696,7 @@ def test_o_free_nunca_mostra_data_de_fim(monkeypatch):
     # Mesmo que a coluna ativo_ate tenha uma data perdida, o Free não acaba.
     monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: limites.Assinatura("free", date(2026, 1, 1)))
     monkeypatch.setattr(limites, "pedidos_no_periodo", lambda user_id, periodo: 0)
+    monkeypatch.setattr(limites, "pdfs_no_mes", lambda user_id: 0)
 
     assert limites.estado_do_plano("utilizador-teste").ativo_ate is None
 
@@ -740,7 +734,7 @@ def test_a_rota_planos_lista_os_planos_por_ordem_sem_login():
 
     assert resposta.status_code == 200
     assert resposta.json() == [
-        {"plano": "free", "limite_diario": 30, "periodo": "mes", "limite_pdf": 0, "memoria_mensagens": 0, "meses_historico": 3},
+        {"plano": "free", "limite_diario": 30, "periodo": "mes", "limite_pdf": 1, "memoria_mensagens": 0, "meses_historico": 3},
         {"plano": "essencial", "limite_diario": 20, "periodo": "dia", "limite_pdf": 15, "memoria_mensagens": 4, "meses_historico": 12},
         {"plano": "completo", "limite_diario": 50, "periodo": "dia", "limite_pdf": 30, "memoria_mensagens": 10, "meses_historico": None},
     ]

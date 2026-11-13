@@ -50,6 +50,17 @@ MENSAGENS: dict[str, dict[str, str]] = {
             "Até lá, você pode importar o extrato em CSV."
         ),
     },
+    # Limite 1 (o Free): singular, mas com "extratos PDF" na mesma (eLimitePdf no frontend). TEXTO NOVO (PT e BR).
+    "limite_pdf_um": {
+        "PT": (
+            "Chegaste ao limite de extratos PDF deste mês: o teu plano inclui 1 por mês. "
+            "O contador volta a zero no dia 1. Até lá, podes importar o extrato em CSV."
+        ),
+        "BR": (
+            "Você chegou ao limite de extratos PDF deste mês: o seu plano inclui 1 por mês. "
+            "O contador zera no dia 1. Até lá, você pode importar o extrato em CSV."
+        ),
+    },
     "pdf_indisponivel": {  # BR: TEXTO NOVO
         "PT": "Não foi possível importar o PDF agora. Tenta outra vez daqui a pouco.",
         "BR": "Não foi possível importar o PDF agora. Tente de novo daqui a pouco.",
@@ -71,16 +82,7 @@ MENSAGENS: dict[str, dict[str, str]] = {
         "BR": "Você chegou ao limite de pedidos à IA de hoje. O resumo volta depois da meia-noite.",
     },
     # --- Funções só dos planos pagos (402). BR igual ao frontend, menos onde está marcado. ---
-    "funcao_paga_importar_pdf": {
-        "PT": (
-            "A importação de extratos em PDF está disponível nos planos Essencial e Completo. "
-            "No Free, podes importar o extrato em CSV."
-        ),
-        "BR": (
-            "A importação de extratos em PDF está disponível nos planos Essencial e Completo. "
-            "No Free, você pode importar o extrato em CSV."
-        ),
-    },
+    # (Já não há "funcao_paga_importar_pdf": desde 2026-11-13 o Free também importa PDF, 1 por mês.)
     "funcao_paga_ler_talao": {
         "PT": "A leitura de talões está disponível nos planos Essencial e Completo.",
         "BR": "A leitura de notas fiscais está disponível nos planos Essencial e Completo.",

@@ -1025,6 +1025,7 @@ def test_o_plano_diz_se_a_conta_pode_escolher_o_brasil(cliente, monkeypatch, bra
     assinatura = Assinatura("free", None, pais=pais, com_perfil=True)
     monkeypatch.setattr(limites, "assinatura_do_utilizador", lambda user_id: assinatura)
     monkeypatch.setattr(limites, "pedidos_no_periodo", lambda user_id, periodo: 0)
+    monkeypatch.setattr(limites, "pdfs_no_mes", lambda user_id: 0)  # o Free também conta os PDF do mês
 
     assert cliente.get("/plano").json()["brasil_disponivel"] is esperado
 

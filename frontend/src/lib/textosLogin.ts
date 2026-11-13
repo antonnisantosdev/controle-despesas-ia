@@ -39,7 +39,7 @@ const PT = {
 
   // Página de registo. {pedidos}: "30 pedidos à IA por mês" (textoDosPedidos, planos.ts).
   TEXTOS_REGISTO: {
-    introducao: "Cria a tua conta grátis. O plano Free inclui {pedidos} e importação de extratos em CSV.",
+    introducao: "Cria a tua conta grátis. O plano Free inclui {pedidos}, importação de extratos em CSV e 1 extrato PDF por mês.", // TEXTO NOVO
     palavraPasse: "Palavra-passe (mínimo 8 caracteres)",
     repetir: "Repetir a palavra-passe",
     erroCurta: "A palavra-passe tem de ter pelo menos 8 caracteres.",
@@ -86,7 +86,7 @@ const BR: Traducao<typeof PT> = {
     criarConta: "Crie uma grátis",
   },
   TEXTOS_REGISTO: {
-    introducao: "Crie sua conta grátis. O plano Free inclui {pedidos} e importação de extratos em CSV.",
+    introducao: "Crie sua conta grátis. O plano Free inclui {pedidos}, importação de extratos em CSV e 1 extrato em PDF por mês.", // TEXTO NOVO
     palavraPasse: "Senha (mínimo de 8 caracteres)",
     repetir: "Repetir a senha",
     erroCurta: "A senha precisa ter pelo menos 8 caracteres.",

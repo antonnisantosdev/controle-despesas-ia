@@ -181,7 +181,7 @@ type PropsCartao = {
 
 function CartaoDePreco({ id, limite, atual, temConta, emailConta }: PropsCartao) {
   const textos = TEXTOS_CARTOES[id];
-  // Pedidos à IA, a importação (PDF nos pagos, CSV no Free), o que o chat vê e guarda e os outros pontos do cartão.
+  // Pedidos à IA, a importação (CSV e 1 PDF no Free, mais PDF nos pagos), o que o chat vê e guarda e os outros pontos do cartão.
   const pontos = pontosDoCartao(id, limite, DICIONARIO_PLANOS.PT);
 
   // A partir do ecrã médio, cada cartão ocupa 4 linhas da grelha da secção (subgrid): nome e frase, preço,

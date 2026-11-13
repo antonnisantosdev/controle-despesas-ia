@@ -119,15 +119,17 @@ def primeiro_mes_visivel(config: ConfigIA, hoje: date) -> str | None:
 PLANOS_PAGOS = {"essencial", "completo"}
 FUNCOES_PAGAS = {
     funcao: msg(f"funcao_paga_{funcao}", "PT")
-    for funcao in ("importar_pdf", "ler_talao", "precos_por_loja", "exportar_relatorio", "fazer_compras")
+    for funcao in ("ler_talao", "precos_por_loja", "exportar_relatorio", "fazer_compras")
 }
 
 # Funções que só o plano Completo tem, com a mensagem do 402 para os outros planos (chave "funcao_completo_<funcao>").
 FUNCOES_SO_COMPLETO = {"resumo_anual_ia": msg("funcao_completo_resumo_anual_ia", "PT")}
 
-# Extratos em PDF que cada plano pode importar por mês de Lisboa (o Free não importa PDF).
-# Contam à parte dos pedidos à IA: cada PDF conta aqui E gasta 1 pedido. Para mudar, muda-se só aqui.
+# Extratos em PDF que cada plano pode importar por mês (no país da conta). Todos os planos importam PDF:
+# o Free só 1 por mês (decisão do CEO, 2026-11-13). Contam à parte dos pedidos à IA: cada PDF conta aqui
+# E gasta 1 pedido (no Free, dos 30 do mês). Para mudar, muda-se só aqui.
 LIMITES_PDF_POR_PLANO: dict[str, int] = {
+    "free": 1,
     "essencial": 15,
     "completo": 30,
 }
@@ -238,7 +240,7 @@ def periodo_do_plano(plano: str | None) -> str:
 
 
 def limite_pdf_do_plano(plano: str | None) -> int:
-    """Quantos extratos em PDF o plano pode importar por mês. 0 no Free e em planos desconhecidos."""
+    """Quantos extratos em PDF o plano pode importar por mês. 0 em planos desconhecidos (ou sem plano)."""
     return LIMITES_PDF_POR_PLANO.get(plano, 0)
 
 
@@ -336,7 +338,10 @@ def mensagem_do_limite_pdf(limite: int, pais: str | None = None) -> str:
     """O texto do 429 do limite de PDF no país da conta (o PT é igual ao do frontend, textosPlanos.ts).
 
     Tem sempre "extratos PDF": é assim que o frontend o distingue do limite de pedidos (api.ts, eLimitePdf).
+    Com limite 1 (o Free) usa a frase no singular, para não dizer "1 extratos".
     """
+    if limite == 1:
+        return msg("limite_pdf_um", pais)
     return msg("limite_pdf", pais, limite=limite)
 
 

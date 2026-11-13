@@ -11,7 +11,7 @@ The demo account uses invented data and is read-only. The API runs on Render's f
 
 ## Features
 
-- **Import statements**: CSV (all plans) and PDF (paid plans; Claude reads the PDF and extracts every transaction).
+- **Import statements**: CSV and PDF on all plans (Free: 1 PDF per month; Claude reads the PDF and extracts every transaction).
 - **AI categorisation**: each transaction gets a category, and the user can correct it.
 - **Dashboard**: spending by category and monthly evolution (Recharts).
 - **Chat with tool use**: questions in natural language ("how much did I spend on restaurants compared to last month?") are answered with data fetched by tools, not made up by the model.
@@ -109,7 +109,7 @@ Detecting subscriptions does not need a model. Descriptions are normalised (numb
 
 ## Cost controls
 
-- **Requests per plan** (`limites.py`): Free 30 AI requests per month, Essencial 20 per day, Completo 50 per day. PDF statements: 15 per month (Essencial) and 30 per month (Completo), max 10 pages each, checked before calling the model. Counters use Lisbon time (the server runs in UTC).
+- **Requests per plan** (`limites.py`): Free 30 AI requests per month, Essencial 20 per day, Completo 50 per day. PDF statements: 1 per month (Free), 15 per month (Essencial) and 30 per month (Completo), max 10 pages each, checked before calling the model; each PDF also uses 1 AI request. Counters use Lisbon time (the server runs in UTC).
 - **Atomic counters in SQL**: `registar_pedido_ia` (migrations 015/016) and `registar_pdf_ia` (017) check and record a request in one transaction, with a per-user `pg_advisory_xact_lock`. Parallel requests cannot all see "29 of 30" and go over the limit. The PDF function uses the same lock, so a PDF and a chat question sent at the same time also wait for each other.
 - **Fail closed**: if the PDF count cannot be read, no PDF is sent to the model.
 - **Chat cost ceiling**: 3 turns, 4 tools per turn, one output budget per question, capped history and 12 months per tool call put an upper bound on the cost of each question.
@@ -134,7 +134,7 @@ Coming soon: 4 weeks of production data.
 
 | Plan | Price | AI requests | PDF statements | Receipts |
 |---|---|---|---|---|
-| Free | €0 | 30 / month | – (CSV only) | – |
+| Free | €0 | 30 / month | 1 / month | – |
 | Essencial | €4.99 / month or €49 / year | 20 / day | up to 15 / month | yes |
 | Completo | €8.99 / month or €89 / year | 50 / day | up to 30 / month | yes |
 

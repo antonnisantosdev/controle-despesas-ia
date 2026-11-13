@@ -68,6 +68,7 @@ def test_o_limite_de_pdf_continua_a_ser_detetado_pelo_frontend():
     assert 'erro.detalhe.includes("extratos PDF")' in api
     for pais in ("PT", "BR"):
         assert "extratos PDF" in limites.mensagem_do_limite_pdf(15, pais)
+        assert "extratos PDF" in limites.mensagem_do_limite_pdf(1, pais)  # o do Free, no singular
         assert "extratos PDF" not in limites.mensagem_do_limite(20, "dia", pais)
         assert "extratos PDF" not in limites.mensagem_do_limite(30, "mes", pais)
 
@@ -91,8 +92,14 @@ def _texto_br_do_frontend(ficheiro: str, chave: str) -> str:
     return re.search(rf'\b{chave}: "([^"]+)"', bloco_br).group(1)
 
 
+def test_o_limite_de_pdf_do_free_em_pt_e_igual_ao_do_frontend():
+    conteudo = (FRONTEND / "textosPlanos.ts").read_text(encoding="utf-8")
+    bloco_pt = conteudo.split("const BR")[0]
+    assert f'textoApiUm: "{msg("limite_pdf_um", "PT")}"' in bloco_pt
+
+
 def test_textos_br_iguais_aos_do_frontend():
-    assert msg("funcao_paga_importar_pdf", "BR") == _texto_br_do_frontend("textosPlanos.ts", "pdf")
+    assert msg("limite_pdf_um", "BR") == _texto_br_do_frontend("textosPlanos.ts", "textoApiUm")
     assert msg("funcao_paga_ler_talao", "BR") == _texto_br_do_frontend("textosPlanos.ts", "talao")
     assert msg("funcao_paga_precos_por_loja", "BR") == _texto_br_do_frontend("textosPrecosLojas.ts", "soPlanosPagos")
     limite = _texto_br_do_frontend("textosPlanos.ts", "textoMes").replace("{limite}", "30")

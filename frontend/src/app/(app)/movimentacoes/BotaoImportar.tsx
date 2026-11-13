@@ -8,14 +8,12 @@ import {
   eLimitePdf,
   enviarFicheiro,
   ErroApi,
-  eSoPlanosPagos,
   SessaoExpirada,
   type ResultadoImportacao,
 } from "@/lib/api";
 import { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import { useTextos } from "@/lib/textos";
 import { DICIONARIO_MOVIMENTACOES } from "@/lib/textosMovimentacoes";
-import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 
 type Props = {
   onImportado: (resultado: ResultadoImportacao) => void;
@@ -23,24 +21,20 @@ type Props = {
   onSessaoExpirada: (e: unknown) => void;
   onLimiteDiario: () => void; // 429: a página mostra o AvisoLimite
   onLimitePdf: () => void; // 429 do limite de extratos PDF do mês: a página mostra o AvisoLimitePdf
-  onSoPlanosPagos: (mensagem: string) => void; // 402 (PDF no Free): a página mostra o AvisoPlanoPago
-  soCsv: boolean; // Free: a janela de escolha só mostra CSV (a API responde 402 ao PDF na mesma)
   desligado?: boolean; // demo (só leitura): o botão fica desligado
 };
 
 // Botão que abre a janela "Escolher ficheiro" e envia o CSV ou o PDF para POST /transacoes/importar.
+// Todos os planos importam PDF (o Free só 1 por mês): o limite de PDF chega como 429 (onLimitePdf).
 export default function BotaoImportar({
   onImportado,
   onErro,
   onSessaoExpirada,
   onLimiteDiario,
   onLimitePdf,
-  onSoPlanosPagos,
-  soCsv,
   desligado = false,
 }: Props) {
   const { TEXTOS_IMPORTAR } = useTextos(DICIONARIO_MOVIMENTACOES);
-  const { TEXTOS_PLANO_PAGO } = useTextos(DICIONARIO_PLANOS);
   // useRef: uma ligação direta ao <input type="file"> escondido, para o "clicar" a partir do botão.
   const entradaFicheiro = useRef<HTMLInputElement>(null);
   const [aImportar, setAImportar] = useState(false);
@@ -65,10 +59,6 @@ export default function BotaoImportar({
         onLimiteDiario();
         return;
       }
-      if (eSoPlanosPagos(e)) {
-        onSoPlanosPagos(typeof e.detalhe === "string" ? e.detalhe : TEXTOS_PLANO_PAGO.pdf);
-        return;
-      }
       // O "detail" do FastAPI chega em duas formas: um texto simples, ou o objeto
       // { mensagem, erros } quando o extrato tem linhas inválidas.
       if (e instanceof ErroApi && typeof e.detalhe === "string") {
@@ -91,7 +81,7 @@ export default function BotaoImportar({
       <input
         ref={entradaFicheiro}
         type="file"
-        accept={soCsv ? ".csv,text/csv" : ".csv,text/csv,.pdf,application/pdf"}
+        accept=".csv,text/csv,.pdf,application/pdf"
         className="hidden"
         onChange={(e) => {
           const ficheiro = e.target.files?.[0];

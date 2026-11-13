@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 
 import AvisoLimite from "@/components/AvisoLimite";
 import AvisoLimitePdf from "@/components/AvisoLimitePdf";
-import AvisoPlanoPago from "@/components/AvisoPlanoPago";
 import NotaDemo, { ID_NOTA_DEMO } from "@/components/NotaDemo";
 import {
   eBloqueadoNaDemo,
@@ -17,7 +16,7 @@ import {
   type Transacao,
 } from "@/lib/api";
 import { useEstadoPlano, useFormatos } from "@/lib/conta";
-import { mesAtual, preencher, temFuncoesPagas } from "@/lib/planos";
+import { mesAtual, preencher } from "@/lib/planos";
 import { comValorAtual, useOpcoes, useTextos } from "@/lib/textos";
 import { DICIONARIO_MOVIMENTACOES } from "@/lib/textosMovimentacoes";
 import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
@@ -59,12 +58,10 @@ export default function PaginaMovimentacoes() {
   const [semPedidos, setSemPedidos] = useState(false);
   // 429 do limite de extratos PDF do mês (o CSV continua a funcionar).
   const [semPdf, setSemPdf] = useState(false);
-  // 402: o PDF é só dos planos pagos. Guarda a mensagem da API para o AvisoPlanoPago.
-  const [soPlanosPagos, setSoPlanosPagos] = useState<string | null>(null);
-  // Free: só importa CSV. Avisa antes de escolher o ficheiro. Se o /plano falhar, aceita os dois (a API decide).
-  // O /plano vem do ProvedorConta (layout da app).
+  // Free: importa CSV e 1 PDF por mês. Diz-lho antes de escolher o ficheiro (o limite a sério é da API: 429).
+  // O /plano vem do ProvedorConta (layout da app); enquanto não chega, não se mostra a nota.
   const estadoPlano = useEstadoPlano();
-  const soCsv = estadoPlano ? !temFuncoesPagas(estadoPlano.plano) : false;
+  const eFree = estadoPlano?.plano === "free";
   // Muda sempre que é criada uma movimentação, para a lista voltar a ser pedida à API.
   const [versao, setVersao] = useState(0);
   // Transações sem categoria em TODOS os meses: a lista só tem o mês escolhido, mas o
@@ -115,7 +112,6 @@ export default function PaginaMovimentacoes() {
   // Depois de importar: diz quantas entraram e salta para o mês mais recente do extrato.
   function aposImportar(resultado: ResultadoImportacao) {
     setSemPedidos(false);
-    setSoPlanosPagos(null);
     setAviso({
       tipo: "sucesso",
       mensagem: preencher(TEXTOS_MOVIMENTACOES.importadas, {
@@ -161,7 +157,6 @@ export default function PaginaMovimentacoes() {
   // Depois de a IA categorizar: diz quantas mudaram e volta a pedir a lista e a contagem.
   function aposCategorizar(atualizadas: Transacao[]) {
     setSemPedidos(false);
-    setSoPlanosPagos(null);
     setAviso({ tipo: "sucesso", mensagem: preencher(TEXTOS_CATEGORIZAR.sucesso, { n: atualizadas.length }), erros: [] });
     setVersao((v) => v + 1);
   }
@@ -292,29 +287,19 @@ export default function PaginaMovimentacoes() {
               onErro={(mensagem, erros) => {
                 setSemPedidos(false);
                 setSemPdf(false);
-                setSoPlanosPagos(null);
                 setAviso({ tipo: "erro", mensagem, erros });
               }}
               onSessaoExpirada={tratarErro}
               onLimiteDiario={() => {
                 setAviso(null);
                 setSemPdf(false);
-                setSoPlanosPagos(null);
                 setSemPedidos(true);
               }}
               onLimitePdf={() => {
                 setAviso(null);
                 setSemPedidos(false);
-                setSoPlanosPagos(null);
                 setSemPdf(true);
               }}
-              onSoPlanosPagos={(mensagem) => {
-                setAviso(null);
-                setSemPedidos(false);
-                setSemPdf(false);
-                setSoPlanosPagos(mensagem);
-              }}
-              soCsv={soCsv}
               desligado={demo}
             />
             <button
@@ -330,11 +315,11 @@ export default function PaginaMovimentacoes() {
         </header>
 
         <NotaDemo />
-        {soCsv && !demo && <p className="text-sm text-texto-suave">{TEXTOS_PLANO_PAGO.soCsv}</p>}
-        {/* O que vai para a Anthropic ao importar: o PDF inteiro (só nos pagos); no CSV, só a descrição e o valor. */}
+        {eFree && !demo && <p className="text-sm text-texto-suave">{TEXTOS_PLANO_PAGO.importarFree}</p>}
+        {/* O que vai para a Anthropic ao importar: o PDF inteiro; no CSV, só a descrição e o valor. */}
         {!demo && (
           <ul className="space-y-1 text-sm text-texto-suave">
-            {!soCsv && <li>{TEXTOS_ENVIO_IA.pdf}</li>}
+            <li>{TEXTOS_ENVIO_IA.pdf}</li>
             <li>{TEXTOS_ENVIO_IA.csv}</li>
           </ul>
         )}
@@ -346,13 +331,11 @@ export default function PaginaMovimentacoes() {
             onCategorizadas={aposCategorizar}
             onErro={(mensagem) => {
               setSemPedidos(false);
-              setSoPlanosPagos(null);
               setAviso({ tipo: "erro", mensagem, erros: [] });
             }}
             onSessaoExpirada={tratarErro}
             onLimiteDiario={() => {
               setAviso(null);
-              setSoPlanosPagos(null);
               setSemPedidos(true);
             }}
           />
@@ -387,7 +370,6 @@ export default function PaginaMovimentacoes() {
 
         {semPedidos && <AvisoLimite />}
         {semPdf && <AvisoLimitePdf />}
-        {soPlanosPagos && <AvisoPlanoPago mensagem={soPlanosPagos} />}
 
         {formAberto && !demo && <FormNovaMovimentacao onCriada={aposCriar} onFechar={() => setFormAberto(false)} />}
 

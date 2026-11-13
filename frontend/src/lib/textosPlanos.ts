@@ -9,9 +9,9 @@ import type { Dicionario, Traducao } from "./textos";
 const PT = {
   TEXTOS_PRECOS: {
     titulo: "Escolhe o teu plano",
-    // TEXTO NOVO
+    // TEXTO NOVO (2026-11-13: o Free também importa 1 PDF por mês)
     subtitulo:
-      "Começas no Free, sem cartão. Os planos pagos dão-te mais pedidos à IA, importação de extratos em PDF e leitura de talões por fotografia.",
+      "Começas no Free, sem cartão. Os planos pagos dão-te mais pedidos à IA, mais extratos PDF e leitura de talões por fotografia.",
     precoPorDefinir: "Preço em breve", // só aparece se um plano pago ficar sem preço em PRECOS (planos.ts)
     precoFree: "Grátis",
     porMes: "/mês",
@@ -22,9 +22,10 @@ const PT = {
     entrar: "Entrar",
     pedidosPorDia: "{limite} pedidos à IA por dia",
     pedidosPorMes: "{limite} pedidos à IA por mês", // TEXTO NOVO
-    // Nos cartões pagos, no lugar de "Importar extratos em PDF". O número vem de GET /planos (limite_pdf).
+    // A importação, em cada cartão. O número vem de GET /planos (limite_pdf): pdfPorMes nos pagos (mais de 1),
+    // pdfPorMesUm no Free (1 por mês) e importarCsv se um plano vier sem PDF (ex.: a API antiga durante um deploy).
     pdfPorMes: "Até {limitePdf} extratos PDF por mês",
-    // No cartão do Free, no lugar do limite de PDF (o Free não importa PDF).
+    pdfPorMesUm: "Importar extratos em CSV e 1 extrato PDF por mês", // TEXTO NOVO
     importarCsv: "Importar extratos em CSV", // TEXTO NOVO
     // O que o chat vê e guarda, a seguir à importação. Os números vêm de GET /planos (meses_historico e
     // memoria_mensagens, ConfigIA em limites.py). {anteriores} = meses_historico - 1.
@@ -63,7 +64,7 @@ const PT = {
       {
         pergunta: "O que conta como pedido à IA?",
         resposta:
-          "Cada vez que a IA trabalha para ti: uma pergunta no chat, a categorização de um extrato importado, a leitura de um talão, uma sugestão de orçamento, o resumo do mês, o resumo do ano (no Completo), o plano de poupança de um objetivo, categorizar uma movimentação nova ou um clique em \"Categorizar\" (até 300 de cada vez). Ver o dashboard, as listas, o resumo anual e o simulador não conta. Se os pedidos acabarem, os extratos em CSV importam-se na mesma, sem categorias. Nos planos pagos, o contador volta a zero à meia-noite. No Free, volta a zero no dia 1 de cada mês. Os extratos em PDF têm também um limite próprio por mês: 15 no Essencial e 30 no Completo, com até 10 páginas cada. Cada PDF conta para esse limite e gasta também 1 pedido à IA. O limite de PDF volta a zero no dia 1.",
+          "Cada vez que a IA trabalha para ti: uma pergunta no chat, a categorização de um extrato importado, a leitura de um talão, uma sugestão de orçamento, o resumo do mês, o resumo do ano (no Completo), o plano de poupança de um objetivo, categorizar uma movimentação nova ou um clique em \"Categorizar\" (até 300 de cada vez). Ver o dashboard, as listas, o resumo anual e o simulador não conta. Se os pedidos acabarem, os extratos em CSV importam-se na mesma, sem categorias. Nos planos pagos, o contador volta a zero à meia-noite. No Free, volta a zero no dia 1 de cada mês. Os extratos em PDF têm também um limite próprio por mês: 1 no Free, 15 no Essencial e 30 no Completo, com até 10 páginas cada. Cada PDF conta para esse limite e gasta também 1 pedido à IA. O limite de PDF volta a zero no dia 1.",
       },
       {
         pergunta: "O que é o resumo anual?",
@@ -78,7 +79,7 @@ const PT = {
       {
         pergunta: "Posso voltar ao Free?",
         resposta:
-          "Sim. Pede-nos e passamos a tua conta para o Free. Se um plano pago chegar ao fim sem renovares, a conta passa sozinha para o Free: continuas a entrar e os teus dados ficam guardados. No Free, os pedidos à IA contam-se por mês, importas extratos em CSV e deixas de poder importar PDF e ler talões. As compras e movimentações que já tens ficam lá.",
+          "Sim. Pede-nos e passamos a tua conta para o Free. Se um plano pago chegar ao fim sem renovares, a conta passa sozinha para o Free: continuas a entrar e os teus dados ficam guardados. No Free, os pedidos à IA contam-se por mês, importas extratos em CSV e 1 extrato PDF por mês, e deixas de poder ler talões. As compras e movimentações que já tens ficam lá.",
       },
       {
         pergunta: "E os meus dados?",
@@ -106,7 +107,7 @@ const PT = {
   },
 
   // Nome, frase, pontos e botão de cada cartão. O primeiro ponto é sempre o limite (textoDosPedidos, planos.ts),
-  // com o número vindo de GET /planos; o segundo é a importação (pdfPorMes nos pagos, importarCsv no Free);
+  // com o número vindo de GET /planos; o segundo é a importação (pdfPorMes nos pagos, pdfPorMesUm no Free);
   // depois vêm os pontos do chat (chatMeses e os seguintes). Aqui ficam só os outros.
   TEXTOS_CARTOES: {
     free: {
@@ -148,7 +149,7 @@ const PT = {
       "O teu plano termina a {data}. Depois, a conta passa para o Free. Para continuares no {plano}, pede a renovação antes dessa data.",
     // Um plano pago chegou ao fim e a conta passou para o Free (GET /plano: plano_terminado e terminou_em).
     avisoTerminou: "O teu plano {plano} terminou a {data}. A conta está agora no Free e os teus dados estão guardados.",
-    // Extratos PDF do mês (não aparece no Free).
+    // Extratos PDF do mês (em todos os planos; no Free, "0 de 1").
     pdfMes: "Extratos PDF este mês: {usados} de {limite}",
     pdfReinicia: "Volta a zero no dia 1 de cada mês.",
     botaoUpgrade: "Mudar de plano",
@@ -160,7 +161,7 @@ const PT = {
     todasFuncionalidadesEssencial:
       "O teu plano inclui todas as funcionalidades da app, exceto o resumo do ano escrito pela IA, que só existe no Completo.",
     // TEXTO NOVO
-    semFuncoesPagas: "A importação de extratos em PDF e a leitura de talões estão disponíveis nos planos Essencial e Completo.",
+    semFuncoesPagas: "A leitura de talões e mais extratos PDF por mês estão disponíveis nos planos Essencial e Completo.",
   },
 
   // Mensagens pré-preenchidas do WhatsApp e do email. Sem sessão, a frase do email da conta sai (FRASE_EMAIL).
@@ -204,6 +205,9 @@ const PT = {
     texto: "Já importaste os {limite} extratos PDF deste mês. O contador volta a zero no dia 1. Até lá, podes importar o extrato em CSV.",
     textoApi:
       "Chegaste ao limite de {limite} extratos PDF este mês. O contador volta a zero no dia 1. Até lá, podes importar o extrato em CSV.",
+    // Limite 1 (o Free), no singular. textoApiUm igual à API (mensagens.py, limite_pdf_um). TEXTO NOVO
+    textoUm: "Já importaste o extrato PDF deste mês. O contador volta a zero no dia 1. Até lá, podes importar o extrato em CSV.",
+    textoApiUm: "Chegaste ao limite de extratos PDF deste mês: o teu plano inclui 1 por mês. O contador volta a zero no dia 1. Até lá, podes importar o extrato em CSV.",
   },
 
   // Aviso discreto quando já se usou 80% (ou mais) dos pedidos à IA do período, antes de chegar ao limite.
@@ -224,12 +228,12 @@ const PT = {
   },
 
   // Funções só dos planos pagos (402 da API). Iguais ao detail da API (FUNCOES_PAGAS em limites.py).
+  // (O PDF deixou de estar aqui a 2026-11-13: o Free também importa, 1 por mês.)
   TEXTOS_PLANO_PAGO: {
-    pdf: "A importação de extratos em PDF está disponível nos planos Essencial e Completo. No Free, podes importar o extrato em CSV.",
     talao: "A leitura de talões está disponível nos planos Essencial e Completo.",
     link: "Mudar de plano",
     // Em Movimentações, no Free, antes de escolher o ficheiro. TEXTO NOVO
-    soCsv: "No Free importas extratos em CSV. PDF nos planos Essencial e Completo.",
+    importarFree: "No Free, importas extratos em CSV e 1 extrato PDF por mês. Os planos Essencial e Completo incluem mais.",
   },
 
   // Movimentações: botão que pede à IA as categorias das transações que ficaram vazias
@@ -298,9 +302,9 @@ const BR: TextosPlanos = {
   // (pedidosPorDia ... analiseCuidada), que aparecem em O meu plano. O resto fica igual ao PT.
   TEXTOS_PRECOS: {
     titulo: "Escolhe o teu plano",
-    // TEXTO NOVO
+    // TEXTO NOVO (2026-11-13: o Free também importa 1 PDF por mês)
     subtitulo:
-      "Começas no Free, sem cartão. Os planos pagos dão-te mais pedidos à IA, importação de extratos em PDF e leitura de talões por fotografia.",
+      "Começas no Free, sem cartão. Os planos pagos dão-te mais pedidos à IA, mais extratos PDF e leitura de talões por fotografia.",
     precoPorDefinir: "Preço em breve", // também nos cartões de /plano das contas BR (preços em PRECOS_BR, ainda escondidos)
     precoFree: "Grátis",
     porMes: "/mês",
@@ -311,9 +315,9 @@ const BR: TextosPlanos = {
     entrar: "Entrar",
     pedidosPorDia: "{limite} pedidos à IA por dia",
     pedidosPorMes: "{limite} pedidos à IA por mês", // TEXTO NOVO
-    // Nos cartões pagos, no lugar de "Importar extratos em PDF". O número vem de GET /planos (limite_pdf).
+    // A importação, em cada cartão (ver o PT).
     pdfPorMes: "Até {limitePdf} extratos em PDF por mês",
-    // No cartão do Free, no lugar do limite de PDF (o Free não importa PDF).
+    pdfPorMesUm: "Importar extratos em CSV e 1 extrato em PDF por mês", // TEXTO NOVO
     importarCsv: "Importar extratos em CSV", // TEXTO NOVO
     // O que o chat vê e guarda, a seguir à importação. Os números vêm de GET /planos (meses_historico e
     // memoria_mensagens, ConfigIA em limites.py). {anteriores} = meses_historico - 1.
@@ -352,7 +356,7 @@ const BR: TextosPlanos = {
       {
         pergunta: "O que conta como pedido à IA?",
         resposta:
-          "Cada vez que a IA trabalha para ti: uma pergunta no chat, a categorização de um extrato importado, a leitura de um talão, uma sugestão de orçamento, o resumo do mês, o resumo do ano (no Completo), o plano de poupança de um objetivo, categorizar uma movimentação nova ou um clique em \"Categorizar\" (até 300 de cada vez). Ver o dashboard, as listas, o resumo anual e o simulador não conta. Se os pedidos acabarem, os extratos em CSV importam-se na mesma, sem categorias. Nos planos pagos, o contador volta a zero à meia-noite. No Free, volta a zero no dia 1 de cada mês. Os extratos em PDF têm também um limite próprio por mês: 15 no Essencial e 30 no Completo, com até 10 páginas cada. Cada PDF conta para esse limite e gasta também 1 pedido à IA. O limite de PDF volta a zero no dia 1.",
+          "Cada vez que a IA trabalha para ti: uma pergunta no chat, a categorização de um extrato importado, a leitura de um talão, uma sugestão de orçamento, o resumo do mês, o resumo do ano (no Completo), o plano de poupança de um objetivo, categorizar uma movimentação nova ou um clique em \"Categorizar\" (até 300 de cada vez). Ver o dashboard, as listas, o resumo anual e o simulador não conta. Se os pedidos acabarem, os extratos em CSV importam-se na mesma, sem categorias. Nos planos pagos, o contador volta a zero à meia-noite. No Free, volta a zero no dia 1 de cada mês. Os extratos em PDF têm também um limite próprio por mês: 1 no Free, 15 no Essencial e 30 no Completo, com até 10 páginas cada. Cada PDF conta para esse limite e gasta também 1 pedido à IA. O limite de PDF volta a zero no dia 1.",
       },
       {
         pergunta: "O que é o resumo anual?",
@@ -367,7 +371,7 @@ const BR: TextosPlanos = {
       {
         pergunta: "Posso voltar ao Free?",
         resposta:
-          "Sim. Pede-nos e passamos a tua conta para o Free. Se um plano pago chegar ao fim sem renovares, a conta passa sozinha para o Free: continuas a entrar e os teus dados ficam guardados. No Free, os pedidos à IA contam-se por mês, importas extratos em CSV e deixas de poder importar PDF e ler talões. As compras e movimentações que já tens ficam lá.",
+          "Sim. Pede-nos e passamos a tua conta para o Free. Se um plano pago chegar ao fim sem renovares, a conta passa sozinha para o Free: continuas a entrar e os teus dados ficam guardados. No Free, os pedidos à IA contam-se por mês, importas extratos em CSV e 1 extrato PDF por mês, e deixas de poder ler talões. As compras e movimentações que já tens ficam lá.",
       },
       {
         pergunta: "E os meus dados?",
@@ -395,7 +399,7 @@ const BR: TextosPlanos = {
   },
 
   // Nome, frase, pontos e botão de cada cartão. O primeiro ponto é sempre o limite (textoDosPedidos, planos.ts),
-  // com o número vindo de GET /planos; o segundo é a importação (pdfPorMes nos pagos, importarCsv no Free);
+  // com o número vindo de GET /planos; o segundo é a importação (pdfPorMes nos pagos, pdfPorMesUm no Free);
   // depois vêm os pontos do chat (chatMeses e os seguintes). Aqui ficam só os outros.
   TEXTOS_CARTOES: {
     free: {
@@ -448,7 +452,7 @@ const BR: TextosPlanos = {
     avisoRenovar: "Seu plano termina em {data}. Depois, a conta passa para o Free. Para continuar no {plano}, peça a renovação antes dessa data.",
     // Um plano pago chegou ao fim e a conta passou para o Free (GET /plano: plano_terminado e terminou_em).
     avisoTerminou: "Seu plano {plano} terminou em {data}. A conta agora está no Free e os seus dados estão salvos.",
-    // Extratos PDF do mês (não aparece no Free).
+    // Extratos PDF do mês (em todos os planos; no Free, "0 de 1").
     pdfMes: "Extratos em PDF este mês: {usados} de {limite}",
     pdfReinicia: "Zera no dia 1 de cada mês.",
     botaoUpgrade: "Mudar de plano",
@@ -460,7 +464,7 @@ const BR: TextosPlanos = {
     todasFuncionalidadesEssencial:
       "O seu plano inclui todas as funções do app, exceto o resumo do ano escrito pela IA, que só existe no Completo.",
     // TEXTO NOVO
-    semFuncoesPagas: "A importação de extratos em PDF e a leitura de notas fiscais estão disponíveis nos planos Essencial e Completo.",
+    semFuncoesPagas: "A leitura de notas fiscais e mais extratos em PDF por mês estão disponíveis nos planos Essencial e Completo.",
   },
 
   // Mensagens pré-preenchidas do WhatsApp e do email. Sem sessão, a frase do email da conta sai (FRASE_EMAIL).
@@ -504,6 +508,9 @@ const BR: TextosPlanos = {
     // Igual à API (mensagens.py, limite_pdf BR).
     textoApi:
       "Você chegou ao limite de {limite} extratos PDF este mês. O contador zera no dia 1. Até lá, você pode importar o extrato em CSV.",
+    // Limite 1 (o Free), no singular. textoApiUm igual à API (mensagens.py, limite_pdf_um BR). TEXTO NOVO
+    textoUm: "Você já importou o extrato em PDF deste mês. O contador zera no dia 1. Até lá, você pode importar o extrato em CSV.",
+    textoApiUm: "Você chegou ao limite de extratos PDF deste mês: o seu plano inclui 1 por mês. O contador zera no dia 1. Até lá, você pode importar o extrato em CSV.",
   },
 
   // Aviso discreto quando já se usou 80% (ou mais) dos pedidos à IA do período, antes de chegar ao limite.
@@ -524,11 +531,10 @@ const BR: TextosPlanos = {
 
   // Funções só dos planos pagos (402 da API). Iguais ao detail da API (FUNCOES_PAGAS em limites.py).
   TEXTOS_PLANO_PAGO: {
-    pdf: "A importação de extratos em PDF está disponível nos planos Essencial e Completo. No Free, você pode importar o extrato em CSV.",
     talao: "A leitura de notas fiscais está disponível nos planos Essencial e Completo.",
     link: "Mudar de plano",
     // Em Movimentações, no Free, antes de escolher o ficheiro. TEXTO NOVO
-    soCsv: "No Free, você importa extratos em CSV. PDF nos planos Essencial e Completo.",
+    importarFree: "No Free, você importa extratos em CSV e 1 extrato em PDF por mês. Os planos Essencial e Completo incluem mais.",
   },
 
   // Movimentações: botão que pede à IA as categorias das transações que ficaram vazias

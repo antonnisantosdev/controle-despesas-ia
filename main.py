@@ -687,14 +687,13 @@ def ler_csv_enviado(csv: bytes, user_id: str) -> list[TransacaoImportada]:
 def ler_pdf_enviado(pdf: bytes, user_id: str, local: Local = Local()) -> tuple[list[TransacaoImportada], int]:
     """A IA lê o extrato em PDF. Devolve os movimentos lidos e as movimentações que a conta já tinha.
 
+    Todos os planos importam PDF (o Free só 1 por mês, LIMITES_PDF_POR_PLANO em limites.py).
     As verificações vêm por esta ordem, todas antes de gastar o pedido e de chamar a IA:
-    402 no Free; 422 se for grande demais ou ilegível; 400 se tiver páginas a mais;
+    422 se for grande demais ou ilegível; 400 se tiver páginas a mais;
     422 se a conta estiver no teto de movimentações; 429 se já chegou ao limite de PDF do mês.
     Só então conta o pedido à IA (e, com ele, o PDF do mês). 503 se a IA falhar.
     local: o país e a moeda da conta (língua das mensagens; o país dos bancos para a IA vem da moeda).
     """
-    # Primeiro o plano: o Free nem chega a ter o ficheiro analisado.
-    exigir_funcao(user_id, "importar_pdf")
     if len(pdf) > TAMANHO_MAXIMO_PDF:
         raise HTTPException(status_code=422, detail=msg("pdf_grande", local.pais))
 
@@ -1185,7 +1184,7 @@ def relatorio(ano: int, response: Response, user_id: str = Depends(obter_utiliza
     return relatorio_pedido(ano, user_id)
 
 
-# O mesmo relatório em CSV para o Excel (só nos planos pagos: 402 no Free, como o PDF e os talões).
+# O mesmo relatório em CSV para o Excel (só nos planos pagos: 402 no Free, como os talões).
 @app.get("/relatorio/csv")
 def relatorio_csv(ano: int, user_id: str = Depends(obter_utilizador_atual)) -> Response:
     exigir_funcao(user_id, "exportar_relatorio")

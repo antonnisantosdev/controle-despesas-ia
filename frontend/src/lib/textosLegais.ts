@@ -6,6 +6,9 @@
 // Na v0.2 dos termos: o "Apagar conta" passou de "O meu plano" para "Definições" (secção 10).
 // Em Markdown simples, desenhado pelo components/DocumentoLegal.tsx (sem dependências novas).
 // Para atualizar: substituir o texto entre as crases pelo Markdown novo (sem crases nem "${").
+// TEXTO NOVO (legal), 2026-11-13: o Free passou a importar 1 PDF por mês. Mudaram só a secção 2 ("em PDF (1 PDF por mês
+// no Free; mais nos planos pagos)") e a linha "Importar extratos" da tabela da secção 6 (Free: "CSV e 1 PDF por mês").
+// A versão e a data dos termos NÃO mudaram: decide o CEO.
 
 export const TERMOS_MD = `
 # Termos de Utilização da Control Prices
@@ -25,7 +28,7 @@ Contacto para assuntos de privacidade: [privacidade@antonnisantosdev.com](mailto
 
 A Control Prices é uma app web (que podes instalar no telemóvel) para organizares as tuas finanças pessoais. Com ela podes:
 
-- importar extratos do teu banco em CSV (em todos os planos) e em PDF (nos planos pagos);
+- importar extratos do teu banco em CSV e em PDF (1 PDF por mês no Free; mais nos planos pagos);
 - deixar a IA escolher a categoria de cada movimentação e corrigi-la quando quiseres;
 - ver os teus gastos por categoria e a evolução de mês para mês;
 - fazer perguntas sobre os teus gastos num chat, que responde com os teus números;
@@ -58,7 +61,7 @@ A Control Prices é uma app web (que podes instalar no telemóvel) para organiza
 |---|---|---|---|
 | Preço | Grátis | 4,99 €/mês ou 49 €/ano | 8,99 €/mês ou 89 €/ano |
 | Pedidos à IA | 30 por mês | 20 por dia | 50 por dia |
-| Importar extratos | Só CSV | CSV e até 15 PDF por mês | CSV e até 30 PDF por mês |
+| Importar extratos | CSV e 1 PDF por mês | CSV e até 15 PDF por mês | CSV e até 30 PDF por mês |
 | Leitura de talões | Não | Sim | Sim |
 
 - O regime de IVA será indicado aqui antes de começarmos a cobrar.

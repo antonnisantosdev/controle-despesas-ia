@@ -293,7 +293,7 @@ export type Periodo = "dia" | "mes";
 // O plano do utilizador, os pedidos à IA que já fez no período e o último dia do plano (GET /plano),
 // já normalizado por normalizarEstadoPlano(). ativo_ate vem em ISO ("2026-12-31"), ou null no Free (não acaba).
 // plano_terminado e terminou_em: o plano pago que chegou ao fim (a conta está no Free), ou null.
-// pdf_usados e pdf_limite: extratos PDF deste mês (pdf_limite 0 no Free).
+// pdf_usados e pdf_limite: extratos PDF deste mês (pdf_limite 1 no Free).
 // memoria_mensagens: mensagens anteriores que o chat recebe (0 no Free). meses_historico: meses que o chat vê (null = todos).
 // pais: onde a pessoa vive (língua e formatos). paises_bancos: países dos cartões e contas. moeda: a moeda principal.
 export type EstadoPlano = {
@@ -696,7 +696,7 @@ export async function enviarFicheiro<T>(caminho: string, campo: string, ficheiro
 }
 
 // Se o erro é o 429 do limite de extratos PDF do mês. Distingue-se do limite de pedidos pelo texto da API
-// (mensagem_do_limite_pdf em limites.py, igual a TEXTOS_LIMITE_PDF.textoApi).
+// (mensagem_do_limite_pdf em limites.py, igual a TEXTOS_LIMITE_PDF.textoApi, ou textoApiUm com limite 1).
 export function eLimitePdf(erro: unknown): erro is ErroApi {
   return (
     erro instanceof ErroApi && erro.status === 429 && typeof erro.detalhe === "string" && erro.detalhe.includes("extratos PDF")
@@ -708,7 +708,7 @@ export function eLimiteDiario(erro: unknown): boolean {
   return erro instanceof ErroApi && erro.status === 429 && !eLimitePdf(erro);
 }
 
-// Se o erro é o 402 de uma função só dos planos pagos (PDF, talões). Os ecrãs mostram o AvisoPlanoPago.
+// Se o erro é o 402 de uma função só dos planos pagos (talões, preços por loja...). Os ecrãs mostram o AvisoPlanoPago.
 // (402 e não 403: o 403 é a conta sem assinatura, que manda para /assinatura-expirada.)
 export function eSoPlanosPagos(erro: unknown): erro is ErroApi {
   return erro instanceof ErroApi && erro.status === 402;

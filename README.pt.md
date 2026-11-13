@@ -11,7 +11,7 @@ A conta de demonstração usa dados inventados e é só de leitura. A API corre 
 
 ## Funcionalidades
 
-- **Importar extratos**: CSV (todos os planos) e PDF (planos pagos; o Claude lê o PDF e extrai todos os movimentos).
+- **Importar extratos**: CSV e PDF em todos os planos (Free: 1 PDF por mês; o Claude lê o PDF e extrai todos os movimentos).
 - **Categorização com IA**: cada movimento recebe uma categoria e o utilizador pode corrigi-la.
 - **Dashboard**: gastos por categoria e evolução mensal (Recharts).
 - **Chat com tool use**: perguntas em linguagem natural ("quanto gastei em restaurantes em comparação com o mês passado?") respondidas com dados obtidos pelas ferramentas, não inventados pelo modelo.
@@ -109,7 +109,7 @@ Detetar subscrições não precisa de um modelo. As descrições são normalizad
 
 ## Controlo de custos
 
-- **Pedidos por plano** (`limites.py`): Free 30 pedidos à IA por mês, Essencial 20 por dia, Completo 50 por dia. Extratos PDF: 15 por mês (Essencial) e 30 por mês (Completo), no máximo 10 páginas cada, verificado antes de chamar o modelo. Os contadores usam a hora de Lisboa (o servidor corre em UTC).
+- **Pedidos por plano** (`limites.py`): Free 30 pedidos à IA por mês, Essencial 20 por dia, Completo 50 por dia. Extratos PDF: 1 por mês (Free), 15 por mês (Essencial) e 30 por mês (Completo), no máximo 10 páginas cada, verificado antes de chamar o modelo; cada PDF gasta também 1 pedido à IA. Os contadores usam a hora de Lisboa (o servidor corre em UTC).
 - **Contadores atómicos em SQL**: `registar_pedido_ia` (migrações 015/016) e `registar_pdf_ia` (017) verificam e registam um pedido numa só transação, com um `pg_advisory_xact_lock` por utilizador. Pedidos em paralelo não conseguem ver todos "29 de 30" e passar o limite. A função dos PDF usa o mesmo bloqueio, por isso um PDF e uma pergunta ao chat enviados ao mesmo tempo também esperam um pelo outro.
 - **Falha fechada**: se não for possível ler a contagem de PDF, nenhum PDF é enviado ao modelo.
 - **Teto de custo do chat**: 3 voltas, 4 ferramentas por volta, um orçamento de saída por pergunta, histórico limitado e 12 meses por chamada de ferramenta põem um limite máximo ao custo de cada pergunta.
@@ -134,7 +134,7 @@ Em breve: 4 semanas de dados de produção.
 
 | Plano | Preço | Pedidos à IA | Extratos PDF | Talões |
 |---|---|---|---|---|
-| Free | 0 € | 30 / mês | – (só CSV) | – |
+| Free | 0 € | 30 / mês | 1 / mês | – |
 | Essencial | 4,99 € / mês ou 49 € / ano | 20 / dia | até 15 / mês | sim |
 | Completo | 8,99 € / mês ou 89 € / ano | 50 / dia | até 30 / mês | sim |
 
