@@ -30,3 +30,6 @@ dados_exemplo/WhatsApp*
 
 # Ficheiros temporários do playwright-cli
 .playwright-cli/
+
+# Estratégia de negócio e rascunhos (o repositório é público)
+marketing/
