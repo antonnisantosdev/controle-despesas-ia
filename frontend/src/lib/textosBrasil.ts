@@ -16,7 +16,7 @@ export const TEXTOS_BRASIL = {
   explicacao: [
     "A Control Prices é um app de controle financeiro pessoal com IA: importa seus extratos, organiza os gastos por categoria e responde a perguntas sobre eles.", // TEXTO NOVO
     "A versão para o Brasil está em preparação.", // TEXTO NOVO
-    "Deixe seu email e avisamos você quando ela estiver disponível.",
+    "Deixe seu e-mail e avisamos você quando ela estiver disponível.",
   ],
   rotuloPais: "De que país você é?", // TEXTO NOVO
   rotuloCartoes: "De quais países são os cartões e contas que você vai usar?", // TEXTO NOVO
@@ -25,7 +25,7 @@ export const TEXTOS_BRASIL = {
   paisPortugal: "Portugal", // TEXTO NOVO
   paisOutro: "Outro país",
   cartoesOutro: "Outro", // TEXTO NOVO
-  rotuloEmail: "Seu email",
+  rotuloEmail: "Seu e-mail",
   // Caixa NÃO pré-marcada (LGPD). Texto aprovado pelo CEO.
   consentimento:
     "Aceito receber um email quando a Control Prices estiver disponível no Brasil. Posso pedir para sair a qualquer momento.",
@@ -35,11 +35,11 @@ export const TEXTOS_BRASIL = {
   botao: "Quero receber o aviso",
   aEnviar: "Enviando...",
   sucessoTitulo: "Pronto!",
-  sucesso: "Avisaremos você por email quando a Control Prices estiver disponível no Brasil.",
+  sucesso: "Avisaremos você por e-mail quando a Control Prices estiver disponível no Brasil.",
   // Erros: a página mostra estes, conforme o estado da resposta da API.
   erroCartoes: "Marque pelo menos um país dos cartões e contas.", // TEXTO NOVO
   erroConsentimento: "Para entrar na lista, marque a caixa de consentimento.",
-  erroDados: "Confira se o email está correto e se você marcou a caixa de consentimento.",
+  erroDados: "Confira se o e-mail está correto e se você marcou a caixa de consentimento.",
   erroMuitosPedidos: "Muitas tentativas a partir desta rede. Tente novamente mais tarde.",
-  erroServidor: "Não foi possível salvar seu email agora. Tente novamente em alguns minutos.",
+  erroServidor: "Não foi possível salvar seu e-mail agora. Tente novamente em alguns minutos.",
 };

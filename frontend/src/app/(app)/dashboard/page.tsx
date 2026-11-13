@@ -84,19 +84,22 @@ export default function PaginaDashboard() {
             <p className="text-xs font-semibold uppercase tracking-wide text-destaque">{TEXTOS_DASHBOARD.etiquetaTopo}</p>
             <h1 className="text-2xl font-semibold text-texto">{TEXTOS_DASHBOARD.titulo}</h1>
           </div>
-          {/* O mês escolhido aqui muda os cartões, as categorias e o resumo da IA. */}
-          <select
-            value={mes}
-            onChange={(e) => setMes(e.target.value)}
-            aria-label={TEXTOS_DASHBOARD.rotuloMes}
-            className="rounded-lg border border-borda bg-cartao px-3 py-2 text-sm text-texto"
-          >
-            {mensal.map((m) => (
-              <option key={m.mes} value={m.mes}>
-                {f.mesAno(m.mes)}
-              </option>
-            ))}
-          </select>
+          {/* O mês escolhido aqui muda os cartões, as categorias e o resumo da IA.
+              Sem meses (conta nova, ou ainda a carregar) não aparece: era uma caixa vazia. */}
+          {mensal.length > 0 && (
+            <select
+              value={mes}
+              onChange={(e) => setMes(e.target.value)}
+              aria-label={TEXTOS_DASHBOARD.rotuloMes}
+              className="rounded-lg border border-borda bg-cartao px-3 py-2 text-sm text-texto"
+            >
+              {mensal.map((m) => (
+                <option key={m.mes} value={m.mes}>
+                  {f.mesAno(m.mes)}
+                </option>
+              ))}
+            </select>
+          )}
         </header>
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

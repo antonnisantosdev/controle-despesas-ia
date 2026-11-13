@@ -12,24 +12,28 @@ import { API_URL, fetchComTentativas } from "@/lib/api";
 import { lerOrigem } from "@/lib/origem";
 import { LIMITES_RESERVA, preencher, textoDosPedidos } from "@/lib/planos";
 import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
-import { TEXTOS_REGISTO } from "@/lib/textosLogin";
+import { usePaisPublico } from "@/lib/paisPublico";
+import { DICIONARIO_LOGIN } from "@/lib/textosLogin";
 import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import CampoPalavraPasse from "@/components/CampoPalavraPasse";
 
-// Página pública: sempre em PT-PT (decisão do CEO), seja qual for o país da conta.
-const { TEXTOS_GERAIS } = DICIONARIO_COMUNS.PT;
+// Página pública: PT-PT, ou PT-BR se o browser estiver em pt-BR (lib/paisPublico.ts, decisão do CEO 2026-11-13).
+type TextosRegisto = (typeof DICIONARIO_LOGIN)["BR"]["TEXTOS_REGISTO"];
 
 const ESTILO_CAMPO = "mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-texto";
 
 // Verifica o formulário antes de o enviar: devolve a mensagem de erro, ou "" se estiver tudo bem.
 // É só para ajudar quem escreve. As regras a sério (email válido, 8+ caracteres) estão na API (NovaConta).
-function erroDoFormulario(password: string, repetir: string): string {
+function erroDoFormulario(password: string, repetir: string, TEXTOS_REGISTO: TextosRegisto): string {
   if (password.length < 8) return TEXTOS_REGISTO.erroCurta;
   if (password !== repetir) return TEXTOS_REGISTO.erroDiferentes;
   return "";
 }
 
 export default function PaginaRegisto() {
+  const pais = usePaisPublico();
+  const { TEXTOS_REGISTO } = DICIONARIO_LOGIN[pais];
+  const { TEXTOS_GERAIS } = DICIONARIO_COMUNS[pais];
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repetir, setRepetir] = useState("");
@@ -44,7 +48,7 @@ export default function PaginaRegisto() {
 
   async function criarConta(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
-    const problema = erroDoFormulario(password, repetir);
+    const problema = erroDoFormulario(password, repetir, TEXTOS_REGISTO);
     setErro(problema);
     if (problema) return;
 
@@ -93,7 +97,7 @@ export default function PaginaRegisto() {
         ) : (
           <form onSubmit={criarConta} className="space-y-4">
             <p className="text-center text-sm text-texto-suave">
-              {preencher(TEXTOS_REGISTO.introducao, { pedidos: textoDosPedidos(LIMITES_RESERVA.free, DICIONARIO_PLANOS.PT) })}
+              {preencher(TEXTOS_REGISTO.introducao, { pedidos: textoDosPedidos(LIMITES_RESERVA.free, DICIONARIO_PLANOS[pais]) })}
             </p>
             {/* Antes das duas formas de criar conta (Google e email), para valer para as duas. */}
             <AvisoTermos />

@@ -1,6 +1,6 @@
 // Textos do questionário de boas-vindas e da página Definições (aprovados pelo CEO, 2026-11-12).
 // Os marcados com "TEXTO NOVO" ainda não foram revistos pelo copywriter.
-// No BR é sempre "a app" (nunca "o app").
+// No BR é sempre "o app" (nunca "a app").
 // {chaves} entre chavetas são trocadas com preencher() (planos.ts).
 // Nos componentes: const { TEXTOS_... } = useTextos(DICIONARIO_BOAS_VINDAS). O questionário escolhe pelo país
 // escolhido no ecrã 1 (DICIONARIO_BOAS_VINDAS[pais]), para os ecrãs seguintes já virem na língua certa.
@@ -119,12 +119,12 @@ const BR: TextosBoasVindas = {
     voltar: "Voltar",
     comecar: "Começar",
     privacidade:
-      "Usamos essas respostas para adaptar a app a você e para estatísticas gerais, que não identificam você. Você pode mudar nas configurações.",
+      "Usamos essas respostas para adaptar o app a você e para estatísticas gerais, que não identificam você. Você pode mudar nas configurações.",
     aGuardar: "Salvando…", // TEXTO NOVO
     erroGuardar: "Não foi possível salvar as respostas agora. Tente mais tarde.", // TEXTO NOVO (igual à API)
 
     tituloBancos: "De quais países são seus cartões e contas?",
-    subtituloBancos: "Serve para escolher a moeda em que a app mostra os valores.",
+    subtituloBancos: "Serve para escolher a moeda em que o app mostra os valores.",
     bancosPortugal: "Portugal",
     bancosBrasil: "Brasil",
     bancosOsDois: "Dos dois países",
@@ -138,7 +138,7 @@ const BR: TextosBoasVindas = {
       "Importe só extratos nessa moeda, para os totais baterem. Depois que a conta tiver dados, a moeda não muda mais.",
     erroMoeda: "Escolha a moeda com que você quer começar.",
 
-    tituloMotivo: "Por que você instalou a app?",
+    tituloMotivo: "Por que você instalou o app?",
     subtituloMotivo: "Escolha o que mais combina com você.",
     motivos: {
       nao_sei: "Não sei para onde vai meu dinheiro",
@@ -176,7 +176,7 @@ const BR: TextosBoasVindas = {
     rotuloMoeda: "Moeda da conta",
     ajudaMoeda: "Só pode ser alterada em uma conta sem dados.",
     erroMoedaComDados: "Esta conta já tem dados, por isso a moeda não pode ser alterada.",
-    rotuloMotivo: "Por que você instalou a app",
+    rotuloMotivo: "Por que você instalou o app",
     rotuloObjetivos: "O que você quer conseguir",
     semResposta: "Sem resposta",
     limparRespostas: "Apagar essas duas respostas",

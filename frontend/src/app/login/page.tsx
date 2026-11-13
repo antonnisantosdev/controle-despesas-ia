@@ -11,13 +11,12 @@ import BotaoDemo from "@/components/BotaoDemo";
 import RodapeLegal from "@/components/RodapeLegal";
 import { API_URL, contaApagada, EVENTO_SESSAO, fetchComTentativas, guardarToken, lerToken } from "@/lib/api";
 import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
-import { TEXTOS_LOGIN } from "@/lib/textosLogin";
+import { useTextosPublicos } from "@/lib/paisPublico";
+import { DICIONARIO_LOGIN } from "@/lib/textosLogin";
 import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
 import CampoPalavraPasse from "@/components/CampoPalavraPasse";
 
-// Página pública: sempre em PT-PT (decisão do CEO), seja qual for o país da conta.
-const { TEXTOS_GERAIS } = DICIONARIO_COMUNS.PT;
-const { TEXTOS_APAGAR_CONTA } = DICIONARIO_PLANOS.PT;
+// Página pública: PT-PT, ou PT-BR se o browser estiver em pt-BR (lib/paisPublico.ts, decisão do CEO 2026-11-13).
 
 // Avisa o React quando a marca "a conta foi apagada" muda (ver terminarSessaoContaApagada em api.ts).
 function subscrever(avisar: () => void) {
@@ -27,6 +26,9 @@ function subscrever(avisar: () => void) {
 
 export default function PaginaLogin() {
   const router = useRouter();
+  const { TEXTOS_LOGIN } = useTextosPublicos(DICIONARIO_LOGIN);
+  const { TEXTOS_GERAIS } = useTextosPublicos(DICIONARIO_COMUNS);
+  const { TEXTOS_APAGAR_CONTA } = useTextosPublicos(DICIONARIO_PLANOS);
 
   // Estado: quando uma destas variáveis muda (com o set...), a página redesenha-se sozinha.
   const [email, setEmail] = useState("");

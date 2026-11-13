@@ -206,6 +206,7 @@ export type RelatorioAnual = {
   maiores_saidas: SaidaRelatorio[];
   recorrentes: RecorrenteAno[];
   objetivos: ObjetivoRelatorio[];
+  primeiro_ano?: number | null; // o ano da movimentação mais antiga (null sem movimentações)
 };
 export type ResumoAnualIA = { resumo: string };
 // "dia" nos planos pagos, "mes" no Free: o período em que se contam os pedidos à IA (limites.py).

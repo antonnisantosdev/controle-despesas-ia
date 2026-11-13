@@ -18,6 +18,8 @@ export const CATEGORIAS = [
   "transferências",
   "levantamentos",
   "outros",
+  // Só humana: a pessoa marca um gasto como fora do habitual. A IA nunca a escolhe (models.py, CategoriaIA).
+  "compras extra",
 ] as const;
 
 export type Categoria = (typeof CATEGORIAS)[number];
@@ -38,6 +40,7 @@ export const ROTULOS_CATEGORIAS: Record<Pais, Record<Categoria, string>> = {
     "transferências": "transferências",
     levantamentos: "levantamentos",
     outros: "outros",
+    "compras extra": "compras extra",
   },
   BR: {
     "alimentação": "alimentação",
@@ -52,6 +55,7 @@ export const ROTULOS_CATEGORIAS: Record<Pais, Record<Categoria, string>> = {
     "transferências": "transferências",
     levantamentos: "saques",
     outros: "outros",
+    "compras extra": "compras extras",
   },
 };
 

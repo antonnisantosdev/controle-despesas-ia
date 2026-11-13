@@ -7,6 +7,7 @@ contexto bancário (categorizar e PDF) = país da moeda. Em PT os prompts ficam 
 import hashlib
 from datetime import date
 from types import SimpleNamespace
+from typing import get_args
 
 import pytest
 
@@ -15,7 +16,7 @@ import ia
 import main
 from limites import CONFIG_IA_POR_PLANO
 from mensagens import Local, msg
-from models import TransacaoCriar
+from models import CATEGORIAS_SO_HUMANAS, CategoriaIA, TransacaoCriar
 
 PT = Local()
 BR = Local(pais="BR", moeda="BRL")
@@ -199,8 +200,12 @@ def test_categorizar_br_com_as_mesmas_categorias():
     texto = ia.instrucoes_de_categorizar(BR)
 
     assert "bancos brasileiros" in texto and "PIX" in texto and "SAQUE" in texto and "MB WAY" not in texto
-    for categoria in ferramentas.CATEGORIAS:
+    for categoria in get_args(CategoriaIA):
         assert f"- {categoria}" in texto, categoria
+    # As categorias só humanas nunca entram na lista que a IA pode escolher.
+    for categoria in CATEGORIAS_SO_HUMANAS:
+        assert categoria not in texto
+        assert categoria not in ia.instrucoes_de_categorizar(Local())
 
 
 def test_resumo_anual_br_proibe_os_termos_fiscais_do_brasil():

@@ -55,6 +55,7 @@ const PT = {
     categoria: "Categoria",
     iaEscolhe: "✨ Deixar a IA escolher",
     erroValor: "Escreve um valor maior do que zero.",
+    erroValorMaximo: "O valor máximo é {maximo}.", // {maximo}: 1 000 000 000 € (ou R$)
     erroGuardar: "Não foi possível guardar. Confirma os dados e tenta outra vez.",
     guardar: "Guardar",
     aGuardar: "A guardar...",
@@ -114,6 +115,7 @@ const BR: TextosMovimentacoes = {
     categoria: "Categoria",
     iaEscolhe: "✨ Deixar a IA escolher",
     erroValor: "Digite um valor maior que zero.",
+    erroValorMaximo: "O valor máximo é {maximo}.",
     erroGuardar: "Não foi possível salvar. Confira os dados e tente de novo.",
     guardar: "Salvar",
     aGuardar: "Salvando...",

@@ -26,12 +26,12 @@ from typing import get_args  # noqa: E402
 
 from ia import categorizar  # noqa: E402
 from mensagens import Local  # noqa: E402
-from models import Categoria, TransacaoCriar  # noqa: E402
+from models import CategoriaIA, TransacaoCriar  # noqa: E402
 
 # --pais BR: conta do Brasil em reais (o prompt da categorização escolhe-se pela moeda da conta).
 LOCAIS = {"PT": Local("PT", "EUR"), "BR": Local("BR", "BRL")}
 
-CATEGORIAS = set(get_args(Categoria))
+CATEGORIAS = set(get_args(CategoriaIA))  # só as que a IA pode escolher
 
 
 def ler_casos(nome: str) -> list[dict]:

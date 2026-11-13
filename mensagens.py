@@ -54,6 +54,10 @@ MENSAGENS: dict[str, dict[str, str]] = {
         "PT": "Não foi possível importar o PDF agora. Tenta outra vez daqui a pouco.",
         "BR": "Não foi possível importar o PDF agora. Tente de novo daqui a pouco.",
     },
+    "metodo_de_outro_pais": {  # revisto pelo copywriter (2026-11-13)
+        "PT": "Este método de pagamento não está disponível no país da tua conta. Escolhe outro.",
+        "BR": "Essa forma de pagamento não está disponível no país da sua conta. Escolha outra.",
+    },
     "conta_cheia": {  # BR: TEXTO NOVO
         "PT": "Chegaste ao máximo de 20 000 movimentações nesta conta. Fala connosco se precisares de mais.",
         "BR": "Você chegou ao máximo de 20.000 movimentações nesta conta. Fale com a gente se precisar de mais.",
@@ -93,7 +97,7 @@ MENSAGENS: dict[str, dict[str, str]] = {
         ),
         "BR": (
             "Baixar o resumo anual em CSV (para abrir em uma planilha) está disponível nos planos "
-            "Essencial e Completo. No Free, você pode ver o resumo na app e salvar em PDF."
+            "Essencial e Completo. No Free, você pode ver o resumo no app e salvar em PDF."
         ),
     },
     "funcao_completo_resumo_anual_ia": {  # BR: TEXTO NOVO

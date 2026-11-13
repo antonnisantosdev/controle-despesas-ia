@@ -409,7 +409,7 @@ const BR: TextosPlanos = {
     },
     essencial: {
       nome: "Essencial",
-      frase: "Para quem usa a app toda semana.",
+      frase: "Para quem usa o app toda semana.",
       pontos: [
         "Leitura de notas fiscais por foto",
         "Preços por loja, a partir das notas fiscais",
@@ -455,10 +455,10 @@ const BR: TextosPlanos = {
     botaoRenovar: "Pedir renovação",
     botaoAvisar: "Me avise", // TEXTO NOVO (contas BR: ainda sem pagamento no Brasil)
     completo: "Você está no plano Completo, o que tem mais pedidos à IA por dia. Se precisar de mais, fale com a gente.",
-    todasFuncionalidades: "O seu plano inclui todas as funções da app.",
+    todasFuncionalidades: "O seu plano inclui todas as funções do app.",
     // Só no Essencial: o resumo do ano escrito pela IA é do Completo. TEXTO NOVO
     todasFuncionalidadesEssencial:
-      "O seu plano inclui todas as funções da app, exceto o resumo do ano escrito pela IA, que só existe no Completo.",
+      "O seu plano inclui todas as funções do app, exceto o resumo do ano escrito pela IA, que só existe no Completo.",
     // TEXTO NOVO
     semFuncoesPagas: "A importação de extratos em PDF e a leitura de notas fiscais estão disponíveis nos planos Essencial e Completo.",
   },

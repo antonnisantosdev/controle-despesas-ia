@@ -19,6 +19,9 @@ function hoje() {
 
 const ESTILO_CAMPO = "mt-1 w-full rounded-md border border-borda bg-cartao px-3 py-2 text-sm text-texto";
 
+// O mesmo teto da API (models.py, VALOR_MAXIMO): acima disto a base de dados não guarda o valor.
+const VALOR_MAXIMO = 1_000_000_000;
+
 type Props = { onCriada: (transacao: Transacao) => void; onFechar: () => void };
 
 export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
@@ -41,6 +44,10 @@ export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
     const numero = Number(valor.replace(",", "."));
     if (!(numero > 0)) {
       setErro(TEXTOS_NOVA_MOVIMENTACAO.erroValor);
+      return;
+    }
+    if (numero > VALOR_MAXIMO) {
+      setErro(preencher(TEXTOS_NOVA_MOVIMENTACAO.erroValorMaximo, { maximo: f.dinheiro(VALOR_MAXIMO, 0) }));
       return;
     }
 

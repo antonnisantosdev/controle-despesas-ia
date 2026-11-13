@@ -34,8 +34,15 @@ import { useSessaoDemo } from "@/lib/useSessaoDemo";
 import CartaoResumo from "../dashboard/CartaoResumo";
 import GraficoAnual from "./GraficoAnual";
 
-// Anos no seletor: o atual e os 5 anteriores (a API aceita de 2000 até ao ano atual).
+// Anos no seletor: o atual e até 5 anteriores, só a partir do ano da movimentação mais antiga
+// (primeiro_ano do GET /relatorio). Sem movimentações, só o ano atual. A API aceita de 2000 até ao ano atual.
 const ANOS_NO_SELETOR = 6;
+
+function anosDoSeletor(anoAtual: number | null, primeiroAno: number | null): number[] {
+  if (anoAtual === null) return [];
+  const desde = Math.max(anoAtual - ANOS_NO_SELETOR + 1, Math.min(primeiroAno ?? anoAtual, anoAtual));
+  return Array.from({ length: anoAtual - desde + 1 }, (_, i) => anoAtual - i);
+}
 
 // --- Formatos desta página ---
 // f: os formatos da conta (useFormatos()), com o país e a moeda.
@@ -383,7 +390,9 @@ export default function PaginaRelatorio() {
   const f = useFormatos();
   const demo = useSessaoDemo();
   const anoAtual = useSyncExternalStore(nadaParaOuvir, lerAnoAtual, semAnoNoServidor);
-  const anos = anoAtual === null ? [] : Array.from({ length: ANOS_NO_SELETOR }, (_, i) => anoAtual - i);
+  // O último primeiro_ano que a API mandou (não muda de ano para ano; enquanto não chega, só o ano atual).
+  const [primeiroAno, setPrimeiroAno] = useState<number | null>(null);
+  const anos = anosDoSeletor(anoAtual, primeiroAno);
 
   const [anoEscolhido, setAno] = useState<number | null>(null);
   const ano = anoEscolhido ?? anoAtual; // null só no pré-render
@@ -420,7 +429,9 @@ export default function PaginaRelatorio() {
     let cancelado = false;
     pedirApi<RelatorioAnual>(`/relatorio?ano=${ano}`)
       .then((d) => {
-        if (!cancelado) setResultado({ ano, dados: d });
+        if (cancelado) return;
+        setResultado({ ano, dados: d });
+        setPrimeiroAno(d.primeiro_ano ?? null);
       })
       .catch((e) => {
         if (e instanceof SessaoExpirada) {

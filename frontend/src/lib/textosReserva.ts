@@ -35,6 +35,8 @@ const PT = {
   // Cartão de um objetivo (CartaoObjetivo). "de" e "corte" vêm a seguir a um valor ou categoria a negrito.
   TEXTOS_OBJETIVO: {
     ate: "Até {mes}",
+    // O prazo já passou e o objetivo não foi atingido.
+    prazoPassado: "O prazo terminou em {mes}",
     de: " de {alvo}",
     rotuloProgresso: "Progresso de {nome}",
     percentagem: "{percentagem}% do objetivo",
@@ -119,6 +121,7 @@ const BR: TextosReserva = {
   // Cartão de um objetivo (CartaoObjetivo). "de" e "corte" vêm a seguir a um valor ou categoria a negrito.
   TEXTOS_OBJETIVO: {
     ate: "Até {mes}",
+    prazoPassado: "O prazo terminou em {mes}",
     de: " de {alvo}",
     rotuloProgresso: "Progresso de {nome}",
     percentagem: "{percentagem}% da meta",

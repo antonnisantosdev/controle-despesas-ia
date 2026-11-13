@@ -8,9 +8,9 @@ from auth import FORMATO_CODE_VERIFIER, FORMATO_CODIGO_GOOGLE
 from limites import MAX_CARACTERES_HISTORICO, MAX_CARACTERES_PERGUNTA_HISTORICO, MAX_CARACTERES_RESPOSTA_HISTORICO
 from perfil import Perfil, moedas_possiveis, perfil_inicial
 
-# As únicas categorias permitidas, tanto para a IA como para as correções do utilizador.
-# Com Literal, o Pydantic rejeita qualquer outra palavra.
-Categoria = Literal[
+# As categorias que a IA pode escolher (categorizar extratos, ler talões). Com Literal, o Pydantic rejeita
+# qualquer outra palavra, por isso a IA nunca consegue devolver uma categoria só humana.
+CategoriaIA = Literal[
     "alimentação",
     "restaurantes",
     "transporte",
@@ -24,6 +24,11 @@ Categoria = Literal[
     "levantamentos",
     "outros",
 ]
+
+# Todas as categorias permitidas nas escolhas do utilizador: as da IA mais as que só uma pessoa escolhe.
+# "compras extra": gastos que a pessoa marca como fora do habitual. A IA nunca a escolhe.
+CATEGORIAS_SO_HUMANAS = ("compras extra",)
+Categoria = Literal[CategoriaIA, "compras extra"]
 
 
 # Como foi paga uma transação. Os nomes são códigos simples; o frontend mostra-os por extenso.
@@ -40,6 +45,22 @@ MetodoPagamento = Literal[
     "boleto",
 ]
 
+# Métodos que só existem num país: a API recusa-os nas movimentações e compras novas das contas do outro país
+# (igual a METODOS_POR_PAIS em frontend/src/lib/opcoes.ts). As movimentações antigas ficam como estão.
+METODOS_SO_DO_PAIS: dict[str, str] = {"mbway": "PT", "pix": "BR", "boleto": "BR"}
+
+
+def metodo_do_pais(metodo: str, pais: str) -> bool:
+    """True se o método se pode escolher numa conta que vive em pais."""
+    return METODOS_SO_DO_PAIS.get(metodo, pais) == pais
+
+
+# Teto dos valores em dinheiro: as colunas são NUMERIC(12, 2) e um valor maior dava erro 500 na base de dados
+# (sem CORS). allow_inf_nan=False recusa NaN e Infinity, que passavam no gt/ge e rebentavam no JSON.
+VALOR_MAXIMO = 1_000_000_000
+# A quantidade de um produto é NUMERIC(10, 3) (máximo 9 999 999,999).
+QUANTIDADE_MAXIMA = 1_000_000
+
 
 # Dados que o cliente envia para criar uma transação (sem id: quem o gera é a base de dados).
 class TransacaoCriar(BaseModel):
@@ -55,7 +76,7 @@ class Transacao(TransacaoCriar):
     metodo_pagamento: str | None = None
 
 
-VALOR_MAXIMO_MOVIMENTACAO = 1_000_000_000
+VALOR_MAXIMO_MOVIMENTACAO = VALOR_MAXIMO
 
 
 # Movimentação criada à mão no ecrã. Mais rigorosa do que TransacaoCriar: o método é obrigatório,
@@ -340,6 +361,7 @@ class AlertasOrcamento(BaseModel):
 
 # Sugestão da IA para uma categoria (saída estruturada): o valor e uma frase a explicar porquê.
 class SugestaoCategoria(BaseModel):
+    # Categoria (e não CategoriaIA): sugerir um orçamento para "compras extra" que a pessoa já tem não é classificar.
     categoria: Categoria
     limite: float
     explicacao: str
@@ -351,7 +373,7 @@ class SugestaoOrcamento(BaseModel):
 
 # Corpo do PUT /orcamentos/{categoria}.
 class NovoLimite(BaseModel):
-    limite: float = Field(gt=0)
+    limite: float = Field(gt=0, le=VALOR_MAXIMO, allow_inf_nan=False)
 
 
 # Unidade em que se mede a quantidade de um produto: unidades, quilos ou litros.
@@ -376,15 +398,15 @@ class Talao(BaseModel):
     data: date | None
     itens: list[ItemTalao]
     total: float
-    categoria: Categoria
+    categoria: CategoriaIA  # a IA nunca escolhe uma categoria só humana
 
 
 # Um produto enviado pelo utilizador no POST /compras. Com tetos: a rota é pública para
 # qualquer conta e, sem eles, um só pedido podia gravar milhares de linhas de texto livre.
 class ItemCompra(BaseModel):
     descricao: str = Field(min_length=1, max_length=200)
-    quantidade: float = Field(gt=0)
-    preco: float = Field(ge=0)
+    quantidade: float = Field(gt=0, le=QUANTIDADE_MAXIMA, allow_inf_nan=False)
+    preco: float = Field(ge=0, le=VALOR_MAXIMO, allow_inf_nan=False)
     # Vêm da leitura da IA (o frontend devolve-os tal como os recebeu). Opcionais: sem eles, a chave
     # do produto sai da descrição e a unidade fica "un".
     nome_generico: str | None = None
@@ -404,7 +426,7 @@ class NovaCompra(BaseModel):
     data: date
     # Um talão de supermercado grande tem umas dezenas de linhas; 200 dá folga.
     itens: list[ItemCompra] = Field(min_length=1, max_length=200)
-    total: float = Field(gt=0)
+    total: float = Field(gt=0, le=VALOR_MAXIMO, allow_inf_nan=False)
     categoria: Categoria
     metodo_pagamento: MetodoPagamento
 
@@ -482,7 +504,7 @@ class JuntarProdutos(BaseModel):
 # Corpo do POST /objetivos: um objetivo de poupança novo. O valor poupado começa a 0 (DEFAULT do SQL).
 class NovoObjetivo(BaseModel):
     nome: str = Field(min_length=1, max_length=100)
-    valor_alvo: float = Field(gt=0)
+    valor_alvo: float = Field(gt=0, le=VALOR_MAXIMO, allow_inf_nan=False)
     data_alvo: date
 
 
@@ -494,11 +516,12 @@ class Objetivo(NovoObjetivo):
 
 # Corpo do PATCH /objetivos/{id}: o novo total poupado (o frontend soma o que se juntou).
 class PoupadoAtualizar(BaseModel):
-    valor_poupado: float = Field(ge=0)
+    valor_poupado: float = Field(ge=0, le=VALOR_MAXIMO, allow_inf_nan=False)
 
 
 # Um corte sugerido pela IA: numa categoria de gasto, quanto se pode poupar por mês e porquê.
 class CorteSugerido(BaseModel):
+    # Categoria (e não CategoriaIA): um corte em "compras extra" que a pessoa já tem é uma sugestão válida.
     categoria: Categoria
     valor_mensal: float
     motivo: str
@@ -703,6 +726,9 @@ class RelatorioAnual(BaseModel):
     maiores_saidas: list[SaidaRelatorio]
     recorrentes: list[RecorrenteAno]
     objetivos: list[ObjetivoRelatorio]
+    # O ano da movimentação mais antiga da conta (None sem movimentações ou se a leitura falhar).
+    # O seletor de anos do frontend só mostra os anos a partir deste.
+    primeiro_ano: int | None = None
 
 
 # Resposta da IA no POST /relatorio/resumo-ia (saída estruturada).

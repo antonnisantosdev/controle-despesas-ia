@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { TEXTOS_PALAVRA_PASSE } from "@/lib/textosComuns";
+import { useTextosPublicos } from "@/lib/paisPublico";
+import { DICIONARIO_PALAVRA_PASSE } from "@/lib/textosComuns";
 
 // Campo de palavra-passe com um botão (olho) para mostrar ou esconder o que se escreveu.
 // Fica dentro do <label> da página: o input é o primeiro controlo, por isso é ele que o rótulo nomeia.
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export default function CampoPalavraPasse({ value, onChange, autoComplete = "current-password", className = "" }: Props) {
+  const { TEXTOS_PALAVRA_PASSE } = useTextosPublicos(DICIONARIO_PALAVRA_PASSE);
   const [visivel, setVisivel] = useState(false);
 
   return (

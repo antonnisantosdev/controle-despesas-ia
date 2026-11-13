@@ -15,11 +15,17 @@ export const TEXTOS_APP = {
   descricao: "Controlo financeiro pessoal com IA",
 } as const;
 
-// Botão do olho no campo da palavra-passe (CampoPalavraPasse).
+// Botão do olho no campo da palavra-passe (CampoPalavraPasse, no login e no registo: páginas públicas,
+// escolhidas com useTextosPublicos).
 export const TEXTOS_PALAVRA_PASSE = {
   esconder: "Esconder a palavra-passe",
   mostrar: "Mostrar a palavra-passe",
 } as const;
+
+export const DICIONARIO_PALAVRA_PASSE = {
+  PT: { TEXTOS_PALAVRA_PASSE },
+  BR: { TEXTOS_PALAVRA_PASSE: { esconder: "Esconder a senha", mostrar: "Mostrar a senha" } },
+};
 
 const PT = {
   // Faixa no fundo do ecrã enquanto a API acorda (AvisoServidor).

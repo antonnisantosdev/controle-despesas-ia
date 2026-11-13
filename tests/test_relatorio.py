@@ -567,3 +567,32 @@ def test_as_tuas_financas_passa_mas_dedutivel_da_503(cliente, leituras, limite, 
     assert resposta.status_code == estado
     if estado == 200:
         assert resposta.json() == {"resumo": resumo}
+
+
+class _UmaLinha:
+    """Supabase falso: qualquer consulta devolve as linhas dadas (ou rebenta, se erro=True)."""
+
+    def __init__(self, linhas, erro=False):
+        self.linhas, self.erro = linhas, erro
+
+    def __getattr__(self, nome):
+        return lambda *args, **opcoes: self
+
+    def execute(self):
+        if self.erro:
+            raise RuntimeError("falhou")
+        return type("Resposta", (), {"data": self.linhas})
+
+
+@pytest.mark.parametrize(
+    ("falso", "esperado"),
+    [
+        (_UmaLinha([{"data": "2023-04-02"}]), 2023),
+        (_UmaLinha([]), None),
+        (_UmaLinha([], erro=True), None),
+    ],
+)
+def test_primeiro_ano_com_dados(monkeypatch, falso, esperado):
+    monkeypatch.setattr(relatorio, "supabase", falso)
+
+    assert relatorio.primeiro_ano_com_dados("u") == esperado

@@ -38,7 +38,7 @@ from limites import (
     hoje_em_lisboa,
 )
 from models import (
-    Categoria,
+    CategoriaIA,
     ExtratoPdf,
     MensagemHistorico,
     PlanoPoupanca,
@@ -100,14 +100,15 @@ def _instrucoes(modelos: dict[str, str], pais: str, moeda: str) -> str:
 # Nomes das categorias no Brasil (iguais a ROTULOS_CATEGORIAS.BR em frontend/src/lib/opcoes.ts).
 # A IA recebe e devolve sempre as chaves internas; estes nomes são só para o texto que o utilizador lê.
 NOMES_CATEGORIAS_BR = (
-    "casa = moradia, telecomunicações = telefone e internet, rendimento = receitas, levantamentos = saques"
+    "casa = moradia, telecomunicações = telefone e internet, rendimento = receitas, levantamentos = saques, "
+    "compras extra = compras extras"
 )
 
 
 # Formato obrigatório da resposta da IA (saída estruturada).
 class Categorizacao(BaseModel):
     indice: int
-    categoria: Categoria
+    categoria: CategoriaIA  # a IA nunca escolhe uma categoria só humana ("compras extra")
 
 
 class RespostaCategorizacao(BaseModel):

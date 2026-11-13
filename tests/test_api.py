@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 import main
 from ia import ErroIA
+from mensagens import Local, msg
 from models import ExtratoPdf, MovimentoPdf, ResumoMes
 
 EXTRATO = (Path(__file__).parent.parent / "dados_exemplo" / "extrato_exemplo.csv").read_bytes()
@@ -127,8 +128,9 @@ def test_sem_perguntas_a_movimentacao_grava_se_sem_categoria(cliente, ia, limite
 
 
 @pytest.mark.parametrize("metodo", ["pix", "boleto"])
-def test_pix_e_boleto_sao_metodos_aceites(cliente, ia, limite, metodo):
+def test_pix_e_boleto_sao_metodos_aceites_nas_contas_br(cliente, ia, limite, metodo, monkeypatch):
     limite.maximo = 0
+    monkeypatch.setattr(main, "local_do_utilizador", lambda user_id: Local(pais="BR", moeda="BRL"))
 
     resposta = cliente.post(
         "/transacoes",
@@ -137,6 +139,93 @@ def test_pix_e_boleto_sao_metodos_aceites(cliente, ia, limite, metodo):
 
     assert resposta.status_code == 201
     assert resposta.json()["metodo_pagamento"] == metodo
+
+
+@pytest.mark.parametrize(("pais", "metodo"), [("PT", "pix"), ("PT", "boleto"), ("BR", "mbway")])
+def test_metodo_de_outro_pais_da_422_sem_gravar_nem_gastar_ia(cliente, ia, limite, base_dados, pais, metodo, monkeypatch):
+    monkeypatch.setattr(main, "local_do_utilizador", lambda user_id: Local(pais=pais, moeda="EUR"))
+
+    resposta = cliente.post(
+        "/transacoes",
+        json={"data": "2026-11-08", "descricao": "Teste", "valor": -20.0, "metodo_pagamento": metodo},
+    )
+
+    assert resposta.status_code == 422
+    assert resposta.json()["detail"] == msg("metodo_de_outro_pais", pais)
+    assert ia == []
+
+
+def test_compra_com_metodo_de_outro_pais_da_422(cliente, limite):
+    corpo = {
+        "loja": "Loja",
+        "data": "2026-11-08",
+        "itens": [{"descricao": "Pão", "quantidade": 1, "preco": 1.0}],
+        "total": 1.0,
+        "categoria": "alimentação",
+        "metodo_pagamento": "pix",
+    }
+
+    resposta = cliente.post("/compras", json=corpo)
+
+    assert resposta.status_code == 422
+    assert resposta.json()["detail"] == msg("metodo_de_outro_pais", "PT")
+
+
+def test_compras_extra_aceite_nas_escolhas_do_utilizador(cliente, ia, limite):
+    resposta = cliente.post(
+        "/transacoes",
+        json={
+            "data": "2026-11-08",
+            "descricao": "Prenda",
+            "valor": -40.0,
+            "metodo_pagamento": "dinheiro",
+            "categoria": "compras extra",
+        },
+    )
+
+    assert resposta.status_code == 201
+    assert resposta.json()["categoria"] == "compras extra"
+    assert ia == []
+
+
+def test_a_ia_nunca_pode_devolver_compras_extra():
+    from pydantic import ValidationError
+
+    from ia import Categorizacao
+    from models import Talao
+
+    with pytest.raises(ValidationError):
+        Categorizacao(indice=0, categoria="compras extra")
+    with pytest.raises(ValidationError):
+        Talao(loja="L", data=None, itens=[], total=1.0, categoria="compras extra")
+
+
+@pytest.mark.parametrize(
+    ("rota", "metodo_http", "corpo"),
+    [
+        ("/orcamentos/casa", "put", '{"limite": Infinity}'),
+        ("/orcamentos/casa", "put", '{"limite": 1e15}'),
+        ("/objetivos", "post", '{"nome": "X", "valor_alvo": Infinity, "data_alvo": "2030-01-01"}'),
+        ("/objetivos", "post", '{"nome": "X", "valor_alvo": 1e15, "data_alvo": "2030-01-01"}'),
+        ("/objetivos/1", "patch", '{"valor_poupado": Infinity}'),
+        (
+            "/compras",
+            "post",
+            '{"loja": "L", "data": "2026-11-08", "itens": [{"descricao": "P", "quantidade": 1e12, "preco": 1}],'
+            ' "total": 1, "categoria": "alimentação", "metodo_pagamento": "dinheiro"}',
+        ),
+        (
+            "/compras",
+            "post",
+            '{"loja": "L", "data": "2026-11-08", "itens": [{"descricao": "P", "quantidade": 1, "preco": 1}],'
+            ' "total": Infinity, "categoria": "alimentação", "metodo_pagamento": "dinheiro"}',
+        ),
+    ],
+)
+def test_valores_enormes_ou_infinitos_dao_422_nas_outras_rotas(cliente, limite, rota, metodo_http, corpo):
+    resposta = getattr(cliente, metodo_http)(rota, content=corpo, headers={"Content-Type": "application/json"})
+
+    assert resposta.status_code == 422
 
 
 @pytest.mark.parametrize("valor", ["-999999999999", "NaN", "Infinity"])

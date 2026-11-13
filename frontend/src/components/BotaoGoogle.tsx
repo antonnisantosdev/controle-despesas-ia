@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import AvisoTermos from "@/components/AvisoTermos";
 import { API_URL, fetchComTentativas } from "@/lib/api";
 import { calcularChallenge, gerarVerifier, guardarVerifier } from "@/lib/pkceGoogle";
-import { TEXTOS_GOOGLE } from "@/lib/textosLogin";
+import { useTextosPublicos } from "@/lib/paisPublico";
+import { DICIONARIO_LOGIN } from "@/lib/textosLogin";
 
 // min-h-11 = 44 px (alvo de toque). Foco visível ao navegar com o teclado.
 // Botão com contorno (como os secundários do projeto), para o "Entrar" continuar a ser o principal.
@@ -29,6 +30,7 @@ function LogoGoogle() {
 // depois de escolher a conta Google, volta à página /login/google com um código (?code=).
 // comTermos: mostra por baixo a frase dos termos (no login, onde o primeiro login com o Google cria a conta).
 export default function BotaoGoogle({ comTermos = false }: { comTermos?: boolean }) {
+  const { TEXTOS_GOOGLE } = useTextosPublicos(DICIONARIO_LOGIN);
   const [aAbrir, setAAbrir] = useState(false);
   const [erro, setErro] = useState("");
 

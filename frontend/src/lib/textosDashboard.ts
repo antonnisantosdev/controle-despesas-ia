@@ -37,6 +37,8 @@ const PT = {
     despesas: "Despesas",
     total: "Total",
     semDespesas: "Sem despesas neste mês.",
+    // A fatia que junta as categorias mais pequenas (não é a categoria "outros").
+    restoSoma: "Restantes categorias",
   } as const,
 
   // Cartão "Resumo do mês" (ResumoCartao, GET /resumo).
@@ -101,6 +103,7 @@ const BR: TextosDashboard = {
     despesas: "Despesas",
     total: "Total",
     semDespesas: "Sem despesas neste mês.",
+    restoSoma: "Demais categorias",
   },
 
   // Cartão "Resumo do mês" (ResumoCartao, GET /resumo).

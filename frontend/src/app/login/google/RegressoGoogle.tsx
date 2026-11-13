@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { API_URL, fetchComTentativas, guardarToken } from "@/lib/api";
 import { lerOrigem, type Origem } from "@/lib/origem";
 import { apagarVerifier, lerVerifier } from "@/lib/pkceGoogle";
-import { TEXTOS_GOOGLE } from "@/lib/textosLogin";
+import { useTextosPublicos } from "@/lib/paisPublico";
+import { DICIONARIO_LOGIN } from "@/lib/textosLogin";
 
 // origem: o canal do utm_source; a API só o guarda se a conta for nova (primeiro login).
 type PedidoTroca = { code: string; code_verifier: string; origem?: Origem };
@@ -48,6 +49,7 @@ async function trocarCodigo(pedido: PedidoTroca): Promise<string> {
 
 // Só corre no browser (a page.tsx carrega-o com ssr: false), por isso pode ler o window.location logo ao abrir.
 export default function RegressoGoogle() {
+  const { TEXTOS_GOOGLE } = useTextosPublicos(DICIONARIO_LOGIN);
   const router = useRouter();
   // Lido uma só vez, quando o componente aparece (antes de o endereço ser limpo e o segredo apagado).
   // Sem o segredo deste browser não há troca: pode ser um link de um atacante com o código da conta dele

@@ -132,6 +132,7 @@ from models import (
     TransacaoCriar,
     TrocaGoogle,
     TransacaoImportada,
+    metodo_do_pais,
 )
 from recorrentes import esquecer_recorrentes, recorrentes_do_utilizador
 from relatorio import ano_valido, dados_para_ia, relatorio_do_ano, relatorio_em_csv
@@ -511,9 +512,17 @@ def obter_transacao(transacao_id: IdTransacao, user_id: str = Depends(obter_util
     return linhas[0]
 
 
+def exigir_metodo_do_pais(metodo: str, user_id: str) -> None:
+    """422 se o método só existe no outro país (MB Way só em PT; Pix e boleto só no BR). Antes de gastar a IA."""
+    pais = local_do_utilizador(user_id).pais
+    if not metodo_do_pais(metodo, pais):
+        raise HTTPException(status_code=422, detail=msg("metodo_de_outro_pais", pais))
+
+
 # Cria uma movimentação à mão (dinheiro, MB Way...). Sem categoria, a IA escolhe uma.
 @app.post("/transacoes", status_code=201)
 def criar_transacao(nova: NovaMovimentacao, user_id: str = Depends(obter_utilizador_atual)) -> Transacao:
+    exigir_metodo_do_pais(nova.metodo_pagamento, user_id)
     # Antes de gastar um pedido à IA: a conta tem de ter espaço para mais uma.
     exigir_espaco_na_conta(contar_transacoes(user_id), 1, user_id)
     categoria = nova.categoria
@@ -931,6 +940,7 @@ def ler_compra(foto: UploadFile, user_id: str = Depends(obter_utilizador_atual))
 # Grava o talão depois de o utilizador o rever: cria a transação com o total, a compra e os produtos.
 @app.post("/compras", status_code=201)
 def criar_compra(nova: NovaCompra, user_id: str = Depends(obter_utilizador_atual)) -> Compra:
+    exigir_metodo_do_pais(nova.metodo_pagamento, user_id)
     # Guardar um talão cria uma transação: conta para o teto de movimentações da conta.
     exigir_espaco_na_conta(contar_transacoes(user_id), 1, user_id)
     compra = gravar_compra(user_id, nova, moeda_da_conta(user_id))

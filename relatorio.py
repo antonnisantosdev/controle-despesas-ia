@@ -10,6 +10,7 @@ import io
 from datetime import date
 
 from consultas import movimentos_entre
+from database import supabase
 from models import (
     CategoriaComparada,
     CategoriaRelatorio,
@@ -63,6 +64,7 @@ ETIQUETAS_POR_PAIS = {
         "telecomunicações": "Telefone e internet",
         "rendimento": "Receitas",
         "levantamentos": "Saques",
+        "compras extra": "Compras extras",
     },
 }
 SEM_CATEGORIA = "sem categoria"
@@ -250,10 +252,25 @@ def montar_relatorio(
     )
 
 
+def primeiro_ano_com_dados(user_id: str) -> int | None:
+    """O ano da movimentação mais antiga deste utilizador (1 linha só), ou None. Uma falha não estraga o relatório."""
+    try:
+        resposta = (
+            supabase.table("transacoes").select("data").eq("user_id", user_id).order("data").limit(1).execute()
+        )
+        linhas = resposta.data or []
+        return int(str(linhas[0]["data"])[:4]) if linhas else None
+    except Exception as erro:
+        print(f"AVISO: não foi possível ler o primeiro ano com movimentações ({getattr(erro, 'code', None) or type(erro).__name__}).")
+        return None
+
+
 def relatorio_do_ano(user_id: str, ano: int, hoje: date, pais: str = "PT") -> RelatorioAnual:
     """Lê as movimentações do ano e do anterior (página a página, só deste utilizador) e monta o relatório."""
     linhas = movimentos_entre(user_id, f"{ano - 1}-01", f"{ano}-12")
-    return montar_relatorio(ano, linhas, _objetivos(user_id), hoje, pais)
+    relatorio = montar_relatorio(ano, linhas, _objetivos(user_id), hoje, pais)
+    relatorio.primeiro_ano = primeiro_ano_com_dados(user_id)
+    return relatorio
 
 
 # --- Para a IA (resumo do ano) ---

@@ -24,6 +24,13 @@ function mesDoPrazo(data: string, f: Formatos) {
   return f.data(data, { month: "long", year: "numeric" });
 }
 
+// O prazo já passou (data_alvo antes de hoje, na hora do browser) e o objetivo ainda não foi atingido.
+// "sv-SE" escreve a data como AAAA-MM-DD, o mesmo formato da data_alvo: compara-se como texto.
+function prazoPassado(objetivo: Objetivo): boolean {
+  const hoje = new Date().toLocaleDateString("sv-SE");
+  return objetivo.data_alvo < hoje && objetivo.valor_poupado < objetivo.valor_alvo;
+}
+
 type Props = {
   objetivo: Objetivo;
   onMudou: (objetivo: Objetivo) => void;
@@ -110,7 +117,13 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="font-medium text-texto">{objetivo.nome}</h2>
-          <p className="text-xs text-texto-suave">{preencher(TEXTOS_OBJETIVO.ate, { mes: mesDoPrazo(objetivo.data_alvo, f) })}</p>
+          {prazoPassado(objetivo) ? (
+            <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              {preencher(TEXTOS_OBJETIVO.prazoPassado, { mes: mesDoPrazo(objetivo.data_alvo, f) })}
+            </p>
+          ) : (
+            <p className="text-xs text-texto-suave">{preencher(TEXTOS_OBJETIVO.ate, { mes: mesDoPrazo(objetivo.data_alvo, f) })}</p>
+          )}
         </div>
         <p className="text-sm text-texto-suave">
           <span className="font-semibold text-texto">{f.dinheiro(objetivo.valor_poupado)}</span>

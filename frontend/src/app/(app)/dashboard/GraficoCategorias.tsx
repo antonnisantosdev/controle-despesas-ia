@@ -14,12 +14,16 @@ const MAX_FATIAS = 5;
 
 type Fatia = { categoria: string; total: number; fill: string };
 
-// Mostra as 5 maiores categorias e junta as restantes numa fatia "outros":
+// Chave da fatia que junta as categorias pequenas. Não é uma categoria: a categoria "outros" pode estar
+// entre as 5 maiores e, com a mesma chave, apareciam duas fatias "Outros" (e duas linhas com a mesma key).
+const CHAVE_RESTO = "_resto";
+
+// Mostra as 5 maiores categorias e junta as restantes numa fatia "Outros (soma)":
 // com mais fatias ficam finas demais para comparar, e as cores começariam a repetir-se.
 function agrupar(dados: GastoCategoria[]): Fatia[] {
   const fatias: Fatia[] = dados.slice(0, MAX_FATIAS).map((d, i) => ({ ...d, fill: CORES[i] }));
   const resto = dados.slice(MAX_FATIAS).reduce((soma, d) => soma + d.total, 0);
-  if (resto > 0) fatias.push({ categoria: "outros", total: resto, fill: "var(--serie-outros)" });
+  if (resto > 0) fatias.push({ categoria: CHAVE_RESTO, total: resto, fill: "var(--serie-outros)" });
   return fatias;
 }
 
@@ -32,7 +36,10 @@ export default function GraficoCategorias({ dados }: { dados: GastoCategoria[] }
   }
 
   // rotulo: o nome mostrado (legenda e tooltip), do país da conta; a chave da categoria não muda.
-  const fatias = agrupar(dados).map((fatia) => ({ ...fatia, rotulo: nomeCategoria(fatia.categoria) }));
+  const fatias = agrupar(dados).map((fatia) => ({
+    ...fatia,
+    rotulo: fatia.categoria === CHAVE_RESTO ? TEXTOS_GRAFICOS.restoSoma : nomeCategoria(fatia.categoria),
+  }));
   const total = fatias.reduce((soma, f) => soma + f.total, 0);
 
   return (
