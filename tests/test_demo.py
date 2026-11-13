@@ -501,6 +501,13 @@ PARAMETROS = {
 }
 
 
+# Corpos de exemplo dos POST permitidos.
+CORPOS_DEMO = {
+    ("POST", "/chat"): {"pergunta": "Quanto gastei este mês?"},
+    ("POST", "/compras/lista"): {"orcamento": 50, "mercados": ["continente"], "lista": "leite, pão"},
+}
+
+
 def _rotas_da_api() -> set[tuple[str, str, bool]]:
     """(método, caminho, precisa de login) de cada rota do main.py."""
     rotas = set()
@@ -569,7 +576,7 @@ def test_a_demo_leva_sempre_423_no_perfil_e_nao_gasta_o_limite_do_perfil(base, a
 
 @pytest.mark.parametrize(("metodo", "caminho"), sorted(demo.PERMISSOES_DEMO))
 def test_rotas_da_lista_funcionam_na_demo(base, api, metodo, caminho):
-    corpo = {"pergunta": "Quanto gastei este mês?"} if metodo == "POST" else None
+    corpo = CORPOS_DEMO.get((metodo, caminho))
 
     resposta = api.request(
         metodo, _endereco(caminho), params=PARAMETROS.get(caminho), json=corpo, headers=cabecalho(token_demo())

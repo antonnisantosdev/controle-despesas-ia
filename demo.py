@@ -170,6 +170,10 @@ PERMISSOES_DEMO: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/compras/produtos"),
         ("GET", "/compras/produtos/{chave}"),
         ("GET", "/compras/produtos/juntar"),
+        # Fazer as minhas compras: o estado e um EXEMPLO FIXO (main.py; sem IA, sem pesquisas e sem contar).
+        # Sem custo, por isso sem limite por IP.
+        ("GET", "/compras/lista/estado"),
+        ("POST", "/compras/lista"),
         ("GET", "/objetivos"),
         ("GET", "/simulador"),
         ("GET", "/plano"),

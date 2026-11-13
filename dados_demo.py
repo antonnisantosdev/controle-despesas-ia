@@ -309,3 +309,47 @@ def objetivos_demo(hoje: date) -> list[dict]:
         }
         for nome, alvo, poupado, meses in OBJETIVOS
     ]
+
+
+# --- Fazer as minhas compras: o exemplo fixo da demo (sem IA, sem pesquisas, não conta) ---
+# Preços INVENTADOS (plausíveis, não são os dos sites) e sem links: a demo nunca mostra preços reais.
+# Os achados vão pelo mesmo caminho dos da IA (lista_compras.limpar_itens e calcular_plano).
+ORCAMENTO_COMPRAS_DEMO = 40.0
+MERCADOS_COMPRAS_DEMO = ["pingo_doce", "auchan"]
+LISTA_COMPRAS_DEMO = (
+    "carne picada, peito de frango, 2 kg de arroz, 2 kg de feijão, refrigerante, 4 garrafões de 6 L de água sem gás"
+)
+
+# (pedido, mercado, produto, preço da embalagem, embalagens). Produto vazio = sem preço nesse mercado.
+ACHADOS_COMPRAS_DEMO = [
+    ("carne picada", "Pingo Doce", "Carne picada mista 500 g", 3.49, 1),
+    ("carne picada", "Auchan", "Carne picada de vaca 500 g", 3.79, 1),
+    ("peito de frango", "Pingo Doce", "Peito de frango 1 kg", 6.49, 1),
+    ("peito de frango", "Auchan", "Filetes de peito de frango 1 kg", 5.99, 1),
+    ("2 kg de arroz", "Pingo Doce", "Arroz agulha 1 kg", 1.19, 2),
+    ("2 kg de arroz", "Auchan", "Arroz carolino 1 kg", 1.09, 2),
+    ("2 kg de feijão", "Pingo Doce", "Feijão encarnado seco 500 g", 1.29, 4),
+    ("2 kg de feijão", "Auchan", "", 0.0, 0),
+    ("refrigerante", "Pingo Doce", "Refrigerante de cola 1,5 L", 0.99, 1),
+    ("refrigerante", "Auchan", "Refrigerante de laranja 1,5 L", 0.89, 1),
+    ("4 garrafões de 6 L de água sem gás", "Pingo Doce", "Água mineral sem gás 6 L", 0.99, 4),
+    ("4 garrafões de 6 L de água sem gás", "Auchan", "Água sem gás 6 L", 1.05, 4),
+]
+
+
+def achados_compras_demo() -> list[dict]:
+    """Os achados do exemplo, no formato que a IA devolve (ainda por limpar)."""
+    return [
+        {
+            "pedido": pedido,
+            "mercado": mercado,
+            "encontrado": bool(produto),
+            "produto": produto,
+            "preco_embalagem": preco,
+            "embalagens": embalagens,
+            "preco_total": round(preco * embalagens, 2),
+            "link": "",
+            "nota": "" if produto else "Sem preço neste exemplo.",
+        }
+        for pedido, mercado, produto, preco, embalagens in ACHADOS_COMPRAS_DEMO
+    ]

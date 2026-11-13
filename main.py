@@ -37,7 +37,8 @@ from demo import (
     registar_forma_do_ip,
 )
 from ferramentas import executar_ferramenta, ferramentas_para
-from ia import ErroIA, categorizar, conversar, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_ano, resumir_mes, sugerir_orcamento
+from dados_demo import MERCADOS_COMPRAS_DEMO, ORCAMENTO_COMPRAS_DEMO, achados_compras_demo
+from ia import ErroIA, categorizar, conversar, fazer_compras, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_ano, resumir_mes, sugerir_orcamento
 from importar_csv import (
     MAX_ENTRADAS_ARVORE_PDF,
     MAX_MOVIMENTOS_CSV,
@@ -59,12 +60,14 @@ from limite_ip import (
     registar_mudanca_de_perfil,
 )
 from lista_espera import inscrever
+from lista_compras import MERCADOS, calcular_plano, limpar_itens
 from mensagens import Local, msg
 from limites import (
     MAX_PAGINAS_PDF,
     abrir_cache_do_pedido,
     aviso_resumo_sem_pedidos,
     estado_do_plano,
+    estado_listas_compras,
     exigir_espaco_na_conta,
     exigir_funcao,
     fechar_cache_do_pedido,
@@ -74,6 +77,8 @@ from limites import (
     plano_e_config_ia,
     planos_disponiveis,
     pode_usar_ia,
+    listas_no_mes,
+    registar_lista_compras,
     registar_pdf,
     registar_pergunta,
 )
@@ -93,6 +98,7 @@ from models import (
     AlertasOrcamento,
     AnoSimulado,
     BoasVindasGuardadas,
+    EstadoListaCompras,
     EstadoPlano,
     Categoria,
     CategoriaAtualizar,
@@ -105,6 +111,7 @@ from models import (
     JuncaoProdutos,
     JuntarProdutos,
     LinhaOrcamento,
+    MercadoDisponivel,
     NovaCompra,
     NovaMovimentacao,
     NovoLimite,
@@ -112,6 +119,7 @@ from models import (
     Objetivo,
     PerfilConta,
     PerfilGuardado,
+    PedidoListaCompras,
     PerguntaChat,
     PlanoDisponivel,
     PlanoPoupanca,
@@ -124,6 +132,7 @@ from models import (
     RespostasBoasVindas,
     ResumoAnualIA,
     ResultadoImportacao,
+    ResultadoListaCompras,
     ResumoMes,
     SugestaoOrcamento,
     ResumoMensal,
@@ -1002,6 +1011,51 @@ def separar_dois_produtos(chave_origem: str, user_id: str = Depends(obter_utiliz
         raise HTTPException(status_code=404, detail=msg("juncao_nao_existe", pais))
     # A chave exata e depois a normalizada (ver separar_produtos).
     separar_produtos(user_id, chave_origem, pais)
+
+
+# --- Fazer as minhas compras (lista_compras.py, sql/024) ---
+# A pessoa dá o orçamento, 1 a 3 mercados e a lista; a IA procura os preços nos sites oficiais e a API calcula
+# o plano (o mais barato de cada produto, o total por mercado e o orçamento). Só planos pagos (402 no Free) e
+# contas em Portugal (422 nas outras). Limite próprio por mês (429), à parte dos pedidos à IA normais.
+# Na demo: um exemplo fixo (dados_demo.py), sem IA, sem pesquisas e sem contar.
+
+
+def mercados_disponiveis() -> list[MercadoDisponivel]:
+    return [MercadoDisponivel(chave=chave, nome=mercado.nome) for chave, mercado in MERCADOS.items()]
+
+
+@app.get("/compras/lista/estado")
+def estado_lista_compras(user_id: str = Depends(obter_utilizador_atual)) -> EstadoListaCompras:
+    disponivel, usadas, limite = estado_listas_compras(user_id, contar=not e_conta_demo(user_id))
+    return EstadoListaCompras(disponivel=disponivel, usadas=usadas, limite=limite, mercados=mercados_disponiveis())
+
+
+def exemplo_lista_compras_demo(user_id: str) -> ResultadoListaCompras:
+    """O exemplo fixo da demo, pelo mesmo cálculo das listas a sério. Não conta nem chama a IA."""
+    _, _, limite = estado_listas_compras(user_id, contar=False)
+    itens = limpar_itens(achados_compras_demo(), MERCADOS_COMPRAS_DEMO)
+    plano = calcular_plano(itens, MERCADOS_COMPRAS_DEMO, ORCAMENTO_COMPRAS_DEMO)
+    return ResultadoListaCompras(**plano, usadas=0, limite=limite, exemplo=True)
+
+
+@app.post("/compras/lista")
+def fazer_lista_compras(pedido: PedidoListaCompras, user_id: str = Depends(obter_utilizador_atual)) -> ResultadoListaCompras:
+    # O corpo já foi validado (422) antes de chegar aqui, também na demo.
+    if e_conta_demo(user_id):
+        return exemplo_lista_compras_demo(user_id)
+    exigir_funcao(user_id, "fazer_compras")
+    local = local_do_utilizador(user_id)  # da assinatura já lida para o plano
+    if local.pais != "PT":
+        raise HTTPException(status_code=422, detail=msg("fazer_compras_so_portugal", local.pais))
+    # Conta a lista ANTES de chamar a IA (429 no limite; 503 sem a sql/024). Conta mesmo que a IA falhe a seguir.
+    limite = registar_lista_compras(user_id)
+    try:
+        achados = fazer_compras(pedido.lista, pedido.mercados, pedido.orcamento, user_id=user_id, local=local)
+    except ErroIA as erro:
+        print(erro)
+        raise HTTPException(status_code=503, detail=msg("fazer_compras_indisponivel", local.pais))
+    plano = calcular_plano(limpar_itens(achados, pedido.mercados), pedido.mercados, pedido.orcamento)
+    return ResultadoListaCompras(**plano, usadas=listas_no_mes(user_id), limite=limite)
 
 
 # Minha reserva: os objetivos de poupança do utilizador, do prazo mais próximo para o mais distante.

@@ -279,6 +279,23 @@ MENSAGENS: dict[str, dict[str, str]] = {
         "PT": "Estes produtos já estão juntos ao contrário.",
         "BR": "Esses produtos já estão juntos ao contrário.",
     },
+    # --- Fazer as minhas compras (lista_compras.py, sql/024). PT e BR: TEXTO NOVO. ---
+    "funcao_paga_fazer_compras": {  # TEXTO NOVO
+        "PT": "Fazer as minhas compras está disponível nos planos Essencial e Completo.",
+        "BR": "Fazer minhas compras está disponível nos planos Essencial e Completo.",
+    },
+    "fazer_compras_so_portugal": {  # TEXTO NOVO
+        "PT": "Fazer as minhas compras só está disponível para contas em Portugal, por agora.",
+        "BR": "Fazer minhas compras ainda não está disponível no Brasil.",
+    },
+    "limite_listas_compras": {  # TEXTO NOVO
+        "PT": "Chegaste ao limite de {limite} listas de compras este mês. O contador volta a zero no dia 1.",
+        "BR": "Você chegou ao limite de {limite} listas de compras este mês. O contador zera no dia 1.",
+    },
+    "fazer_compras_indisponivel": {  # revisto pelo copywriter: a tentativa falhada conta (pesquisas já pagas)
+        "PT": "Não foi possível procurar os preços agora e esta tentativa contou para o limite do mês. Tenta outra vez daqui a pouco.",
+        "BR": "Não foi possível buscar os preços agora e esta tentativa contou no limite do mês. Tente de novo daqui a pouco.",
+    },
     # --- Minha reserva (objetivos = "metas" no BR) ---
     "objetivo_nao_encontrado": {  # BR: TEXTO NOVO
         "PT": "Objetivo não encontrado",

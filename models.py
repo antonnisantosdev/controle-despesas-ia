@@ -6,6 +6,7 @@ from pydantic import AfterValidator, BaseModel, EmailStr, Field, StrictBool, Str
 
 from auth import FORMATO_CODE_VERIFIER, FORMATO_CODIGO_GOOGLE
 from limites import MAX_CARACTERES_HISTORICO, MAX_CARACTERES_PERGUNTA_HISTORICO, MAX_CARACTERES_RESPOSTA_HISTORICO
+from lista_compras import MERCADOS
 from perfil import Perfil, moedas_possiveis, perfil_inicial
 
 # As categorias que a IA pode escolher (categorizar extratos, ler talões). Com Literal, o Pydantic rejeita
@@ -499,6 +500,87 @@ class JuncaoProdutos(BaseModel):
 class JuntarProdutos(BaseModel):
     chave_origem: str = Field(min_length=1, max_length=100)
     chave_destino: str = Field(min_length=1, max_length=100)
+
+
+# --- Fazer as minhas compras (POST /compras/lista e GET /compras/lista/estado) ---
+
+# Teto do orçamento de uma lista de compras (uma ida ao supermercado; acima disto é um engano).
+ORCAMENTO_MAXIMO_LISTA = 10_000
+MAX_MERCADOS_LISTA = 3
+
+
+# Corpo do POST /compras/lista: o orçamento, 1 a 3 mercados (chaves de lista_compras.MERCADOS, sem repetidos)
+# e a lista de produtos em texto livre. A lista vai para a IA: o teto de 600 caracteres limita o custo.
+class PedidoListaCompras(BaseModel):
+    orcamento: float = Field(gt=0, le=ORCAMENTO_MAXIMO_LISTA, allow_inf_nan=False)
+    mercados: list[str] = Field(min_length=1, max_length=MAX_MERCADOS_LISTA)
+    lista: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=600)]
+
+    @field_validator("mercados")
+    @classmethod
+    def mercados_conhecidos_sem_repetidos(cls, mercados: list[str]) -> list[str]:
+        if any(mercado not in MERCADOS for mercado in mercados):
+            raise ValueError("mercado desconhecido")
+        if len(set(mercados)) != len(mercados):
+            raise ValueError("mercados repetidos")
+        return mercados
+
+
+# Um mercado que se pode escolher (o nome é o que se mostra).
+class MercadoDisponivel(BaseModel):
+    chave: str
+    nome: str
+
+
+# GET /compras/lista/estado: se a pessoa pode usar (plano pago e conta em Portugal), as listas do mês e os mercados.
+class EstadoListaCompras(BaseModel):
+    disponivel: bool
+    usadas: int
+    limite: int
+    mercados: list[MercadoDisponivel]
+
+
+# Um produto da lista num mercado, tal como a IA o encontrou (já limpo: lista_compras.limpar_itens).
+class ItemListaCompras(BaseModel):
+    pedido: str
+    mercado: str
+    encontrado: bool
+    produto: str
+    preco_embalagem: float
+    embalagens: int
+    preco_total: float
+    link: str
+    nota: str
+
+
+# O que comprar num mercado (o mais barato de cada produto).
+class ItemPlanoCompras(BaseModel):
+    pedido: str
+    produto: str
+    embalagens: int
+    preco_total: float
+    link: str
+
+
+class MercadoPlanoCompras(BaseModel):
+    mercado: str
+    total: float
+    itens: list[ItemPlanoCompras]
+    mapa_url: str
+
+
+# Resposta do POST /compras/lista. diferenca = orcamento - total (negativa quando passa o orçamento).
+# exemplo: true só na demo (um exemplo fixo, sem IA).
+class ResultadoListaCompras(BaseModel):
+    itens: list[ItemListaCompras]
+    plano: list[MercadoPlanoCompras]
+    total: float
+    orcamento: float
+    diferenca: float
+    sem_preco: list[str]
+    usadas: int
+    limite: int
+    exemplo: bool = False
 
 
 # Corpo do POST /objetivos: um objetivo de poupança novo. O valor poupado começa a 0 (DEFAULT do SQL).

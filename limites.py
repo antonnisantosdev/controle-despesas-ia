@@ -113,7 +113,7 @@ def primeiro_mes_visivel(config: ConfigIA, hoje: date) -> str | None:
 PLANOS_PAGOS = {"essencial", "completo"}
 FUNCOES_PAGAS = {
     funcao: msg(f"funcao_paga_{funcao}", "PT")
-    for funcao in ("importar_pdf", "ler_talao", "precos_por_loja", "exportar_relatorio")
+    for funcao in ("importar_pdf", "ler_talao", "precos_por_loja", "exportar_relatorio", "fazer_compras")
 }
 
 # Funções que só o plano Completo tem, com a mensagem do 402 para os outros planos (chave "funcao_completo_<funcao>").
@@ -124,6 +124,14 @@ FUNCOES_SO_COMPLETO = {"resumo_anual_ia": msg("funcao_completo_resumo_anual_ia",
 LIMITES_PDF_POR_PLANO: dict[str, int] = {
     "essencial": 15,
     "completo": 30,
+}
+
+# Listas de "Fazer as minhas compras" que cada plano pode pedir por mês (no país da conta; o Free não tem).
+# Cada lista custa duas chamadas à IA e várias pesquisas na web: tem limite próprio e NÃO gasta os pedidos
+# à IA normais (conta-se na tabela uso_listas_compras, sql/024). Decisão do CEO; para mudar, muda-se só aqui.
+LIMITES_LISTAS_COMPRAS_POR_PLANO: dict[str, int] = {
+    "essencial": 5,
+    "completo": 15,
 }
 
 # Páginas máximas de um extrato em PDF. A IA lê o PDF inteiro numa só chamada: cada página a mais
@@ -711,6 +719,101 @@ def registar_pdf(user_id: str) -> None:
     # Resposta inesperada: falha fechado (não se sabe se o pedido contou, por isso não se chama a IA).
     print(f"AVISO: registar_pdf_ia devolveu uma resposta inesperada: {resultado!r}")
     raise HTTPException(status_code=503, detail=msg("pdf_indisponivel", pais))
+
+
+# --- Listas de "Fazer as minhas compras" (sql/024) ---
+
+# Códigos do PostgREST quando a tabela não existe (antes da sql/024).
+TABELA_NAO_EXISTE = {"PGRST205", "42P01"}
+
+
+def limite_listas_compras_do_plano(plano: str | None) -> int:
+    """Quantas listas de compras o plano permite por mês. 0 no Free e em planos desconhecidos."""
+    return LIMITES_LISTAS_COMPRAS_POR_PLANO.get(plano or "", 0)
+
+
+def listas_no_mes(user_id: str) -> int:
+    """Quantas listas de compras o utilizador já pediu neste mês (desde inicio_dos_contadores, no país da conta).
+
+    Só para mostrar (GET /compras/lista/estado): quem decide se há espaço é a registar_lista_compras, na base
+    de dados. Antes da sql/024 a tabela não existe: devolve 0 e deixa um aviso (o POST responde 503 na mesma).
+    """
+    inicio = inicio_dos_contadores_da_conta(user_id, "mes", agora_utc()).isoformat()
+    try:
+        resposta = (
+            supabase.table("uso_listas_compras")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .gte("criado_em", inicio)
+            .execute()
+        )
+    except APIError as erro:
+        # Só para mostrar: um erro aqui nunca pode estragar a resposta (no POST, a IA já foi paga).
+        if erro.code in TABELA_NAO_EXISTE:
+            print("AVISO: tabela uso_listas_compras não encontrada (sql/024); listas do mês a 0.")
+        else:
+            print(f"AVISO: não foi possível contar as listas de compras do mês ({erro.code or type(erro).__name__}).")
+        return 0
+    return resposta.count or 0
+
+
+def estado_listas_compras(user_id: str, contar: bool = True) -> tuple[bool, int, int]:
+    """(disponivel, usadas, limite) de "Fazer as minhas compras" para a conta.
+
+    disponivel: plano pago E conta a viver em Portugal (os mercados são só portugueses, por agora).
+    limite: as listas por mês do plano (0 no Free). usadas: as do mês (0 sem contar, ex.: na demo, que nunca conta).
+    """
+    plano = plano_do_utilizador(user_id)
+    pago = plano_inclui(plano, "fazer_compras")
+    limite = limite_listas_compras_do_plano(plano) if pago else 0
+    usadas = listas_no_mes(user_id) if pago and contar else 0
+    disponivel = pago and limite > 0 and local_do_utilizador(user_id).pais == "PT"
+    return disponivel, usadas, limite
+
+
+def _chamar_registar_lista_compras(parametros: dict) -> str | None:
+    """Chama a função registar_lista_compras (sql/024). None se ainda não existir no Supabase."""
+    try:
+        resposta = supabase.rpc("registar_lista_compras", parametros).execute()
+    except APIError as erro:
+        if erro.code in FUNCAO_NAO_EXISTE:
+            return None
+        raise
+    # A função devolve texto ('ok' ou 'limite'): o PostgREST responde só essa palavra.
+    return resposta.data if isinstance(resposta.data, str) else ""
+
+
+def registar_lista_compras(user_id: str) -> int:
+    """Conta uma lista de compras do mês, ou responde 429 se o plano já chegou ao limite. Devolve o limite do plano.
+
+    Chama-se depois de o pedido ser aceite (plano, país, corpo) e logo ANTES de chamar a IA: como nos PDF,
+    a lista conta mesmo que a IA falhe a seguir (as pesquisas na web já podem ter sido pagas).
+    Não gasta pedidos à IA normais. Falha fechado (503, sem chamar a IA): sem a sql/024, com um erro da base
+    de dados ou com uma resposta inesperada, não se sabe quantas listas já foram feitas.
+    """
+    limite = limite_listas_compras_do_plano(plano_do_utilizador(user_id))
+    pais = local_do_utilizador(user_id).pais
+    parametros = {
+        "p_user_id": user_id,
+        "p_desde": inicio_dos_contadores_da_conta(user_id, "mes", agora_utc()).isoformat(),
+        "p_limite": limite,
+    }
+    try:
+        resultado = _chamar_registar_lista_compras(parametros)
+    except APIError as erro:
+        print(f"AVISO: registar_lista_compras falhou ({getattr(erro, 'code', None) or type(erro).__name__}).")
+        raise HTTPException(status_code=503, detail=msg("fazer_compras_indisponivel", pais))
+
+    if resultado == "ok":
+        return limite
+    if resultado == "limite":
+        raise HTTPException(status_code=429, detail=msg("limite_listas_compras", pais, limite=limite))
+    if resultado is None:
+        # Aparece nos logs do Render: se continuar a aparecer depois de correr a 024, algo está mal.
+        print("AVISO: função registar_lista_compras não encontrada (sql/024); listas de compras desligadas.")
+    else:
+        print(f"AVISO: registar_lista_compras devolveu uma resposta inesperada: {resultado!r}")
+    raise HTTPException(status_code=503, detail=msg("fazer_compras_indisponivel", pais))
 
 
 def pode_usar_ia(user_id: str, funcao: str) -> bool:

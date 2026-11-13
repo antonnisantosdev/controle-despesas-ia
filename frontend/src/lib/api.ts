@@ -152,6 +152,47 @@ export type JuncaoProdutos = {
   nome_destino: string;
   criado_em: string;
 };
+// Fazer as minhas compras: a IA procura os preços da lista nos sites oficiais dos mercados (só planos pagos).
+// GET /compras/lista/estado: se a conta pode usar, as listas deste mês e os mercados à escolha.
+export type MercadoDisponivel = { chave: string; nome: string };
+export type EstadoListas = { disponivel: boolean; usadas: number; limite: number; mercados: MercadoDisponivel[] };
+// POST /compras/lista. orcamento > 0 e <= 10000; mercados: 1 a 3 chaves; lista: 3 a 600 caracteres.
+export type PedidoListaCompras = { orcamento: number; mercados: string[]; lista: string };
+// Um produto da lista num mercado (todos os mercados escolhidos, para a comparação).
+// mercado: o NOME do mercado ("Pingo Doce"), não a chave. Os campos vêm sempre preenchidos:
+// sem preço (encontrado false), os textos vêm "" e os números 0 (nunca null).
+export type ItemListaCompras = {
+  pedido: string;
+  mercado: string;
+  encontrado: boolean;
+  produto: string;
+  preco_embalagem: number;
+  embalagens: number;
+  preco_total: number;
+  link: string; // "" sem link
+  nota: string; // "" sem nota
+};
+export type ItemPlanoCompras = {
+  pedido: string;
+  produto: string;
+  embalagens: number;
+  preco_total: number;
+  link: string; // "" sem link
+};
+// Um mercado do plano (mercado: o NOME, ex. "Pingo Doce"): o que comprar lá e o total.
+export type MercadoPlano = { mercado: string; total: number; itens: ItemPlanoCompras[]; mapa_url: string };
+// diferenca = orcamento - total (negativa: passa o orçamento). exemplo: true na demo (plano já feito).
+export type ListaCompras = {
+  itens: ItemListaCompras[];
+  plano: MercadoPlano[];
+  total: number;
+  orcamento: number;
+  diferenca: number;
+  sem_preco: string[];
+  usadas: number;
+  limite: number;
+  exemplo: boolean;
+};
 export type Objetivo = { id: number; nome: string; valor_alvo: number; data_alvo: string; valor_poupado: number };
 export type CorteSugerido = { categoria: string; valor_mensal: number; motivo: string };
 export type PlanoPoupanca = { viavel: boolean; explicacao: string; cortes: CorteSugerido[] };
