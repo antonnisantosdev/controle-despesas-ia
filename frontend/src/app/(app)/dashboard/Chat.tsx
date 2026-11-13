@@ -10,6 +10,7 @@ import {
   pedirApi,
   SessaoExpirada,
   type MensagemHistorico,
+  type PropostaChat,
   type RespostaChat,
 } from "@/lib/api";
 import { useEstadoPlano, usePedidoPlano } from "@/lib/conta";
@@ -20,7 +21,15 @@ import { DICIONARIO_DASHBOARD } from "@/lib/textosDashboard";
 import { DICIONARIO_DEMO } from "@/lib/textosDemo";
 import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
-type Mensagem = { autor: "tu" | "ia"; texto: string };
+import CartaoProposta from "./CartaoProposta";
+
+// propostas: os cartões que a IA preparou nesta resposta (só ficam no ecrã; nunca vão no histórico).
+type Mensagem = { autor: "tu" | "ia"; texto: string; propostas?: PropostaChat[] };
+
+type Props = {
+  // Depois de confirmar uma proposta: a página volta a pedir os dados (gráficos e cartões).
+  onDadosMudaram?: () => void;
+};
 
 // A IA às vezes marca palavras com **negrito** (markdown). Mostra-se como <strong>, sem HTML vindo da resposta:
 // o texto é partido nos "**" e cada parte continua a ser texto simples, que o React escapa.
@@ -64,7 +73,7 @@ function juntarExemplos(exemplos: readonly string[], ou: string): string {
   return `${comAspas.slice(0, -1).join(", ")} ${ou} ${comAspas[comAspas.length - 1]}`;
 }
 
-export default function Chat() {
+export default function Chat({ onDadosMudaram }: Props) {
   const { TEXTOS_GERAIS } = useTextos(DICIONARIO_COMUNS);
   const { TEXTOS_CHAT } = useTextos(DICIONARIO_DASHBOARD);
   const { TEXTOS_DEMO } = useTextos(DICIONARIO_DEMO);
@@ -96,7 +105,7 @@ export default function Chat() {
 
     try {
       const resposta = await pedirApi<RespostaChat>("/chat", { pergunta: texto, historico });
-      setMensagens((m) => [...m, { autor: "ia", texto: resposta.resposta }]);
+      setMensagens((m) => [...m, { autor: "ia", texto: resposta.resposta, propostas: resposta.propostas ?? [] }]);
     } catch (e) {
       if (e instanceof SessaoExpirada) {
         setErro(TEXTOS_GERAIS.sessaoExpirou);
@@ -134,7 +143,7 @@ export default function Chat() {
           </p>
         )}
         {mensagens.map((m, i) => (
-          <div key={i} className={m.autor === "tu" ? "flex justify-end" : "flex justify-start"}>
+          <div key={i} className={m.autor === "tu" ? "flex justify-end" : "flex flex-col items-start gap-2"}>
             <p
               className={
                 m.autor === "tu"
@@ -144,6 +153,10 @@ export default function Chat() {
             >
               {m.autor === "ia" ? comNegrito(m.texto) : m.texto}
             </p>
+            {/* Cada proposta só é gravada se a pessoa carregar em Confirmar no cartão. */}
+            {m.propostas?.map((proposta, j) => (
+              <CartaoProposta key={j} proposta={proposta} onFeito={() => onDadosMudaram?.()} />
+            ))}
           </div>
         ))}
         {aPensar && <p className="text-sm text-texto-suave">{TEXTOS_CHAT.aPensar}</p>}

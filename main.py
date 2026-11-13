@@ -8,6 +8,7 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from postgrest.exceptions import APIError
 from supabase import AuthApiError, AuthError
 
 from auth import (
@@ -36,7 +37,7 @@ from demo import (
     registar_entrada_demo,
     registar_forma_do_ip,
 )
-from ferramentas import executar_ferramenta, ferramentas_para
+from ferramentas import PropostasDoPedido, executar_ferramenta, ferramentas_para
 from dados_demo import MERCADOS_COMPRAS_DEMO, ORCAMENTO_COMPRAS_DEMO, achados_compras_demo
 from ia import ErroIA, categorizar, conversar, fazer_compras, ler_extrato_pdf, ler_talao, planear_poupanca, resumir_ano, resumir_mes, sugerir_orcamento
 from importar_csv import (
@@ -63,6 +64,7 @@ from lista_espera import inscrever
 from lista_compras import MERCADOS, calcular_plano, limpar_itens
 from mensagens import Local, msg
 from limites import (
+    COLUNA_NAO_EXISTE,
     MAX_PAGINAS_PDF,
     abrir_cache_do_pedido,
     aviso_resumo_sem_pedidos,
@@ -101,7 +103,6 @@ from models import (
     EstadoListaCompras,
     EstadoPlano,
     Categoria,
-    CategoriaAtualizar,
     Compra,
     ConfirmacaoApagarConta,
     Credenciais,
@@ -128,6 +129,7 @@ from models import (
     ProdutoResumo,
     Recorrente,
     RelatorioAnual,
+    TransacaoAtualizar,
     RespostaChat,
     RespostasBoasVindas,
     ResumoAnualIA,
@@ -547,28 +549,56 @@ def criar_transacao(nova: NovaMovimentacao, user_id: str = Depends(obter_utiliza
 
     # mode="json" converte a date em texto ("2026-09-20"), que é o que o Supabase aceita.
     # O dono vem sempre do token, nunca do corpo do pedido; a moeda é sempre a principal da conta.
-    dados = nova.model_dump(mode="json") | {"categoria": categoria, "user_id": user_id} | campos_de_moeda(user_id)
-    resposta = supabase.table("transacoes").insert(dados).execute()
+    # Sem nota, a chave nem vai: assim o insert funciona também antes da sql/025.
+    dados = (
+        nova.model_dump(mode="json", exclude={"nota"} if nova.nota is None else set())
+        | {"categoria": categoria, "user_id": user_id}
+        | campos_de_moeda(user_id)
+    )
+    resposta = inserir_movimentacao(dados)
     # As movimentações mudaram: os pagamentos que se repetem voltam a ser calculados.
     esquecer_recorrentes(user_id)
     return resposta.data[0]
 
 
-# O utilizador corrige a categoria escolhida pela IA (ou preenche uma que ficou vazia).
+def inserir_movimentacao(dados: dict):
+    """Grava a movimentação. Antes da sql/025 (sem a coluna nota), grava-a sem a nota e deixa um aviso nos logs:
+    perder a nota é melhor do que perder a movimentação que a pessoa escreveu."""
+    try:
+        return supabase.table("transacoes").insert(dados).execute()
+    except APIError as erro:
+        if "nota" not in dados or erro.code not in COLUNA_NAO_EXISTE:
+            raise
+    print("AVISO: coluna transacoes.nota não encontrada (sql/025); movimentação gravada sem a nota.")
+    return supabase.table("transacoes").insert({chave: valor for chave, valor in dados.items() if chave != "nota"}).execute()
+
+
+# O utilizador corrige a categoria escolhida pela IA (ou preenche uma que ficou vazia) e/ou escreve,
+# muda ou apaga a nota pessoal (sql/025). A descrição do banco nunca muda (entra no hash_importacao).
+# Na demo: 423 (fora de PERMISSOES_DEMO).
 @app.patch("/transacoes/{transacao_id}")
-def corrigir_categoria(
-    transacao_id: IdTransacao, alteracao: CategoriaAtualizar, user_id: str = Depends(obter_utilizador_atual)
+def atualizar_transacao(
+    transacao_id: IdTransacao, alteracao: TransacaoAtualizar, user_id: str = Depends(obter_utilizador_atual)
 ) -> Transacao:
-    resposta = (
-        supabase.table("transacoes")
-        .update({"categoria": alteracao.categoria})
-        .eq("id", transacao_id)
-        .eq("user_id", user_id)
-        .execute()
-    )
+    alteracoes = alteracao.alteracoes()
+    try:
+        resposta = (
+            supabase.table("transacoes")
+            .update(alteracoes)
+            .eq("id", transacao_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except APIError as erro:
+        # Antes da sql/025 a coluna nota não existe: não se grava nada (nem a categoria que viesse junto).
+        if "nota" not in alteracoes or erro.code not in COLUNA_NAO_EXISTE:
+            raise
+        print("AVISO: coluna transacoes.nota não encontrada (sql/025); a nota não foi guardada.")
+        raise erro_no_pais(user_id, 503, "notas_indisponiveis")
     if not resposta.data:
         raise erro_no_pais(user_id, 404, "transacao_nao_encontrada")
-    esquecer_recorrentes(user_id)  # a categoria aparece nos pagamentos que se repetem
+    if "categoria" in alteracoes:
+        esquecer_recorrentes(user_id)  # a categoria aparece nos pagamentos que se repetem
     return resposta.data[0]
 
 
@@ -789,15 +819,19 @@ def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -
     # A língua (país onde vive) e a moeda: da mesma assinatura já lida no pedido.
     local = local_do_utilizador(user_id)
 
+    # As propostas da IA (criar, alterar, apagar) ficam só nesta lista: a IA nunca grava, quem grava é a pessoa
+    # ao confirmar no cartão. Na demo não há propostas (o chat é só de leitura e poupa tokens).
+    propostas = None if e_conta_demo(user_id) else PropostasDoPedido(pais=local.pais)
+
     # Closure: uma função que "lembra" o user_id, o plano e o dia deste pedido. A IA só lhe passa o nome e os argumentos.
     def executar(nome: str, argumentos: dict) -> str:
-        return executar_ferramenta(nome, argumentos, user_id, plano, hoje)
+        return executar_ferramenta(nome, argumentos, user_id, plano, hoje, propostas)
 
     try:
         # O histórico vem do browser: o conversar() corta-o para a memória do plano (0 no Free).
         resposta = conversar(
             pedido.pergunta,
-            ferramentas_para(local),
+            ferramentas_para(local, com_propostas=propostas is not None),
             executar,
             user_id=user_id,
             config=config,
@@ -808,7 +842,7 @@ def chat(pedido: PerguntaChat, user_id: str = Depends(obter_utilizador_atual)) -
     except ErroIA as erro:
         print(erro)
         raise HTTPException(status_code=503, detail=msg("chat_falhou", local.pais))
-    return RespostaChat(resposta=resposta)
+    return RespostaChat(resposta=resposta, propostas=propostas.lista if propostas else [])
 
 
 # Resumo do mês escrito pela IA, com alertas. Exemplo: /resumo?mes=2026-10

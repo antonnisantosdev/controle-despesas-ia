@@ -430,7 +430,8 @@ def test_as_ferramentas_recebem_o_user_id_do_token_e_o_plano(cliente, conversa_f
     cliente.post("/chat", json={"pergunta": "?"})
     conversa_falsa[0]["executar"]("gastos_por_categoria", {"mes": "2026-11"})
 
-    assert recebidos == [("gastos_por_categoria", {"mes": "2026-11"}, "utilizador-teste", "completo", hoje)]
+    # O 6.º argumento é a lista de propostas do pedido (test_chat_propostas.py).
+    assert [args[:5] for args in recebidos] == [("gastos_por_categoria", {"mes": "2026-11"}, "utilizador-teste", "completo", hoje)]
     assert conversa_falsa[0]["hoje"] == hoje
 
 

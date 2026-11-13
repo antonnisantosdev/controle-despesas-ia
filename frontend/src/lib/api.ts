@@ -71,7 +71,36 @@ export function eSessaoDemo(): boolean {
 // Formatos das respostas do dashboard (os mesmos modelos Pydantic do backend, em TypeScript).
 export type ResumoMensal = { mes: string; receitas: number; despesas: number };
 export type GastoCategoria = { categoria: string; total: number };
-export type RespostaChat = { resposta: string };
+// Propostas do chat (models.PropostaChat): a IA propõe e NUNCA grava; quem grava é a pessoa, ao confirmar no cartão,
+// com as rotas de sempre (POST, PATCH e DELETE /transacoes). Os dados de "movimento" são lidos da base de dados pela API.
+export type MovimentoNaProposta = {
+  id: number;
+  data: string;
+  descricao: string;
+  valor: number;
+  categoria: string | null;
+  metodo_pagamento?: string | null;
+  nota?: string | null;
+};
+// Os campos já validados pela API (com categoria: confirmar não chama a IA).
+export type NovaMovimentacaoProposta = {
+  data: string;
+  descricao: string;
+  valor: number;
+  metodo_pagamento: string;
+  categoria: string | null;
+  nota?: string | null;
+};
+// categoria null: não muda. muda_nota: a nota muda (nota null = apagar a nota).
+export type AlteracaoProposta = { categoria: string | null; muda_nota: boolean; nota: string | null };
+export type PropostaChat = {
+  tipo: "criar" | "alterar" | "apagar";
+  movimento?: MovimentoNaProposta | null;
+  nova?: NovaMovimentacaoProposta | null;
+  alteracao?: AlteracaoProposta | null;
+};
+// propostas: opcional (uma API antiga não a envia; a demo devolve sempre a lista vazia).
+export type RespostaChat = { resposta: string; propostas?: PropostaChat[] };
 // Uma mensagem anterior do chat, enviada em POST /chat (memória só da sessão; a API corta-a para o plano).
 export type MensagemHistorico = { papel: "utilizador" | "ia"; texto: string };
 // Um pagamento que se repete todos os meses (GET /recorrentes, sem IA). ultimo_pagamento em ISO.
@@ -91,6 +120,8 @@ export type Transacao = {
   valor: number;
   categoria: string | null;
   metodo_pagamento: string | null;
+  // Nota pessoal (sql/025), escrita pela pessoa; a descrição do banco nunca muda. Opcional: uma API antiga não a envia.
+  nota?: string | null;
 };
 export type LinhaOrcamento = { categoria: string; limite: number | null; gasto: number };
 // Alertas de orçamento do mês atual de Lisboa (GET /orcamentos/alertas, sem IA).
@@ -216,7 +247,14 @@ export type ComparacaoAno = {
   totais: TotaisAno;
   categorias: CategoriaComparada[];
 };
-export type SaidaRelatorio = { data: string; descricao: string; valor: number; categoria: string | null; etiqueta: string };
+export type SaidaRelatorio = {
+  data: string;
+  descricao: string;
+  valor: number;
+  categoria: string | null;
+  etiqueta: string;
+  nota?: string | null; // nota pessoal (sql/025)
+};
 export type RecorrenteAno = {
   descricao: string;
   categoria: string | null;

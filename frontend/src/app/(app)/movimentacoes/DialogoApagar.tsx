@@ -13,6 +13,8 @@ type Props = {
   onApagada: (mensagem: string) => void; // apagou (ou já não existia): a página volta a pedir a lista
   onFechar: () => void; // o diálogo fechou (Cancelar, Esc ou depois de apagar)
   onSessaoExpirada: (e: unknown) => void;
+  // Opcional (cartões do chat): 404, a movimentação já não existe. Sem ele, conta como apagada (onApagada).
+  onNaoEncontrada?: () => void;
 };
 
 // Se a movimentação veio de um talão: "a-verificar" enquanto se pede GET /compras,
@@ -27,7 +29,7 @@ function dataCurta(data: string) {
 
 // Confirmação antes de DELETE /transacoes/{id}. <dialog> nativo com showModal(): prende o foco lá dentro,
 // fecha com Esc e devolve o foco ao botão que o abriu.
-export default function DialogoApagar({ transacao, onApagada, onFechar, onSessaoExpirada }: Props) {
+export default function DialogoApagar({ transacao, onApagada, onFechar, onSessaoExpirada, onNaoEncontrada }: Props) {
   const { TEXTOS_APAGAR_MOVIMENTO } = useTextos(DICIONARIO_PLANOS);
   const f = useFormatos();
   const dialogo = useRef<HTMLDialogElement>(null);
@@ -70,7 +72,8 @@ export default function DialogoApagar({ transacao, onApagada, onFechar, onSessao
       } else if (eBloqueadoNaDemo(e)) {
         fechar(); // 423 da demo: a faixa já explica
       } else if (e instanceof ErroApi && e.status === 404) {
-        onApagada(TEXTOS_APAGAR_MOVIMENTO.naoEncontrada);
+        if (onNaoEncontrada) onNaoEncontrada();
+        else onApagada(TEXTOS_APAGAR_MOVIMENTO.naoEncontrada);
         fechar();
       } else {
         setErro(TEXTOS_APAGAR_MOVIMENTO.erro);

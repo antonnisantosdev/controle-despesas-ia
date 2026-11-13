@@ -30,6 +30,20 @@ const PT = {
     colunaAcoes: "Ações", // só para leitores de ecrã
     rotuloCategoria: "Categoria de {descricao}",
     semCategoria: "sem categoria",
+
+    // Nota pessoal de cada movimentação (CampoNota, PATCH /transacoes/{id}). A descrição do banco não muda.
+    prefixoNota: "Nota:", // TEXTO NOVO (só para leitores de ecrã, antes da nota)
+    adicionarNota: "Adicionar nota", // TEXTO NOVO
+    editarNota: "Editar nota", // TEXTO NOVO
+    rotuloAdicionarNota: "Adicionar nota a {descricao}", // TEXTO NOVO
+    rotuloEditarNota: "Editar a nota de {descricao}", // TEXTO NOVO
+    rotuloCampoNota: "Nota de {descricao}", // TEXTO NOVO
+    contadorNota: "{n} de {maximo} caracteres", // TEXTO NOVO
+    ajudaNota: "Para apagar a nota, deixa o campo vazio e carrega em Guardar.",
+    guardarNota: "Guardar", // TEXTO NOVO
+    aGuardarNota: "A guardar...", // TEXTO NOVO
+    cancelarNota: "Cancelar", // TEXTO NOVO
+    erroNota: "Não foi possível guardar a nota. Tenta outra vez.", // TEXTO NOVO
   } as const,
 
   // Botão "Importar extrato" (BotaoImportar, POST /transacoes/importar).
@@ -60,6 +74,9 @@ const PT = {
     guardar: "Guardar",
     aGuardar: "A guardar...",
     aCategorizar: "A IA está a categorizar...",
+    nota: "Nota (opcional)", // TEXTO NOVO
+    marcadorNota: "Ex.: jantar de anos da Rita", // TEXTO NOVO
+    contadorNota: "{n} de {maximo} caracteres", // TEXTO NOVO
   } as const,
 };
 
@@ -90,6 +107,20 @@ const BR: TextosMovimentacoes = {
     colunaAcoes: "Ações", // só para leitores de ecrã
     rotuloCategoria: "Categoria de {descricao}",
     semCategoria: "sem categoria",
+
+    // Nota pessoal de cada movimentação (CampoNota, PATCH /transacoes/{id}).
+    prefixoNota: "Nota:", // TEXTO NOVO
+    adicionarNota: "Adicionar nota", // TEXTO NOVO
+    editarNota: "Editar nota", // TEXTO NOVO
+    rotuloAdicionarNota: "Adicionar nota a {descricao}", // TEXTO NOVO
+    rotuloEditarNota: "Editar a nota de {descricao}", // TEXTO NOVO
+    rotuloCampoNota: "Nota de {descricao}", // TEXTO NOVO
+    contadorNota: "{n} de {maximo} caracteres", // TEXTO NOVO
+    ajudaNota: "Para apagar a nota, deixe o campo vazio e clique em Salvar.",
+    guardarNota: "Salvar", // TEXTO NOVO
+    aGuardarNota: "Salvando...", // TEXTO NOVO
+    cancelarNota: "Cancelar", // TEXTO NOVO
+    erroNota: "Não foi possível salvar a nota. Tente de novo.", // TEXTO NOVO
   },
 
   // Botão "Importar extrato" (BotaoImportar, POST /transacoes/importar).
@@ -120,6 +151,9 @@ const BR: TextosMovimentacoes = {
     guardar: "Salvar",
     aGuardar: "Salvando...",
     aCategorizar: "A IA está categorizando...",
+    nota: "Nota (opcional)", // TEXTO NOVO
+    marcadorNota: "Ex.: jantar de aniversário da Rita", // TEXTO NOVO
+    contadorNota: "{n} de {maximo} caracteres", // TEXTO NOVO
   },
 };
 

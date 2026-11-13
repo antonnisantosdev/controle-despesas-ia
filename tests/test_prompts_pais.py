@@ -28,7 +28,7 @@ FREE = CONFIG_IA_POR_PLANO["free"]
 # ("app portuguesa" passou a "app"). Se mudares um prompt PT de propósito, atualiza aqui o hash.
 HASHES_PT = {
     "INSTRUCOES": "0e69e6d89d2ed66259ea1f512f800ca3fb79efbf1670f5526cdf8532bc1ba5c0",
-    "INSTRUCOES_CHAT": "bcd3c7c52154da0b0216f8572c89b01ed4ed95fb5330ed8f9c6f935036084986",
+    "INSTRUCOES_CHAT": "879f0a938050788ed8cf5636f5e75c2e1b80302ee1a89fae7092fc2845c31896",  # propostas do chat (confirmar no cartão)
     "INSTRUCOES_RESUMO": "02d786b650644d80b8f09df75cbd109e54c219e513eb8740a7aa0514586dccb7",
     "INSTRUCOES_ORCAMENTO": "e0d908c5d69b5937caebad66600643c4c9718a984f7f92de9dfaea8b6fa8bb84",
     "INSTRUCOES_TALAO": "e41f3d8866845aee6be82d8ecb8d8990dc3104251fe0b0a0ae509bc88997f90a",

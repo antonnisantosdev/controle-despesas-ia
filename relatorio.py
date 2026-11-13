@@ -176,6 +176,7 @@ def _maiores_saidas(linhas: list[dict], pais: str) -> list[SaidaRelatorio]:
             valor=round(-linha["valor"], 2),
             categoria=linha.get("categoria"),
             etiqueta=etiqueta(linha.get("categoria"), pais),
+            nota=linha.get("nota"),  # None antes da sql/025 ou sem nota
         )
         for linha in saidas[:MAX_MAIORES_SAIDAS]
     ]
@@ -277,7 +278,7 @@ def relatorio_do_ano(user_id: str, ano: int, hoje: date, pais: str = "PT") -> Re
 
 
 def dados_para_ia(relatorio: RelatorioAnual) -> dict:
-    """Só números já calculados e nomes de categorias: nunca descrições de movimentos nem nomes de objetivos."""
+    """Só números já calculados e nomes de categorias: nunca descrições nem notas de movimentos, nem nomes de objetivos."""
     comparacao = relatorio.comparacao
     return {
         "ano": relatorio.ano,
@@ -420,9 +421,11 @@ def relatorio_em_csv(relatorio: RelatorioAnual, pais: str = "PT", moeda: str = "
         escritor.writerow([])
 
     linha(f"{MAX_MAIORES_SAIDAS} maiores saídas")
-    linha("Data", "Descrição", f"Valor ({m})", "Categoria")
+    linha("Data", "Descrição", f"Valor ({m})", "Categoria", "Nota")
     for saida_ in relatorio.maiores_saidas:
-        linha(saida_.data.isoformat(), _descricao_curta(saida_.descricao), saida_.valor, saida_.etiqueta)
+        # A nota pessoal vai inteira (máx. 300), numa só linha e protegida contra fórmulas como os outros textos.
+        nota = " ".join((saida_.nota or "").split())
+        linha(saida_.data.isoformat(), _descricao_curta(saida_.descricao), saida_.valor, saida_.etiqueta, nota)
     escritor.writerow([])
 
     linha("Pagamentos que se repetem")

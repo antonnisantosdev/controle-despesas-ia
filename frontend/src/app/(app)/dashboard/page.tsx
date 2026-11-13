@@ -50,6 +50,8 @@ export default function PaginaDashboard() {
   const [erro, setErro] = useState(false);
   // Conta nova, ainda sem nenhuma movimentação: mostra como começar em vez de ficar "a analisar" para sempre.
   const [semDados, setSemDados] = useState(false);
+  // Sobe quando o chat grava uma proposta confirmada: os gráficos e os cartões voltam a ser pedidos.
+  const [versao, setVersao] = useState(0);
   const totais = calcularTotais(mensal, mes);
 
   // 1. Ao abrir a página: sem token vai para o login; com token carrega a evolução mensal
@@ -63,10 +65,13 @@ export default function PaginaDashboard() {
       .then((dados) => {
         setMensal(dados);
         setSemDados(dados.length === 0);
-        if (dados.length > 0) setMes(dados[dados.length - 1].mes);
+        // Ao recarregar fica o mês escolhido, se ainda existir; senão (ou na 1.ª vez), o mais recente.
+        setMes((atual) =>
+          atual && dados.some((d) => d.mes === atual) ? atual : dados.length > 0 ? dados[dados.length - 1].mes : "",
+        );
       })
       .catch((e) => tratarErro(e, router, setErro));
-  }, [router]);
+  }, [router, versao]);
 
   // 2. Sempre que o mês escolhido muda: carrega os gastos por categoria desse mês.
   useEffect(() => {
@@ -74,7 +79,7 @@ export default function PaginaDashboard() {
     pedirApi<GastoCategoria[]>(`/dashboard/categorias?mes=${mes}`)
       .then(setCategorias)
       .catch((e) => tratarErro(e, router, setErro));
-  }, [mes, router]);
+  }, [mes, router, versao]);
 
   return (
     <main className="p-4 sm:p-8">
@@ -125,10 +130,11 @@ export default function PaginaDashboard() {
         )}
 
         {/* Só aparece quando o mês escolhido é o atual e há categorias com 90% ou mais do orçamento gasto. */}
-        {mes && <AlertasOrcamento mes={mes} />}
+        {/* key={versao}: voltam a pedir os dados (sem IA) depois de uma proposta confirmada no chat. */}
+        {mes && <AlertasOrcamento key={`alertas-${versao}`} mes={mes} />}
 
         {/* Cartão pequeno, só quando há pagamentos que se repetem (sem IA). A lista completa está no Planeamento. */}
-        {mes && <PagamentosRecorrentes compacto />}
+        {mes && <PagamentosRecorrentes key={`recorrentes-${versao}`} compacto />}
 
         <div className="grid gap-6 lg:grid-cols-3">
           <section className="rounded-xl border border-borda bg-cartao p-4 sm:p-6 lg:col-span-2">
@@ -148,7 +154,7 @@ export default function PaginaDashboard() {
             </p>
             <GraficoCategorias dados={categorias} />
           </section>
-          <Chat />
+          <Chat onDadosMudaram={() => setVersao((v) => v + 1)} />
         </div>
       </div>
     </main>

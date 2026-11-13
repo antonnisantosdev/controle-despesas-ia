@@ -3,14 +3,24 @@
 import re
 import unicodedata
 
+from postgrest.exceptions import APIError
+
 from dashboard import gastos_por_categoria, limites_do_mes
 from database import ler_todas, supabase
+from limites import COLUNA_NAO_EXISTE
 from models import GastoCategoria
 
 # Quantos movimentos a procura devolve por extenso (os de maior valor); dos outros só vai a contagem.
 MAX_AMOSTRA_MOVIMENTOS = 10
 # As descrições vão cortadas para a IA: chegam para reconhecer o movimento e gastam menos tokens.
 MAX_CARACTERES_DESCRICAO = 60
+# As notas pessoais (sql/025) também vão cortadas para a IA.
+MAX_CARACTERES_NOTA = 100
+
+# O que movimentos_entre lê; a nota só existe depois da sql/025. O id vai na amostra do chat:
+# é com ele que a IA aponta para uma movimentação nas propostas (o servidor volta a lê-la pelo id e pelo dono).
+COLUNAS_MOVIMENTOS = "id, data, descricao, valor, categoria"
+COLUNAS_MOVIMENTOS_COM_NOTA = COLUNAS_MOVIMENTOS + ", nota"
 
 
 def _transacoes_entre(
@@ -32,6 +42,23 @@ def _transacoes_entre(
     )
 
 
+def contar_transacoes(user_id: str) -> int:
+    """Quantas movimentações o utilizador tem. head=True: o Supabase devolve só o número, sem linhas."""
+    resposta = supabase.table("transacoes").select("id", count="exact", head=True).eq("user_id", user_id).execute()
+    return resposta.count or 0
+
+
+def transacao_do_utilizador(user_id: str, transacao_id: int) -> dict | None:
+    """A movimentação com este id, só se for deste utilizador (senão None, como se não existisse).
+
+    select("*"): antes da sql/025 a linha vem sem a chave nota, e quem chama sabe que as notas não existem.
+    """
+    resposta = (
+        supabase.table("transacoes").select("*").eq("id", transacao_id).eq("user_id", user_id).limit(1).execute()
+    )
+    return resposta.data[0] if resposta.data else None
+
+
 def gastos_do_mes(user_id: str, mes: str) -> list[GastoCategoria]:
     """Quanto o utilizador gastou em cada categoria num mês, do maior gasto para o menor."""
     return gastos_por_categoria(_transacoes_entre(user_id, mes, mes))
@@ -49,18 +76,19 @@ def gastos_de_varios_meses(user_id: str, meses: list[str]) -> dict[str, list[Gas
 def movimentos_entre(
     user_id: str, primeiro_mes: str, ultimo_mes: str, categoria: str | None = None, tipo: str = "todos"
 ) -> list[dict]:
-    """A data, a descrição, o valor e a categoria das transações do primeiro ao último mês (os dois incluídos).
+    """A data, a descrição, o valor, a categoria e a nota das transações do primeiro ao último mês (os dois incluídos).
 
     A categoria (já validada contra a lista fixa) e o tipo filtram logo na base de dados, para ler menos linhas.
     Os termos de pesquisa nunca vão para a consulta: comparam-se em Python (resumir_movimentos).
+    Antes da sql/025 a coluna nota não existe: lê-se outra vez sem ela (as linhas ficam sem nota).
     """
     inicio, _ = limites_do_mes(primeiro_mes)
     _, fim = limites_do_mes(ultimo_mes)
 
-    def consulta():
+    def consulta(colunas: str):
         q = (
             supabase.table("transacoes")
-            .select("data, descricao, valor, categoria")
+            .select(colunas)
             .eq("user_id", user_id)
             .gte("data", inicio.isoformat())
             .lt("data", fim.isoformat())
@@ -73,7 +101,13 @@ def movimentos_entre(
             q = q.gt("valor", 0)
         return q.order("id")
 
-    return ler_todas(consulta)
+    try:
+        return ler_todas(lambda: consulta(COLUNAS_MOVIMENTOS_COM_NOTA))
+    except APIError as erro:
+        if erro.code not in COLUNA_NAO_EXISTE:
+            raise
+    print("AVISO: coluna transacoes.nota não encontrada (sql/025); movimentos lidos sem a nota.")
+    return ler_todas(lambda: consulta(COLUNAS_MOVIMENTOS))
 
 
 def normalizar(texto: str) -> str:
@@ -83,7 +117,8 @@ def normalizar(texto: str) -> str:
 
 
 def _coincide(linha: dict, termos: list[str], categoria: str | None, tipo: str) -> bool:
-    """Se a transação entra na procura: o tipo, a categoria (se pedida) e pelo menos um dos termos (se houver)."""
+    """Se a transação entra na procura: o tipo, a categoria (se pedida) e pelo menos um dos termos (se houver),
+    na descrição ou na nota pessoal."""
     valor = linha["valor"]
     if (tipo == "saidas" and valor >= 0) or (tipo == "entradas" and valor <= 0):
         return False
@@ -94,14 +129,29 @@ def _coincide(linha: dict, termos: list[str], categoria: str | None, tipo: str) 
     # Comparação de texto em Python (não ILIKE): % e _ são letras como as outras, não curingas.
     # Cada termo tem de começar uma palavra: "Rita" encontra "MB WAY RITA S", mas não "Margarita";
     # "combust" continua a encontrar "Combustível".
-    descricao = normalizar(linha.get("descricao") or "")
-    return any(re.search(r"(?<!\w)" + re.escape(normalizar(termo)), descricao) for termo in termos)
+    # A descrição e a nota juntas, separadas por uma mudança de linha (um termo não junta as duas).
+    texto = normalizar((linha.get("descricao") or "") + "\n" + (linha.get("nota") or ""))
+    return any(re.search(r"(?<!\w)" + re.escape(normalizar(termo)), texto) for termo in termos)
+
+
+def _texto_curto(texto: str | None, maximo: int) -> str:
+    # Espaços e mudanças de linha seguidos ficam um só espaço antes de cortar.
+    return " ".join((texto or "").split())[:maximo]
 
 
 def _na_amostra(linha: dict) -> dict:
-    # Espaços e mudanças de linha seguidos ficam um só espaço antes de cortar.
-    descricao = " ".join((linha.get("descricao") or "").split())[:MAX_CARACTERES_DESCRICAO]
-    return {"data": linha["data"], "descricao": descricao, "valor": linha["valor"], "categoria": linha.get("categoria")}
+    movimento = {
+        "id": linha.get("id"),
+        "data": linha["data"],
+        "descricao": _texto_curto(linha.get("descricao"), MAX_CARACTERES_DESCRICAO),
+        "valor": linha["valor"],
+        "categoria": linha.get("categoria"),
+    }
+    # A nota só vai quando existe: menos tokens nos movimentos sem nota.
+    nota = _texto_curto(linha.get("nota"), MAX_CARACTERES_NOTA)
+    if nota:
+        movimento["nota"] = nota
+    return movimento
 
 
 def resumir_movimentos(linhas: list[dict], termos: list[str], categoria: str | None, tipo: str) -> dict:

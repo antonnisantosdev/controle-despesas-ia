@@ -1,4 +1,5 @@
 import math
+import unicodedata
 from datetime import date, datetime
 from typing import Annotated, Literal
 
@@ -71,10 +72,42 @@ class TransacaoCriar(BaseModel):
     categoria: str | None = None
 
 
+# Nota pessoal de uma movimentação (sql/025), ex. "jantar de anos da Rita". A descrição do banco nunca muda
+# (entra no hash_importacao); a nota é à parte e opcional.
+MAX_CARACTERES_NOTA = 300
+
+
+def numa_linha(texto: str) -> str:
+    """O texto numa só linha: caracteres de controlo passam a espaço, espaços e mudanças de linha seguidos
+    ficam um só espaço, e saem os das pontas."""
+    # Cc (controlo) passa a espaço; Cf (invisíveis: U+202E que vira o texto ao contrário, larguras zero) sai.
+    sem_controlo = "".join(
+        " " if unicodedata.category(letra) == "Cc" else "" if unicodedata.category(letra) == "Cf" else letra
+        for letra in texto
+    )
+    return " ".join(sem_controlo.split())
+
+
+def limpar_nota(valor: str | None) -> str | None:
+    """A nota numa só linha: tira caracteres de controlo, junta espaços e mudanças de linha seguidos num só
+    espaço e tira os das pontas. Vazia passa a None (sem nota). Mais de MAX_CARACTERES_NOTA: erro (422)."""
+    if valor is None:
+        return None
+    texto = numa_linha(valor)
+    if len(texto) > MAX_CARACTERES_NOTA:
+        raise ValueError(f"a nota pode ter no máximo {MAX_CARACTERES_NOTA} caracteres")
+    return texto or None
+
+
+Nota = Annotated[str | None, AfterValidator(limpar_nota)]
+
+
 # Transação completa, tal como fica guardada: herda os campos acima e junta o id.
+# nota fica None antes da sql/025 (a coluna ainda não existe e o select("*") não a traz).
 class Transacao(TransacaoCriar):
     id: int
     metodo_pagamento: str | None = None
+    nota: str | None = None
 
 
 VALOR_MAXIMO_MOVIMENTACAO = VALOR_MAXIMO
@@ -83,11 +116,14 @@ VALOR_MAXIMO_MOVIMENTACAO = VALOR_MAXIMO
 # Movimentação criada à mão no ecrã. Mais rigorosa do que TransacaoCriar: o método é obrigatório,
 # a categoria (se vier) tem de ser uma das permitidas, e sem categoria quem escolhe é a IA.
 class NovaMovimentacao(BaseModel):
-    data: date
+    # Entre 2000 e 2099: um ano 0001 ou 9999 (escrito à mão ou proposto pela IA) é quase de certeza um erro.
+    data: Annotated[date, Field(ge=date(2000, 1, 1), le=date(2099, 12, 31))]
     descricao: str = Field(min_length=1, max_length=200)
     valor: float
     metodo_pagamento: MetodoPagamento
     categoria: Categoria | None = None
+    # Opcional; texto vazio ou só espaços fica sem nota.
+    nota: Nota = None
 
     # O Pydantic não tem uma regra pronta para "diferente de zero", por isso escreve-se à mão.
     # Teto de mil milhões: a coluna é NUMERIC(12, 2) e um valor maior dava erro 500 na base de dados (sem CORS).
@@ -142,9 +178,24 @@ class ResumoMensal(BaseModel):
     despesas: float
 
 
-# Corpo do PATCH: o utilizador só pode mudar a categoria, e só para uma das permitidas.
-class CategoriaAtualizar(BaseModel):
-    categoria: Categoria
+# Corpo do PATCH /transacoes/{id}: a categoria (só uma das permitidas) e/ou a nota. Pelo menos uma das duas.
+# A descrição, o valor e a data não mudam por aqui. {"nota": ""} (ou null) apaga a nota.
+class TransacaoAtualizar(BaseModel):
+    categoria: Categoria | None = None
+    nota: Nota = None
+
+    @model_validator(mode="after")
+    def pelo_menos_um_campo(self) -> "TransacaoAtualizar":
+        if not self.model_fields_set & {"categoria", "nota"}:
+            raise ValueError("indica a categoria e/ou a nota")
+        # Uma movimentação pode ficar sem nota, mas não volta a ficar sem categoria por aqui.
+        if "categoria" in self.model_fields_set and self.categoria is None:
+            raise ValueError("a categoria não pode ficar vazia")
+        return self
+
+    def alteracoes(self) -> dict:
+        """Só os campos que vieram no pedido, prontos para o update (a nota vazia vai como None = NULL)."""
+        return {campo: getattr(self, campo) for campo in ("categoria", "nota") if campo in self.model_fields_set}
 
 
 # Para apagar a conta, o corpo tem de trazer {"confirmacao": "APAGAR"} (evita apagar por engano).
@@ -322,8 +373,42 @@ class PerguntaChat(BaseModel):
         return historico
 
 
+# --- Propostas do chat: a IA propõe criar, alterar ou apagar uma movimentação; quem grava é a pessoa,
+# ao carregar "Confirmar" no cartão (com as rotas de sempre: POST, PATCH e DELETE /transacoes). ---
+
+
+# A movimentação como está na base de dados, lida pelo servidor (nunca o que a IA escreveu).
+class MovimentoNaProposta(BaseModel):
+    id: int
+    data: date
+    descricao: str
+    valor: float
+    categoria: str | None = None
+    metodo_pagamento: str | None = None
+    nota: str | None = None
+
+
+# O que muda numa proposta de alteração. categoria None: a categoria não muda.
+# muda_nota: se a nota muda; com muda_nota, nota None quer dizer apagar a nota.
+class AlteracaoProposta(BaseModel):
+    categoria: Categoria | None = None
+    muda_nota: bool = False
+    nota: str | None = None
+
+
+# Uma proposta. criar: nova (os campos já validados, com categoria, para confirmar sem chamar a IA).
+# alterar: movimento (da base de dados) e alteracao. apagar: só movimento (da base de dados).
+class PropostaChat(BaseModel):
+    tipo: Literal["criar", "alterar", "apagar"]
+    movimento: MovimentoNaProposta | None = None
+    nova: NovaMovimentacao | None = None
+    alteracao: AlteracaoProposta | None = None
+
+
+# propostas: vazia quando a IA não propôs nada (e sempre vazia na demo). Uma API antiga não a envia.
 class RespostaChat(BaseModel):
     resposta: str
+    propostas: list[PropostaChat] = Field(default_factory=list)
 
 
 # Um alerta do resumo mensal: "atencao" para coisas a corrigir, "info" para o resto.
@@ -774,6 +859,7 @@ class SaidaRelatorio(BaseModel):
     valor: float
     categoria: str | None
     etiqueta: str
+    nota: str | None = None  # a nota pessoal (sql/025), se houver
 
 
 class RecorrenteAno(BaseModel):

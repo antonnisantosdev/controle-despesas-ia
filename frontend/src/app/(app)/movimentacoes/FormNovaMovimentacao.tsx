@@ -9,6 +9,8 @@ import { comValorAtual, useOpcoes, useTextos } from "@/lib/textos";
 import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
 import { DICIONARIO_MOVIMENTACOES } from "@/lib/textosMovimentacoes";
 
+import { MAX_CARACTERES_NOTA } from "./CampoNota";
+
 // Data de hoje no formato do <input type="date"> (AAAA-MM-DD), na hora local.
 function hoje() {
   const agora = new Date();
@@ -35,6 +37,7 @@ export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
   const [data, setData] = useState(hoje());
   const [metodo, setMetodo] = useState("cartao_debito");
   const [categoria, setCategoria] = useState(""); // "" = a IA escolhe
+  const [nota, setNota] = useState(""); // opcional; vazia = sem nota
   const [aGuardar, setAGuardar] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -60,6 +63,7 @@ export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
         valor: tipo === "despesa" ? -numero : numero,
         metodo_pagamento: metodo,
         categoria: categoria || null,
+        nota: nota.trim() || null,
       });
       onCriada(criada);
     } catch (e) {
@@ -150,6 +154,21 @@ export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="block sm:col-span-2">
+          <span className="text-sm text-texto-suave">{TEXTOS_NOVA_MOVIMENTACAO.nota}</span>
+          <input
+            maxLength={MAX_CARACTERES_NOTA}
+            value={nota}
+            onChange={(e) => setNota(e.target.value)}
+            placeholder={TEXTOS_NOVA_MOVIMENTACAO.marcadorNota}
+            aria-describedby="nova-movimentacao-contador-nota"
+            className={ESTILO_CAMPO}
+          />
+          <span id="nova-movimentacao-contador-nota" className="mt-1 block text-xs tabular-nums text-texto-suave">
+            {preencher(TEXTOS_NOVA_MOVIMENTACAO.contadorNota, { n: nota.length, maximo: MAX_CARACTERES_NOTA })}
+          </span>
         </label>
       </div>
 

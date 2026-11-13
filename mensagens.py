@@ -156,6 +156,10 @@ MENSAGENS: dict[str, dict[str, str]] = {
         "PT": "Transação não encontrada",
         "BR": "Transação não encontrada",
     },
+    "notas_indisponiveis": {  # revisto pelo copywriter (2026-11-13)
+        "PT": "Ainda não é possível guardar notas. Nada foi alterado. Tenta mais tarde.",
+        "BR": "Ainda não é possível salvar notas. Nada foi alterado. Tente mais tarde.",
+    },
     "categorizacao_falhou": {  # BR: TEXTO NOVO
         "PT": "A categorização automática falhou. Tenta mais tarde.",
         "BR": "A categorização automática falhou. Tente mais tarde.",

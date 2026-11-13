@@ -65,6 +65,27 @@ const PT = {
     marcador: "Escreve uma pergunta...",
     enviar: "Enviar",
   } as const,
+
+  // Cartões das propostas do chat (CartaoProposta): a IA propõe, a pessoa confirma. {valor} e {data} já formatados.
+  // TEXTO NOVO (todo o bloco)
+  TEXTOS_PROPOSTAS: {
+    rotulo: "Proposta da IA",
+    criar: "Criar: \"{descricao}\" ({data}, {valor}) em {categoria}. Método: {metodo}.",
+    criarNota: "Com a nota \"{nota}\".",
+    mudarCategoria: "Mudar a categoria de \"{descricao}\" ({data}, {valor}) de {de} para {para}.",
+    semCategoria: "(sem categoria)",
+    mudarNota: "Mudar a nota de \"{descricao}\" ({data}, {valor}) para \"{nota}\".",
+    apagarNota: "Apagar a nota de \"{descricao}\" ({data}, {valor}).",
+    apagar: "Apagar: \"{descricao}\" ({data}, {valor}).",
+    aviso: "Proposto pela IA: confere os valores. Nada muda até carregares em Confirmar.",
+    confirmar: "Confirmar",
+    aGravar: "A guardar...",
+    cancelar: "Cancelar",
+    feito: "Feito.",
+    cancelado: "Cancelado.",
+    naoExiste: "Esta movimentação já não existe.",
+    erro: "Não foi possível fazer esta alteração. Tenta outra vez.",
+  } as const,
 };
 
 export type TextosDashboard = Traducao<typeof PT>;
@@ -129,6 +150,27 @@ const BR: TextosDashboard = {
     erro: "O chat falhou. Tente mais tarde.",
     marcador: "Escreva uma pergunta...",
     enviar: "Enviar",
+  },
+
+  // Cartões das propostas do chat (CartaoProposta): a IA propõe, a pessoa confirma.
+  // TEXTO NOVO (todo o bloco)
+  TEXTOS_PROPOSTAS: {
+    rotulo: "Proposta da IA",
+    criar: "Criar: \"{descricao}\" ({data}, {valor}) em {categoria}. Forma de pagamento: {metodo}.",
+    criarNota: "Com a nota \"{nota}\".",
+    mudarCategoria: "Mudar a categoria de \"{descricao}\" ({data}, {valor}) de {de} para {para}.",
+    semCategoria: "(sem categoria)",
+    mudarNota: "Mudar a nota de \"{descricao}\" ({data}, {valor}) para \"{nota}\".",
+    apagarNota: "Apagar a nota de \"{descricao}\" ({data}, {valor}).",
+    apagar: "Apagar: \"{descricao}\" ({data}, {valor}).",
+    aviso: "Proposto pela IA: confira os valores. Nada muda até você clicar em Confirmar.",
+    confirmar: "Confirmar",
+    aGravar: "Salvando...",
+    cancelar: "Cancelar",
+    feito: "Feito.",
+    cancelado: "Cancelado.",
+    naoExiste: "Esta movimentação não existe mais.",
+    erro: "Não foi possível fazer esta alteração. Tente de novo.",
   },
 };
 

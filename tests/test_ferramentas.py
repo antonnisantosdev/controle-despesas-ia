@@ -341,7 +341,7 @@ def test_movimentos_entre_le_so_as_transacoes_do_utilizador(monkeypatch):
 
     consultas.movimentos_entre("utilizador-teste", "2026-09", "2026-11")
 
-    assert ("select", "data, descricao, valor, categoria") in filtros
+    assert ("select", "id, data, descricao, valor, categoria, nota") in filtros
     assert ("eq", "user_id", "utilizador-teste") in filtros
     assert ("gte", "data", "2026-09-01") in filtros
     assert ("lt", "data", "2026-12-01") in filtros

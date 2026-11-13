@@ -83,6 +83,12 @@ MIN_TOKENS_POR_VOLTA = 256
 # e pode pedi-los na volta seguinte. Evita que uma resposta peça dezenas de consultas à base de dados.
 MAX_FERRAMENTAS_POR_VOLTA = 4
 
+# Propostas do chat (criar, alterar ou apagar movimentações). A IA nunca grava: só propõe, e cada proposta
+# aparece num cartão que a pessoa tem de confirmar. Tetos por resposta: nada de alterações em massa,
+# e apagar é sempre uma movimentação de cada vez. Iguais em todos os planos.
+MAX_PROPOSTAS_POR_RESPOSTA = 5
+MAX_APAGAR_POR_RESPOSTA = 1
+
 # Tamanho do histórico do chat (vem do browser e pode ser falsificado). Cada pergunta antiga tem o
 # tamanho máximo de uma pergunta; cada resposta antiga da IA, até 2000 caracteres; e o histórico inteiro
 # até 4000, para não encher o prompt (e o custo), mesmo nos planos com mais memória.

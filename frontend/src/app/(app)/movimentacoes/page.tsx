@@ -25,6 +25,7 @@ import { useSessaoDemo } from "@/lib/useSessaoDemo";
 
 import BotaoCategorizar from "./BotaoCategorizar";
 import BotaoImportar from "./BotaoImportar";
+import CampoNota from "./CampoNota";
 import DialogoApagar from "./DialogoApagar";
 import FormNovaMovimentacao from "./FormNovaMovimentacao";
 
@@ -182,6 +183,22 @@ export default function PaginaMovimentacoes() {
         transacoes: atual.transacoes.map((t) => (t.id === id ? { ...t, categoria } : t)),
       },
     );
+  }
+
+  // A nota foi guardada (PATCH): troca a movimentação na lista pela que a API devolveu.
+  function trocarTransacao(atualizada: Transacao) {
+    setLista(
+      (atual) =>
+        atual && {
+          ...atual,
+          transacoes: atual.transacoes.map((t) => (t.id === atualizada.id ? atualizada : t)),
+        },
+    );
+  }
+
+  // Nota pessoal por baixo da descrição (tabela e cartões).
+  function campoNota(t: Transacao) {
+    return <CampoNota transacao={t} desligado={demo} onGuardada={trocarTransacao} onSessaoExpirada={tratarErro} />;
   }
 
   // O utilizador escolheu outra categoria na tabela.
@@ -398,7 +415,10 @@ export default function PaginaMovimentacoes() {
               {transacoes.map((t) => (
                 <li key={t.id} className="space-y-2 border-b border-borda p-4 last:border-0">
                   <div className="flex items-start justify-between gap-3">
-                    <p className="min-w-0 break-words text-sm text-texto">{t.descricao}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-sm text-texto">{t.descricao}</p>
+                      {campoNota(t)}
+                    </div>
                     <p
                       className={`shrink-0 whitespace-nowrap text-sm font-medium tabular-nums ${
                         t.valor > 0 ? "text-destaque" : "text-texto"
@@ -442,7 +462,10 @@ export default function PaginaMovimentacoes() {
                   {transacoes.map((t) => (
                     <tr key={t.id} className="border-b border-borda last:border-0 hover:bg-fundo">
                       <td className="whitespace-nowrap px-4 py-3 tabular-nums text-texto-suave">{diaMes(t.data)}</td>
-                      <td className="px-4 py-3 text-texto">{t.descricao}</td>
+                      <td className="px-4 py-3 text-texto">
+                        <p className="break-words">{t.descricao}</p>
+                        {campoNota(t)}
+                      </td>
                       <td className="px-4 py-3">{seletorCategoria(t)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-texto-suave">
                         {t.metodo_pagamento ? rotuloMetodo(t.metodo_pagamento) : "—"}
