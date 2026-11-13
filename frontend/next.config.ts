@@ -39,8 +39,10 @@ const diretivasCsp = [
 ].join("; ");
 
 const cabecalhosDeSeguranca = [
-  // Por agora só avisa (na consola do browser). Para bloquear, trocar o nome para Content-Security-Policy.
-  { key: "Content-Security-Policy-Report-Only", value: diretivasCsp },
+  // A bloquear desde 2026-11-13 (esteve só a avisar desde 2026-11-10, sem avisos nas páginas públicas nem na app).
+  // Se algo deixar de carregar, a consola do browser diz qual diretiva bloqueou.
+  // Nota: nos deploys de pré-visualização da Vercel, a barra de comentários (vercel.live) fica bloqueada.
+  { key: "Content-Security-Policy", value: diretivasCsp },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   // Os talões usam <input type="file" capture>, que não precisa desta permissão (não há getUserMedia).
