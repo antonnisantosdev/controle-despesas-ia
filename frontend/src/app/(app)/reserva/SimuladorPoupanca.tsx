@@ -23,7 +23,7 @@ type Props = { onSessaoExpirada: (e: unknown) => void };
 
 // Quanto junta quem poupa um valor fixo por mês. As contas são feitas no backend (simulador.py).
 export default function SimuladorPoupanca({ onSessaoExpirada }: Props) {
-  const { TEXTOS_SIMULADOR } = useTextos(DICIONARIO_RESERVA);
+  const { TEXTOS_SIMULADOR, TEXTOS_NOVO_OBJETIVO } = useTextos(DICIONARIO_RESERVA);
   // Taxas de exemplo para comparar cenários. Não são produtos nem recomendações.
   const TAXAS = TEXTOS_SIMULADOR.taxas;
   const f = useFormatos();
@@ -38,7 +38,15 @@ export default function SimuladorPoupanca({ onSessaoExpirada }: Props) {
   // Valor vazio ou inválido: não se mostra o resultado (nem o erro) de um valor que já não é o do campo.
   const valido = numero > 0;
   const pedidoAtual = `${numero}|${anos}|${taxa}`;
-  const erroAtual = valido && erro?.de === pedidoAtual ? erro.texto : "";
+  // Campo com algo que não é um valor positivo (ex. -20): diz-se porquê, em vez de só esconder o resultado.
+  // Campo vazio: nada (a pessoa ainda está a escrever).
+  const erroAtual = !valido
+    ? mensal.trim()
+      ? TEXTOS_NOVO_OBJETIVO.erroValor
+      : ""
+    : erro?.de === pedidoAtual
+      ? erro.texto
+      : "";
 
   useEffect(() => {
     if (!valido) return;

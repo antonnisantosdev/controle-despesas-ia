@@ -34,6 +34,9 @@ export function useTextos<T>(dicionario: Dicionario<T>): T {
 export type Opcoes = {
   categorias: readonly string[]; // para os <select>
   rotuloCategoria: (chave: string) => string; // chave desconhecida (ex. "sem categoria"): mostra a chave
+  // O mesmo rótulo com maiúscula só na 1.ª letra ("Telefone e internet"), para títulos e listas.
+  // Substitui o CSS capitalize, que punha maiúscula em todas as palavras ("Telefone E Internet").
+  nomeCategoria: (chave: string) => string;
   metodos: readonly string[]; // códigos para os <select>
   rotuloMetodo: (codigo: string) => string; // código desconhecido: mostra o código
 };
@@ -41,10 +44,15 @@ export type Opcoes = {
 export function opcoesDe(pais: Pais): Opcoes {
   const rotulosCategorias: Record<string, string> = ROTULOS_CATEGORIAS[pais];
   const rotulosMetodos: Record<string, string> = ROTULOS_METODOS[pais];
+  // Object.hasOwn: "constructor" ou "__proto__" não apanham propriedades herdadas.
+  const rotuloCategoria = (chave: string) => (Object.hasOwn(rotulosCategorias, chave) ? rotulosCategorias[chave] : chave);
   return {
     categorias: CATEGORIAS_POR_PAIS[pais],
-    // Object.hasOwn: "constructor" ou "__proto__" não apanham propriedades herdadas.
-    rotuloCategoria: (chave) => (Object.hasOwn(rotulosCategorias, chave) ? rotulosCategorias[chave] : chave),
+    rotuloCategoria,
+    nomeCategoria: (chave) => {
+      const rotulo = rotuloCategoria(chave);
+      return rotulo.charAt(0).toLocaleUpperCase(pais === "BR" ? "pt-BR" : "pt-PT") + rotulo.slice(1);
+    },
     metodos: METODOS_POR_PAIS[pais],
     rotuloMetodo: (codigo) => (Object.hasOwn(rotulosMetodos, codigo) ? rotulosMetodos[codigo] : codigo),
   };

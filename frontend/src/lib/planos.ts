@@ -165,17 +165,20 @@ export function lerContactos(
 
 export const CONTACTOS = lerContactos();
 
-export type Pedido = { plano: IdPlano; renovar: boolean; emailConta: string | null };
+// avisar: contas BR, enquanto não há pagamento no Brasil (pede um aviso em vez do plano).
+export type Pedido = { plano: IdPlano; renovar: boolean; emailConta: string | null; avisar?: boolean };
 
 // A mensagem pré-preenchida. Sem email da conta (página pública sem sessão), a frase do email sai.
-export function mensagemDoPedido({ plano, renovar, emailConta }: Pedido, t: TextosPlanos): string {
-  const modelo = renovar ? t.TEXTOS_MENSAGEM.mensagemRenovar : t.TEXTOS_MENSAGEM.mensagem;
+export function mensagemDoPedido({ plano, renovar, emailConta, avisar }: Pedido, t: TextosPlanos): string {
+  const m = t.TEXTOS_MENSAGEM;
+  const modelo = avisar ? m.mensagemAvisar : renovar ? m.mensagemRenovar : m.mensagem;
   const semEmail = emailConta ? modelo : modelo.replace(t.FRASE_EMAIL, "");
   return preencher(semEmail, { plano: NOMES_PLANOS[plano], email: emailConta ?? "" });
 }
 
-export function assuntoDoPedido({ plano, renovar }: Pedido, t: TextosPlanos): string {
-  const modelo = renovar ? t.TEXTOS_MENSAGEM.emailAssuntoRenovar : t.TEXTOS_MENSAGEM.emailAssunto;
+export function assuntoDoPedido({ plano, renovar, avisar }: Pedido, t: TextosPlanos): string {
+  const m = t.TEXTOS_MENSAGEM;
+  const modelo = avisar ? m.emailAssuntoAvisar : renovar ? m.emailAssuntoRenovar : m.emailAssunto;
   return preencher(modelo, { plano: NOMES_PLANOS[plano] });
 }
 

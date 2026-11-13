@@ -314,7 +314,7 @@ def pdfs_no_mes(user_id: str) -> int:
         return resposta.count or 0
     except APIError as erro:
         # Falha fechado: sem saber quantos PDF já foram lidos, não se lê mais nenhum (o CSV continua).
-        print(f"AVISO: não foi possível contar os PDF deste mês: {erro}")
+        print(f"AVISO: não foi possível contar os PDF deste mês ({getattr(erro, 'code', None) or type(erro).__name__}).")
         raise HTTPException(status_code=503, detail=msg("pdf_indisponivel", local_do_utilizador(user_id).pais))
 
 

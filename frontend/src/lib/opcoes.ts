@@ -22,7 +22,7 @@ export const CATEGORIAS = [
 
 export type Categoria = (typeof CATEGORIAS)[number];
 
-// Rótulo mostrado de cada categoria. Em PT o rótulo é a própria chave (o CSS `capitalize` põe a maiúscula).
+// Rótulo mostrado de cada categoria. Em PT o rótulo é a própria chave (nomeCategoria, em lib/textos.ts, põe a 1.ª letra em maiúscula).
 // BR: rótulos do copywriter (passo 7), em minúsculas como no PT. O tipo obriga a ter todas as chaves.
 export const ROTULOS_CATEGORIAS: Record<Pais, Record<Categoria, string>> = {
   PT: {
@@ -70,6 +70,8 @@ export const METODOS = [
   "mbway",
   "transferencia",
   "debito_direto",
+  "pix",
+  "boleto",
 ] as const;
 
 export type MetodoPagamento = (typeof METODOS)[number];
@@ -85,6 +87,8 @@ export const ROTULOS_METODOS: Record<Pais, Record<MetodoPagamento, string>> = {
     mbway: "MB Way",
     transferencia: "Transferência",
     debito_direto: "Débito direto",
+    pix: "Pix", // não aparece para escolher em PT; só para movimentações de uma conta que mudou de país
+    boleto: "Boleto",
   },
   BR: {
     dinheiro: "Dinheiro",
@@ -94,12 +98,15 @@ export const ROTULOS_METODOS: Record<Pais, Record<MetodoPagamento, string>> = {
     mbway: "MB Way", // não aparece para escolher no BR (METODOS_POR_PAIS); só para movimentações antigas
     transferencia: "Transferência",
     debito_direto: "Débito automático",
+    pix: "Pix",
+    boleto: "Boleto",
   },
 };
 
-// Métodos que aparecem para escolher em cada país. O MB Way só existe em Portugal: no BR não aparece na lista
-// (uma movimentação antiga com "mbway" continua a mostrar o nome).
+// Métodos que aparecem para escolher em cada país. O MB Way só existe em Portugal; o Pix e o boleto, no Brasil
+// (uma movimentação antiga com um método do outro país continua a mostrar o nome). No BR o Pix vem logo a seguir
+// ao dinheiro: é a forma de pagamento mais usada lá.
 export const METODOS_POR_PAIS: Record<Pais, readonly MetodoPagamento[]> = {
-  PT: METODOS,
-  BR: METODOS.filter((m) => m !== "mbway"),
+  PT: METODOS.filter((m) => m !== "pix" && m !== "boleto"),
+  BR: ["dinheiro", "pix", "cartao_debito", "cartao_credito", "cartao_refeicao", "boleto", "transferencia", "debito_direto"],
 };

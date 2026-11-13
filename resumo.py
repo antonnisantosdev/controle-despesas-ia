@@ -88,7 +88,7 @@ def resumo_guardado(user_id: str, mes: str, assinatura: str) -> ResumoMes | None
             linha = resposta.data[0]
             return ResumoMes(resumo=linha["texto"], alertas=linha["alertas"] or [])
     except Exception as erro:
-        print(f"AVISO: não foi possível ler os resumos guardados (sql/016 por correr?): {erro}")
+        print(f"AVISO: não foi possível ler os resumos guardados (sql/016 por correr?) ({getattr(erro, 'code', None) or type(erro).__name__}).")
     return RESUMOS_EM_MEMORIA.get(_chave_memoria(user_id, mes, assinatura))
 
 
@@ -109,7 +109,7 @@ def guardar_resumo(user_id: str, mes: str, assinatura: str, resumo: ResumoMes) -
         ).execute()
         return
     except Exception as erro:
-        print(f"AVISO: não foi possível guardar o resumo (sql/016 por correr?): {erro}")
+        print(f"AVISO: não foi possível guardar o resumo (sql/016 por correr?) ({getattr(erro, 'code', None) or type(erro).__name__}).")
     RESUMOS_EM_MEMORIA[_chave_memoria(user_id, mes, assinatura)] = resumo
 
 

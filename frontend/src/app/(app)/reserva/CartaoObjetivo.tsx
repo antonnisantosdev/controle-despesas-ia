@@ -33,7 +33,7 @@ type Props = {
 
 export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoExpirada }: Props) {
   const { TEXTOS_OBJETIVO } = useTextos(DICIONARIO_RESERVA);
-  const { rotuloCategoria } = useOpcoes();
+  const { nomeCategoria } = useOpcoes();
   const [aJuntar, setAJuntar] = useState(false); // o campo "+ Juntei dinheiro" está aberto
   const [valor, setValor] = useState("");
   const [plano, setPlano] = useState<PlanoPoupanca | null>(null);
@@ -195,7 +195,7 @@ export default function CartaoObjetivo({ objetivo, onMudou, onApagado, onSessaoE
             <ul className="space-y-1 border-t border-borda pt-2">
               {plano.cortes.map((corte) => (
                 <li key={corte.categoria} className="text-texto-suave">
-                  <span className="font-medium capitalize text-texto">{rotuloCategoria(corte.categoria)}</span>
+                  <span className="font-medium text-texto">{nomeCategoria(corte.categoria)}</span>
                   {preencher(TEXTOS_OBJETIVO.corte, { valor: f.dinheiro(corte.valor_mensal) })}
                   {corte.motivo}
                 </li>

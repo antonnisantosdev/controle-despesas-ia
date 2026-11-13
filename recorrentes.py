@@ -38,6 +38,8 @@ CATEGORIAS_EXCLUIDAS = {"transferências", "levantamentos"}
 PALAVRAS_GENERICAS = {
     "mb", "way", "mbway", "multibanco", "atm", "levantamento", "levant", "transferencia", "transf", "trf",
     "sepa", "pagamento", "pag", "compra", "cartao", "debito", "deb", "dd", "ref", "p", "para", "de", "a",
+    # Brasil: "PIX ENVIADO MARIA" fica "maria"; "PAG BOLETO SABESP" fica "sabesp".
+    "pix", "enviado", "recebido", "boleto", "ted", "doc", "tef", "saque",
 }  # fmt: skip
 
 # Quanto tempo (segundos) se guarda a resposta de cada utilizador. Ler um ano de despesas é a consulta

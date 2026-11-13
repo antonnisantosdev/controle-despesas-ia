@@ -1,3 +1,4 @@
+import math
 from datetime import date, datetime
 from typing import Annotated, Literal
 
@@ -34,6 +35,9 @@ MetodoPagamento = Literal[
     "mbway",
     "transferencia",
     "debito_direto",
+    # Brasil (só aparecem para escolher nas contas BR; o frontend decide em opcoes.ts).
+    "pix",
+    "boleto",
 ]
 
 
@@ -51,6 +55,9 @@ class Transacao(TransacaoCriar):
     metodo_pagamento: str | None = None
 
 
+VALOR_MAXIMO_MOVIMENTACAO = 1_000_000_000
+
+
 # Movimentação criada à mão no ecrã. Mais rigorosa do que TransacaoCriar: o método é obrigatório,
 # a categoria (se vier) tem de ser uma das permitidas, e sem categoria quem escolhe é a IA.
 class NovaMovimentacao(BaseModel):
@@ -61,11 +68,15 @@ class NovaMovimentacao(BaseModel):
     categoria: Categoria | None = None
 
     # O Pydantic não tem uma regra pronta para "diferente de zero", por isso escreve-se à mão.
+    # Teto de mil milhões: a coluna é NUMERIC(12, 2) e um valor maior dava erro 500 na base de dados (sem CORS).
     @field_validator("valor")
     @classmethod
     def valor_diferente_de_zero(cls, valor: float) -> float:
         if valor == 0:
             raise ValueError("o valor não pode ser 0")
+        # NaN passava nas duas regras (NaN não é 0 nem maior do que nada) e rebentava na base de dados.
+        if not math.isfinite(valor) or abs(valor) > VALOR_MAXIMO_MOVIMENTACAO:
+            raise ValueError("o valor é demasiado grande")
         return valor
 
 

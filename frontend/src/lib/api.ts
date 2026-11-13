@@ -1,3 +1,4 @@
+import { esquecerConta } from "./contaGuardada";
 import { ePais, eMoeda, type Moeda, type Pais } from "./formatos";
 import { DICIONARIO_DEMO } from "./textosDemo";
 import type { Motivo, Objetivo as ObjetivoBoasVindas } from "./textosBoasVindas";
@@ -47,6 +48,7 @@ export function apagarToken() {
   if (localStorage.getItem(CHAVE_TOKEN) !== null) sessionStorage.removeItem(CHAVE_DEMO_TERMINOU);
   localStorage.removeItem(CHAVE_TOKEN);
   localStorage.removeItem(CHAVE_DEMO);
+  esquecerConta(); // o país da conta que estava guardado (lib/contaGuardada.ts)
   window.dispatchEvent(new Event(EVENTO_SESSAO));
 }
 

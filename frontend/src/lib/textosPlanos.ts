@@ -153,8 +153,12 @@ const PT = {
     pdfReinicia: "Volta a zero no dia 1 de cada mês.",
     botaoUpgrade: "Mudar de plano",
     botaoRenovar: "Pedir renovação",
+    botaoAvisar: "Avisem-me", // TEXTO NOVO (só contas BR o veem)
     completo: "Estás no plano Completo, o que tem mais pedidos à IA por dia. Se precisares de mais, fala connosco.",
     todasFuncionalidades: "O teu plano inclui todas as funcionalidades da app.",
+    // Só no Essencial: o resumo do ano escrito pela IA é do Completo. TEXTO NOVO
+    todasFuncionalidadesEssencial:
+      "O teu plano inclui todas as funcionalidades da app, exceto o resumo do ano escrito pela IA, que só existe no Completo.",
     // TEXTO NOVO
     semFuncoesPagas: "A importação de extratos em PDF e a leitura de talões estão disponíveis nos planos Essencial e Completo.",
   },
@@ -166,6 +170,10 @@ const PT = {
     mensagemRenovar: "Olá! Quero renovar o plano {plano} da Control Prices. O email da minha conta é {email}.",
     emailAssunto: "Pedido de plano {plano} – Control Prices",
     emailAssuntoRenovar: "Renovação do plano {plano} – Control Prices",
+    // Contas BR, enquanto não há pagamento no Brasil (só para o tipo ter as mesmas chaves: o PT não o vê). TEXTO NOVO
+    mensagemAvisar:
+      "Olá! Gostava de receber um aviso quando o plano {plano} da Control Prices puder ser pago no Brasil. O email da minha conta é {email}.",
+    emailAssuntoAvisar: "Aviso do plano {plano} – Control Prices",
   },
 
   FRASE_EMAIL: " O email da minha conta é {email}.",
@@ -445,8 +453,12 @@ const BR: TextosPlanos = {
     pdfReinicia: "Zera no dia 1 de cada mês.",
     botaoUpgrade: "Mudar de plano",
     botaoRenovar: "Pedir renovação",
+    botaoAvisar: "Me avise", // TEXTO NOVO (contas BR: ainda sem pagamento no Brasil)
     completo: "Você está no plano Completo, o que tem mais pedidos à IA por dia. Se precisar de mais, fale com a gente.",
     todasFuncionalidades: "O seu plano inclui todas as funções da app.",
+    // Só no Essencial: o resumo do ano escrito pela IA é do Completo. TEXTO NOVO
+    todasFuncionalidadesEssencial:
+      "O seu plano inclui todas as funções da app, exceto o resumo do ano escrito pela IA, que só existe no Completo.",
     // TEXTO NOVO
     semFuncoesPagas: "A importação de extratos em PDF e a leitura de notas fiscais estão disponíveis nos planos Essencial e Completo.",
   },
@@ -457,6 +469,10 @@ const BR: TextosPlanos = {
     mensagemRenovar: "Olá! Quero renovar o plano {plano} da Control Prices. O e-mail da minha conta é {email}.",
     emailAssunto: "Pedido do plano {plano} – Control Prices",
     emailAssuntoRenovar: "Renovação do plano {plano} – Control Prices",
+    // Contas BR, enquanto não há pagamento no Brasil (botão "Me avise" nos cartões de /plano). TEXTO NOVO
+    mensagemAvisar:
+      "Olá! Quero receber um aviso quando o plano {plano} da Control Prices puder ser pago no Brasil. O e-mail da minha conta é {email}.",
+    emailAssuntoAvisar: "Aviso do plano {plano} – Control Prices",
   },
 
   FRASE_EMAIL: " O e-mail da minha conta é {email}.",

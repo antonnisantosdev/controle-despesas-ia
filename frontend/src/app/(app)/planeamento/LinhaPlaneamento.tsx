@@ -27,7 +27,7 @@ function corDaBarra(percentagem: number) {
 
 export default function LinhaPlaneamento({ linha, onGuardar, compacta = false, desligado = false }: Props) {
   const { TEXTOS_LINHA_ORCAMENTO } = useTextos(DICIONARIO_PLANEAMENTO);
-  const { rotuloCategoria } = useOpcoes();
+  const { rotuloCategoria, nomeCategoria } = useOpcoes();
   const f = useFormatos();
   const [valor, setValor] = useState(linha.limite?.toString().replace(".", ",") ?? "");
 
@@ -67,7 +67,7 @@ export default function LinhaPlaneamento({ linha, onGuardar, compacta = false, d
     <div className="space-y-2 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-medium capitalize text-texto">{rotuloCategoria(linha.categoria)}</p>
+          <p className="font-medium text-texto">{nomeCategoria(linha.categoria)}</p>
           <p className="text-xs text-texto-suave">
             {linha.limite === null
               ? preencher(TEXTOS_LINHA_ORCAMENTO.semOrcamento, { gasto: f.dinheiro(linha.gasto) })

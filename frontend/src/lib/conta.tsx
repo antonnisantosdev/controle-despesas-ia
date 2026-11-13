@@ -1,9 +1,20 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
 import { pedirEstadoPlano, SessaoExpirada, type BoasVindasGuardadas, type EstadoPlano } from "./api";
+import { contaDoTexto, guardarConta, lerContaGuardada } from "./contaGuardada";
 import { CONTA_PADRAO, criarFormatos, FORMATOS_PADRAO, type Conta, type Formatos } from "./formatos";
 import { useSessaoDemo } from "./useSessaoDemo";
 
@@ -23,6 +34,9 @@ const ContextoAplicarPerfil = createContext<AplicarPerfil>(() => {});
 type PedidoPlano = { falhou: boolean; sessaoExpirada: boolean; atualizar: () => void };
 const ContextoPedidoPlano = createContext<PedidoPlano>({ falhou: false, sessaoExpirada: false, atualizar: () => {} });
 
+// O localStorage não muda sozinho durante a visita: não há nada a que subscrever.
+const semSubscricao = () => () => {};
+
 function chaveDaConta(conta: Conta): string {
   return `${conta.pais}|${conta.moeda}|${conta.paisesBancos.join(",")}`;
 }
@@ -34,7 +48,12 @@ export function ProvedorConta({ children }: { children: ReactNode }) {
   const pagina = usePathname();
   const demo = useSessaoDemo();
   const [estado, setEstado] = useState<EstadoPlano | null>(null);
-  const [conta, setConta] = useState<Conta>(CONTA_PADRAO);
+  // A conta que o /plano deu (null enquanto não chega). Até lá vale a guardada neste browser (a da última visita),
+  // para a app abrir logo na língua e na moeda certas; no servidor e sem nada guardado, PT/EUR.
+  const [contaDoPlano, setContaDoPlano] = useState<Conta | null>(null);
+  const textoGuardado = useSyncExternalStore(semSubscricao, lerContaGuardada, () => null);
+  const contaGuardada = useMemo(() => contaDoTexto(textoGuardado), [textoGuardado]);
+  const conta = contaDoPlano ?? contaGuardada ?? CONTA_PADRAO;
   const jaPediuNaDemo = useRef(false);
   // O questionário já foi gravado nesta sessão: um GET /plano que saia antes (ou chegue atrasado) não o volta a pedir.
   const respondido = useRef(false);
@@ -56,7 +75,8 @@ export function ProvedorConta({ children }: { children: ReactNode }) {
         setEstado(respondido.current ? { ...novo, boas_vindas_pendente: false } : novo);
         // Só troca a conta se o país, a moeda ou os bancos mudaram: quem formata dinheiro não volta a desenhar.
         const nova: Conta = { pais: novo.pais, moeda: novo.moeda, paisesBancos: novo.paises_bancos };
-        setConta((atual) => (chaveDaConta(atual) === chaveDaConta(nova) ? atual : nova));
+        setContaDoPlano((atual) => (atual && chaveDaConta(atual) === chaveDaConta(nova) ? atual : nova));
+        if (!demo) guardarConta(nova); // a demo é partilhada: não fica como "a conta deste browser"
         setFalha(null);
       })
       .catch((e) => {
@@ -80,13 +100,14 @@ export function ProvedorConta({ children }: { children: ReactNode }) {
   const aplicarPerfil = useCallback<AplicarPerfil>((perfil) => {
     respondido.current = true;
     const nova: Conta = { pais: perfil.pais, moeda: perfil.moeda, paisesBancos: perfil.paises_bancos };
-    setConta((atual) => (chaveDaConta(atual) === chaveDaConta(nova) ? atual : nova));
+    setContaDoPlano((atual) => (atual && chaveDaConta(atual) === chaveDaConta(nova) ? atual : nova));
+    if (!demo) guardarConta(nova); // como no GET /plano: a demo não fica como "a conta deste browser"
     setEstado((atual) =>
       atual
         ? { ...atual, pais: perfil.pais, moeda: perfil.moeda, paises_bancos: perfil.paises_bancos, boas_vindas_pendente: false }
         : atual,
     );
-  }, []);
+  }, [demo]);
 
   return (
     <ContextoAplicarPerfil.Provider value={aplicarPerfil}>

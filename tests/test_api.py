@@ -126,6 +126,29 @@ def test_sem_perguntas_a_movimentacao_grava_se_sem_categoria(cliente, ia, limite
     assert ia == []
 
 
+@pytest.mark.parametrize("metodo", ["pix", "boleto"])
+def test_pix_e_boleto_sao_metodos_aceites(cliente, ia, limite, metodo):
+    limite.maximo = 0
+
+    resposta = cliente.post(
+        "/transacoes",
+        json={"data": "2026-11-08", "descricao": "PIX ENVIADO FEIRA", "valor": -20.0, "metodo_pagamento": metodo},
+    )
+
+    assert resposta.status_code == 201
+    assert resposta.json()["metodo_pagamento"] == metodo
+
+
+@pytest.mark.parametrize("valor", ["-999999999999", "NaN", "Infinity"])
+def test_valor_enorme_ou_invalido_da_422_e_nao_chega_a_base_de_dados(cliente, ia, limite, valor):
+    # O corpo vai à mão: o json do Python escreve NaN e Infinity, como um pedido feito de propósito.
+    corpo = '{"data": "2026-11-08", "descricao": "Erro", "valor": %s, "metodo_pagamento": "dinheiro"}' % valor
+    resposta = cliente.post("/transacoes", content=corpo, headers={"Content-Type": "application/json"})
+
+    assert resposta.status_code == 422
+    assert ia == []
+
+
 def test_o_resumo_repetido_nao_volta_a_chamar_a_ia(cliente, ia, limite, monkeypatch):
     dados = {"transacoes_no_mes": 3, "despesas": 100.0}
     monkeypatch.setattr(main, "recolher_dados", lambda user_id, mes: dict(dados))

@@ -282,7 +282,13 @@ async def erro_de_validacao(request: Request, erro: RequestValidationError):
     mensagem = MENSAGENS_422_GENERICAS.get(request.url.path)
     if mensagem is not None:
         return JSONResponse(status_code=422, content={"detail": mensagem})
-    return await request_validation_exception_handler(request, erro)
+    try:
+        return await request_validation_exception_handler(request, erro)
+    except ValueError:
+        # Um valor que o JSON não aceita (NaN, Infinity) no "input" do erro: devolve-se o erro sem o valor,
+        # em vez de um 500 sem CORS.
+        sem_valores = [{k: v for k, v in e.items() if k not in ("input", "ctx")} for e in erro.errors()]
+        return JSONResponse(status_code=422, content={"detail": sem_valores})
 
 
 @app.post(CAMINHO_TROCA_GOOGLE, dependencies=[Depends(LIMITE_GOOGLE_TROCA)])
@@ -800,14 +806,17 @@ def resumo_do_mes(
 
     # O dashboard pede o resumo sempre que abre. Se os números não mudaram, o resumo também não:
     # devolve-se o que já foi escrito (tabela resumos_ia), sem pagar outra chamada nem gastar uma pergunta.
-    assinatura = assinatura_dos_dados(dados)
+    # O país e a moeda entram na impressão digital (o resumo vem na língua e na moeda da conta): mudar de país
+    # pede um resumo novo. Em PT/EUR ficam de fora, para os resumos já guardados continuarem a servir.
+    local = local_do_utilizador(user_id)
+    perfil = {} if (local.pais, local.moeda) == ("PT", "EUR") else {"_pais": local.pais, "_moeda": local.moeda}
+    assinatura = assinatura_dos_dados({**dados, **perfil})
     guardado = resumo_guardado(user_id, mes, assinatura)
     if guardado is not None:
         return guardado
 
     if not pode_usar_ia(user_id, "resumo"):
         return ResumoMes(resumo=aviso_resumo_sem_pedidos(user_id), alertas=[])
-    local = local_do_utilizador(user_id)
     try:
         resumo = resumir_mes(dados, user_id=user_id, config=plano_e_config_ia(user_id)[1], local=local)
     except ErroIA as erro:

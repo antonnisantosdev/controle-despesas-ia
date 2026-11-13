@@ -21,7 +21,7 @@ type Props = {
 // O que a IA leu, num formulário: o utilizador corrige o que estiver mal e só depois grava.
 export default function RevisaoTalao({ talao, onGravada, onCancelar, onSessaoExpirada }: Props) {
   const { TEXTOS_REVISAO_TALAO } = useTextos(DICIONARIO_COMPRAS);
-  const { categorias, rotuloCategoria, metodos, rotuloMetodo } = useOpcoes();
+  const { categorias, nomeCategoria, metodos, rotuloMetodo } = useOpcoes();
   const f = useFormatos();
   const [loja, setLoja] = useState(talao.loja);
   const [data, setData] = useState(talao.data ?? ""); // vazia se a IA não a conseguiu ler
@@ -90,10 +90,10 @@ export default function RevisaoTalao({ talao, onGravada, onCancelar, onSessaoExp
         </label>
         <label className="text-sm text-texto-suave">
           {TEXTOS_REVISAO_TALAO.categoria}
-          <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className={`${ESTILO_CAMPO} capitalize`}>
+          <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className={ESTILO_CAMPO}>
             {comValorAtual(categorias, categoria).map((c) => (
               <option key={c} value={c}>
-                {rotuloCategoria(c)}
+                {nomeCategoria(c)}
               </option>
             ))}
           </select>

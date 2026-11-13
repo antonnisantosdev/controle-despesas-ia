@@ -9,7 +9,7 @@ import AvisoServidor from "@/components/AvisoServidor";
 import BotaoGoogle from "@/components/BotaoGoogle";
 import BotaoDemo from "@/components/BotaoDemo";
 import RodapeLegal from "@/components/RodapeLegal";
-import { API_URL, contaApagada, EVENTO_SESSAO, fetchComTentativas, guardarToken } from "@/lib/api";
+import { API_URL, contaApagada, EVENTO_SESSAO, fetchComTentativas, guardarToken, lerToken } from "@/lib/api";
 import { DICIONARIO_COMUNS } from "@/lib/textosComuns";
 import { TEXTOS_LOGIN } from "@/lib/textosLogin";
 import { DICIONARIO_PLANOS } from "@/lib/textosPlanos";
@@ -39,8 +39,14 @@ export default function PaginaLogin() {
   // Acorda a API logo que a página abre: enquanto se escreve o email e a palavra-passe,
   // o Render já está a arrancar o servidor. A resposta não interessa, e um erro também não.
   useEffect(() => {
+    // Já há sessão neste browser (ex. abriu "/" ou a PWA): vai direto para a app. Se o token já expirou,
+    // a app recebe 401, apaga-o e volta aqui, já sem token (não fica em ciclo).
+    if (lerToken()) {
+      router.replace("/dashboard");
+      return;
+    }
     fetch(`${API_URL}/`).catch(() => {});
-  }, []);
+  }, [router]);
 
   async function entrar(evento: FormEvent<HTMLFormElement>) {
     // Impede o envio clássico do formulário (que recarregava a página, como num form PHP).

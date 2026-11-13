@@ -177,7 +177,11 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
               : TEXTOS_MEU_PLANO.semDataFim}
           </p>
           <p className="text-texto-suave">
-            {temFuncoesPagas(estado.plano) ? TEXTOS_MEU_PLANO.todasFuncionalidades : TEXTOS_MEU_PLANO.semFuncoesPagas}
+            {plano === "completo"
+              ? TEXTOS_MEU_PLANO.todasFuncionalidades
+              : temFuncoesPagas(estado.plano)
+                ? TEXTOS_MEU_PLANO.todasFuncionalidadesEssencial
+                : TEXTOS_MEU_PLANO.semFuncoesPagas}
           </p>
         </div>
       </section>
@@ -218,7 +222,11 @@ function DetalhesPlano({ estado, emailConta }: { estado: EstadoPlano; emailConta
                       ))}
                     </ul>
                     <div className="mt-auto pt-1">
-                      <BotaoPedirAcesso pedido={{ plano: id, renovar: false, emailConta }} rotulo={TEXTOS_CARTOES[id].botao} />
+                      {/* Brasil: ainda sem pagamento, por isso pede-se um aviso em vez do plano. */}
+                      <BotaoPedirAcesso
+                        pedido={{ plano: id, renovar: false, emailConta, avisar: brasil }}
+                        rotulo={brasil ? TEXTOS_MEU_PLANO.botaoAvisar : TEXTOS_CARTOES[id].botao}
+                      />
                     </div>
                   </div>
                 );

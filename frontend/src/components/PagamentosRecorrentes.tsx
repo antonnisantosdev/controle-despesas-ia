@@ -29,7 +29,7 @@ const MAXIMO_NO_CARTAO = 3;
 // compacto: o cartão pequeno do dashboard (só aparece se houver algum). Sem compacto: a secção do Planeamento.
 export default function PagamentosRecorrentes({ compacto = false }: { compacto?: boolean }) {
   const { TEXTOS_RECORRENTES } = useTextos(DICIONARIO_RECORRENTES);
-  const { rotuloCategoria } = useOpcoes();
+  const { nomeCategoria } = useOpcoes();
   const f = useFormatos();
   const [lista, setLista] = useState<Recorrente[] | null>(null);
   const [erro, setErro] = useState(false);
@@ -108,7 +108,7 @@ export default function PagamentosRecorrentes({ compacto = false }: { compacto?:
               <div className="min-w-0">
                 <p className="break-words font-medium text-texto">{r.descricao}</p>
                 <p className="text-xs text-texto-suave">
-                  {r.categoria && <span className="capitalize">{rotuloCategoria(r.categoria)} · </span>}
+                  {r.categoria && <span>{nomeCategoria(r.categoria)} · </span>}
                   {preencher(TEXTOS_RECORRENTES.detalhe, {
                     meses: r.meses_seguidos,
                     data: dataCurta(r.ultimo_pagamento, f),

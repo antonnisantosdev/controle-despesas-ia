@@ -36,7 +36,7 @@ function diaMes(data: string) {
 
 export default function PaginaMovimentacoes() {
   const { TEXTOS_MOVIMENTACOES } = useTextos(DICIONARIO_MOVIMENTACOES);
-  const { categorias, rotuloCategoria, rotuloMetodo } = useOpcoes();
+  const { categorias, nomeCategoria, rotuloMetodo } = useOpcoes();
   const { TEXTOS_APAGAR_MOVIMENTO, TEXTOS_CATEGORIZAR, TEXTOS_ENVIO_IA, TEXTOS_PLANO_PAGO } = useTextos(DICIONARIO_PLANOS);
   const router = useRouter();
   const f = useFormatos();
@@ -213,7 +213,7 @@ export default function PaginaMovimentacoes() {
         disabled={demo}
         aria-describedby={demo ? ID_NOTA_DEMO : undefined}
         aria-label={preencher(TEXTOS_MOVIMENTACOES.rotuloCategoria, { descricao: t.descricao })}
-        className="cursor-pointer rounded-full disabled:cursor-default disabled:hover:border-transparent border border-transparent bg-fundo px-2.5 py-1 text-xs capitalize text-texto-suave hover:border-borda"
+        className="cursor-pointer rounded-full disabled:cursor-default disabled:hover:border-transparent border border-transparent bg-fundo px-2.5 py-1 text-xs text-texto-suave hover:border-borda"
       >
         {t.categoria === null && (
           <option value="" disabled>
@@ -222,7 +222,7 @@ export default function PaginaMovimentacoes() {
         )}
         {comValorAtual(categorias, t.categoria).map((c) => (
           <option key={c} value={c}>
-            {rotuloCategoria(c)}
+            {nomeCategoria(c)}
           </option>
         ))}
       </select>

@@ -46,16 +46,20 @@ export function dinheiro(valor: number, pais: Pais, moeda: Moeda, casas: Casas =
   });
 }
 
-// O símbolo junto a um número já escrito, com um espaço normal: EUR "1500 €", BRL "R$ 1.500".
+// O símbolo junto a um número já escrito, com um espaço normal, do lado em que o país o escreve
+// (igual ao dinheiro()): PT depois ("1500 €", "1500 R$"), BR antes ("R$ 1.500", "€ 1.500").
 // Os eixos e rótulos de PT sempre foram escritos assim à mão (`${v} €`), por isso ficam iguais.
-export function comSimbolo(texto: string, moeda: Moeda): string {
-  return moeda === "BRL" ? `R$ ${texto}` : `${texto} €`;
+// Sem país: o da moeda (EUR -> PT, BRL -> BR), como antes.
+export function comSimbolo(texto: string, moeda: Moeda, pais?: Pais): string {
+  const simbolo = simboloMoeda(moeda);
+  const lado = pais ?? (moeda === "BRL" ? "BR" : "PT");
+  return lado === "BR" ? `${simbolo} ${texto}` : `${texto} ${simbolo}`;
 }
 
 // Eixo dos gráficos (valores redondos escolhidos pelo Recharts). PT/EUR: 1500 -> "1500 €", 10000 -> "10 000 €".
 // BR/BRL: 1500 -> "R$ 1.500". Não arredonda: o eixo mostra o valor que o gráfico dá.
 export function dinheiroEixo(valor: number, pais: Pais, moeda: Moeda): string {
-  return comSimbolo(numero(valor, pais), moeda);
+  return comSimbolo(numero(valor, pais), moeda, pais);
 }
 
 // Eixo do simulador, em forma curta para caber no eixo com valores grandes (até 10 000/mês durante 40 anos):
@@ -64,7 +68,7 @@ export function dinheiroMil(valor: number, pais: Pais, moeda: Moeda): string {
   const texto = (valor || 0) // "|| 0": sem "-0"
     .toLocaleString(localeDe(pais), { notation: "compact", maximumFractionDigits: 1 })
     .replace(/\s/g, " ");
-  return comSimbolo(texto, moeda);
+  return comSimbolo(texto, moeda, pais);
 }
 
 // Números sem moeda: 1.5 -> "1,5" (quantidades, percentagens).
@@ -93,7 +97,7 @@ export function criarFormatos(conta: Conta) {
     moeda,
     simbolo: simboloMoeda(moeda),
     nomeMoeda: nomeMoeda(moeda),
-    comSimbolo: (texto: string) => comSimbolo(texto, moeda),
+    comSimbolo: (texto: string) => comSimbolo(texto, moeda, pais),
     dinheiro: (valor: number, casas?: Casas) => dinheiro(valor, pais, moeda, casas),
     dinheiroEixo: (valor: number) => dinheiroEixo(valor, pais, moeda),
     dinheiroMil: (valor: number) => dinheiroMil(valor, pais, moeda),

@@ -306,7 +306,7 @@ def _registar_chamada(funcao: str, resposta, inicio: float, user_id: str | None 
             "cache_creation_tokens": cache_escrita,
         }
     except Exception as erro:
-        print(f"Não foi possível registar a chamada à IA ({funcao}): {erro}")
+        print(f"Não foi possível registar a chamada à IA ({funcao}, {getattr(erro, 'code', None) or type(erro).__name__}).")
         return
 
     # Da linha mais completa para a mais simples: se uma migração ainda não foi corrida no Supabase,
@@ -322,7 +322,7 @@ def _registar_chamada(funcao: str, resposta, inicio: float, user_id: str | None 
             supabase.table("chamadas_ia").insert(tentativa).execute()
             return
         except Exception as erro:
-            print(f"Não foi possível registar a chamada à IA ({funcao}, {len(tentativa)} colunas): {erro}")
+            print(f"Não foi possível registar a chamada à IA ({funcao}, {len(tentativa)} colunas, {getattr(erro, 'code', None) or type(erro).__name__}).")
 
 
 def categorizar(

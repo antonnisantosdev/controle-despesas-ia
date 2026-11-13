@@ -30,7 +30,7 @@ import SugestoesIA from "./SugestoesIA";
 
 export default function PaginaPlaneamento() {
   const { TEXTOS_PLANEAMENTO } = useTextos(DICIONARIO_PLANEAMENTO);
-  const { categorias, rotuloCategoria } = useOpcoes();
+  const { categorias, nomeCategoria } = useOpcoes();
   const router = useRouter();
   const f = useFormatos();
   const [meses, setMeses] = useState<string[]>([]);
@@ -193,12 +193,12 @@ export default function PaginaPlaneamento() {
               value={novaCategoria}
               onChange={(e) => setNovaCategoria(e.target.value)}
               aria-label={TEXTOS_PLANEAMENTO.rotuloNovaCategoria}
-              className="rounded-lg border border-borda bg-cartao px-3 py-2 text-sm capitalize text-texto"
+              className="rounded-lg border border-borda bg-cartao px-3 py-2 text-sm text-texto"
             >
               <option value="">{TEXTOS_PLANEAMENTO.adicionar}</option>
               {semLinha.map((c) => (
                 <option key={c} value={c}>
-                  {rotuloCategoria(c)}
+                  {nomeCategoria(c)}
                 </option>
               ))}
             </select>

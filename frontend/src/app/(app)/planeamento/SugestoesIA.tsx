@@ -19,7 +19,7 @@ type Props = {
 // Lista das propostas da IA. Nada é guardado sem o utilizador clicar em "Aceitar" (a IA sugere, a pessoa decide).
 export default function SugestoesIA({ sugestoes, onAceitar, onFechar, desligado = false }: Props) {
   const { TEXTOS_SUGESTOES } = useTextos(DICIONARIO_PLANEAMENTO);
-  const { rotuloCategoria } = useOpcoes();
+  const { nomeCategoria } = useOpcoes();
   const f = useFormatos();
   const descricaoDemo = desligado ? ID_NOTA_DEMO : undefined; // aponta para a explicação (NotaDemo)
   const [aceites, setAceites] = useState<string[]>([]);
@@ -64,7 +64,7 @@ export default function SugestoesIA({ sugestoes, onAceitar, onFechar, desligado 
           <li key={s.categoria} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="min-w-0 flex-1">
               <p className="text-sm text-texto">
-                <span className="font-medium capitalize">{rotuloCategoria(s.categoria)}</span>
+                <span className="font-medium">{nomeCategoria(s.categoria)}</span>
                 {preencher(TEXTOS_SUGESTOES.porMes, { valor: f.dinheiro(s.limite) })}
               </p>
               <p className="text-xs text-texto-suave">{s.explicacao}</p>

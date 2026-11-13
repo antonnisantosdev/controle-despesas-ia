@@ -24,7 +24,7 @@ type Props = { onCriada: (transacao: Transacao) => void; onFechar: () => void };
 export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
   const { TEXTOS_GERAIS } = useTextos(DICIONARIO_COMUNS);
   const { TEXTOS_NOVA_MOVIMENTACAO } = useTextos(DICIONARIO_MOVIMENTACOES);
-  const { categorias, rotuloCategoria, metodos, rotuloMetodo } = useOpcoes();
+  const { categorias, nomeCategoria, metodos, rotuloMetodo } = useOpcoes();
   const f = useFormatos();
   const [tipo, setTipo] = useState<"despesa" | "entrada">("despesa");
   const [descricao, setDescricao] = useState("");
@@ -135,11 +135,11 @@ export default function FormNovaMovimentacao({ onCriada, onFechar }: Props) {
 
         <label className="block">
           <span className="text-sm text-texto-suave">{TEXTOS_NOVA_MOVIMENTACAO.categoria}</span>
-          <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className={`${ESTILO_CAMPO} capitalize`}>
+          <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className={ESTILO_CAMPO}>
             <option value="">{TEXTOS_NOVA_MOVIMENTACAO.iaEscolhe}</option>
             {comValorAtual(categorias, categoria).map((c) => (
               <option key={c} value={c}>
-                {rotuloCategoria(c)}
+                {nomeCategoria(c)}
               </option>
             ))}
           </select>
